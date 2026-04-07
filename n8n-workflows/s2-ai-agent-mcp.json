@@ -1,0 +1,130 @@
+{
+  "name": "S2 - AI Agent + MCP Cluster Intelligence",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger-manual",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.query || 'What is the current health of the Kubernetes cluster? Check all namespaces for any issues.' }}",
+        "options": {
+          "systemMessage": "You are an expert SRE assistant with direct access to a Kubernetes cluster.\n\nYou have three tools:\n1. kubectl_read - run any read-only kubectl command (get, describe, logs, events, top)\n2. promql - run any PromQL query against Prometheus\n3. kubectl_write - run write kubectl commands (ONLY after human approval - do not call this directly)\n\nWhen investigating a cluster issue:\n- Always start with `kubectl get pods -A` to get an overview\n- For any unhealthy pods, run `kubectl describe pod <name> -n <namespace>`\n- Check recent events with `kubectl get events -A --sort-by=.lastTimestamp | tail -20`\n- Use PromQL to get live metrics when relevant\n- Never suggest running kubectl_write without explicit human approval\n\nReturn a structured response with:\n- SUMMARY: one-line status (e.g. '2 pods crashing in prod namespace')\n- SEVERITY: critical / warning / healthy\n- ROOT_CAUSE: your best assessment\n- CONFIDENCE: high / medium / low\n- RECOMMENDED_ACTION: what should be done\n- REQUIRES_APPROVAL: yes/no (yes if any write action needed)"
+        }
+      },
+      "id": "ai-agent",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "model": "models/gemini-1.5-pro",
+        "options": {}
+      },
+      "id": "gemini-model",
+      "name": "Gemini",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [360, 500],
+      "credentials": {
+        "googlePalmApi": {
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "kubectl_read",
+        "description": "Run any read-only kubectl command. Examples: 'get pods -A', 'describe pod <name> -n <ns>', 'logs <pod> -n <ns> --tail=50', 'get events -A --sort-by=.lastTimestamp'",
+        "method": "POST",
+        "url": "http://mcp-server:8000/tools/kubectl-read",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ command: $fromAI('command', 'The kubectl command to run (without the kubectl prefix)', 'string') }) }}",
+        "options": {}
+      },
+      "id": "tool-kubectl-read",
+      "name": "kubectl_read",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [480, 500]
+    },
+    {
+      "parameters": {
+        "name": "promql",
+        "description": "Run any PromQL query against Prometheus to get live metrics. Examples: 'up', 'rate(container_cpu_usage_seconds_total[5m])', 'kube_pod_status_ready{condition=\"true\"}'",
+        "method": "POST",
+        "url": "http://mcp-server:8000/tools/promql",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: $fromAI('query', 'The PromQL expression to run', 'string') }) }}",
+        "options": {}
+      },
+      "id": "tool-promql",
+      "name": "promql",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [600, 500]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "summary",
+              "name": "summary",
+              "value": "={{ $json.output }}",
+              "type": "string"
+            },
+            {
+              "id": "timestamp",
+              "name": "timestamp",
+              "value": "={{ new Date().toISOString() }}",
+              "type": "string"
+            },
+            {
+              "id": "workflow",
+              "name": "workflow",
+              "value": "S2 - AI Agent + MCP",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "format-output",
+      "name": "Format Output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [720, 300]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [[{"node": "AI Agent", "type": "main", "index": 0}]]
+    },
+    "AI Agent": {
+      "main": [[{"node": "Format Output", "type": "main", "index": 0}]]
+    },
+    "Gemini": {
+      "ai_languageModel": [[{"node": "AI Agent", "type": "ai_languageModel", "index": 0}]]
+    },
+    "kubectl_read": {
+      "ai_tool": [[{"node": "AI Agent", "type": "ai_tool", "index": 0}]]
+    },
+    "promql": {
+      "ai_tool": [[{"node": "AI Agent", "type": "ai_tool", "index": 1}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [{"name": "workshop"}, {"name": "session-2"}]
+}
