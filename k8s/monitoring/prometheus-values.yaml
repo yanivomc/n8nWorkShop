@@ -1,6 +1,11 @@
-# kube-prometheus-stack values for workshop
-# Install: helm upgrade --install monitoring prometheus-community/kube-prometheus-stack -n monitoring --create-namespace -f prometheus-values.yaml
+# kube-prometheus-stack values — n8n DevOps Workshop
+# AWS kops cluster — using AWS LoadBalancer for Prometheus and Grafana
+#
+# Install (handled by setup.sh option 6):
+#   helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+#     -n monitoring --create-namespace -f prometheus-values.yaml
 
+# ── Prometheus ─────────────────────────────────────────────────────────
 prometheus:
   prometheusSpec:
     retention: 24h
@@ -10,86 +15,167 @@ prometheus:
         cpu: 200m
       limits:
         memory: 800Mi
+        cpu: 500m
+    podMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
 
   service:
-    type: NodePort
-    nodePort: 30090
+    type: LoadBalancer
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-type: "classic"
+      service.beta.kubernetes.io/aws-load-balancer-internal: "false"
+    port: 9090
 
+# ── Grafana ────────────────────────────────────────────────────────────
 grafana:
   enabled: true
+  adminUser: admin
   adminPassword: workshop123
+
   service:
-    type: NodePort
-    nodePort: 30030
+    type: LoadBalancer
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-type: "classic"
+      service.beta.kubernetes.io/aws-load-balancer-internal: "false"
+    port: 80
+
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+    limits:
+      memory: 256Mi
+      cpu: 200m
+
   dashboardProviders:
     dashboardproviders.yaml:
       apiVersion: 1
       providers:
         - name: workshop
+          orgId: 1
           folder: Workshop
           type: file
+          disableDeletion: false
           options:
             path: /var/lib/grafana/dashboards/workshop
 
+  dashboards:
+    default:
+      kubernetes-cluster:
+        gnetId: 7249
+        revision: 1
+        datasource: Prometheus
+      pod-monitoring:
+        gnetId: 6417
+        revision: 1
+        datasource: Prometheus
+
+  grafana.ini:
+    security:
+      allow_embedding: true
+
+# ── Alertmanager ───────────────────────────────────────────────────────
 alertmanager:
   alertmanagerSpec:
     resources:
       requests:
-        memory: 100Mi
+        memory: 64Mi
+        cpu: 50m
+      limits:
+        memory: 128Mi
+
+  service:
+    type: ClusterIP   # internal only — n8n webhook is the output channel
 
   config:
     global:
       resolve_timeout: 5m
     route:
-      group_by: ['alertname', 'namespace']
+      group_by: [alertname, namespace, pod]
       group_wait: 10s
       group_interval: 30s
       repeat_interval: 1h
       receiver: n8n-webhook
+      routes:
+        - matchers:
+            - severity = critical
+          receiver: n8n-webhook
+          group_wait: 5s
+        - matchers:
+            - severity = warning
+          receiver: n8n-webhook
     receivers:
       - name: n8n-webhook
         webhook_configs:
-          # Students replace <EC2_IP> with their own EC2 public IP
-          - url: 'http://<EC2_IP>:5678/webhook/prometheus-alert'
+          # Injected by setup.sh option 6 from EC2_PUBLIC_IP in .env
+          - url: "http://EC2_PUBLIC_IP_PLACEHOLDER:5678/webhook/prometheus-alert"
             send_resolved: true
 
+# ── Workshop Alert Rules ───────────────────────────────────────────────
 additionalPrometheusRulesMap:
   workshop-alerts:
     groups:
+
       - name: workshop.pods
         rules:
           - alert: PodCrashLooping
-            expr: rate(kube_pod_container_status_restarts_total[5m]) > 0
+            expr: rate(kube_pod_container_status_restarts_total[5m]) * 60 > 0
             for: 1m
             labels:
               severity: critical
+              workshop: "true"
             annotations:
-              summary: 'Pod {{ $labels.pod }} is crash looping'
-              description: 'Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has restarted {{ $value | humanize }} times in the last 5 minutes'
+              summary: "Pod {{ $labels.pod }} is crash looping"
+              description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} restarted {{ $value | humanizePercentage }} times/min"
 
           - alert: PodOOMKilled
-            expr: kube_pod_container_status_last_terminated_reason{reason='OOMKilled'} == 1
+            expr: kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1
             for: 0m
             labels:
               severity: critical
+              workshop: "true"
             annotations:
-              summary: 'Pod {{ $labels.pod }} was OOMKilled'
-              description: 'Container {{ $labels.container }} in pod {{ $labels.pod }} was killed due to out of memory'
+              summary: "Pod {{ $labels.pod }} OOMKilled"
+              description: "Container {{ $labels.container }} in {{ $labels.namespace }}/{{ $labels.pod }} was killed — memory limit exceeded"
 
           - alert: PodNotReady
-            expr: kube_pod_status_ready{condition='true'} == 0
+            expr: kube_pod_status_ready{condition="true"} == 0
             for: 2m
             labels:
               severity: warning
+              workshop: "true"
             annotations:
-              summary: 'Pod {{ $labels.pod }} not ready'
-              description: 'Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has been not ready for 2 minutes'
+              summary: "Pod {{ $labels.pod }} not ready"
+              description: "Pod {{ $labels.pod }} in {{ $labels.namespace }} not ready for 2+ minutes"
 
           - alert: DeploymentReplicasMismatch
             expr: kube_deployment_spec_replicas != kube_deployment_status_available_replicas
             for: 3m
             labels:
               severity: warning
+              workshop: "true"
             annotations:
-              summary: 'Deployment {{ $labels.deployment }} replica mismatch'
-              description: 'Deployment {{ $labels.deployment }} has {{ $value }} available replicas but spec requires more'
+              summary: "Deployment {{ $labels.deployment }} replica mismatch"
+              description: "Expected vs available replicas mismatch for {{ $labels.deployment }} in {{ $labels.namespace }}"
+
+      - name: workshop.nodes
+        rules:
+          - alert: NodeMemoryPressure
+            expr: kube_node_status_condition{condition="MemoryPressure",status="true"} == 1
+            for: 1m
+            labels:
+              severity: critical
+              workshop: "true"
+            annotations:
+              summary: "Node {{ $labels.node }} memory pressure"
+              description: "Node {{ $labels.node }} is under memory pressure"
+
+          - alert: NodeHighCPU
+            expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+            for: 2m
+            labels:
+              severity: warning
+              workshop: "true"
+            annotations:
+              summary: "Node {{ $labels.instance }} CPU > 85%"
+              description: "CPU usage on {{ $labels.instance }} has been above 85% for 2 minutes"

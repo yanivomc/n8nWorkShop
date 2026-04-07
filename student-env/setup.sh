@@ -212,28 +212,68 @@ install_monitoring() {
     return
   fi
 
-  echo "  Checking Helm..."
+  if [[ -z "$EC2_PUBLIC_IP" ]]; then
+    err "EC2_PUBLIC_IP not set — run option 3 first"
+    return
+  fi
+
+  # Install Helm if missing
   if ! command -v helm &>/dev/null; then
     echo "  Installing Helm..."
     curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
     ok "Helm installed"
   else
-    ok "Helm: $(helm version --short)"
+    ok "Helm: $(helm version --short 2>/dev/null)"
   fi
 
-  echo "  Adding prometheus-community chart repo..."
+  echo "  Adding prometheus-community repo..."
   helm repo add prometheus-community https://prometheus-community.github.io/helm-charts &>/dev/null
   helm repo update &>/dev/null
+  ok "Helm repo ready"
 
-  echo "  Installing kube-prometheus-stack..."
+  # Patch alertmanager webhook URL in values file
+  VALUES_FILE="$(dirname "$0")/../k8s/monitoring/prometheus-values.yaml"
+  PATCHED_FILE="/tmp/prometheus-values-patched.yaml"
+  sed "s|EC2_PUBLIC_IP_PLACEHOLDER|${EC2_PUBLIC_IP}|g" "$VALUES_FILE" > "$PATCHED_FILE"
+  ok "Alertmanager webhook → http://${EC2_PUBLIC_IP}:5678/webhook/prometheus-alert"
+
+  echo "  Installing kube-prometheus-stack (AWS LoadBalancer)..."
   helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
     -n monitoring --create-namespace \
-    -f "$(dirname "$0")/../k8s/monitoring/prometheus-values.yaml" \
-    --set alertmanager.config.receivers[0].webhook_configs[0].url="http://${EC2_PUBLIC_IP}:5678/webhook/prometheus-alert"
+    -f "$PATCHED_FILE" \
+    --timeout 5m \
+    --wait
 
   echo ""
   ok "Monitoring stack installed"
-  warn "Update Alertmanager webhook URL if EC2_PUBLIC_IP changed"
+  echo ""
+
+  # Wait for LB hostnames to be assigned
+  echo "  Waiting for LoadBalancer addresses (up to 60s)..."
+  for i in $(seq 1 12); do
+    PROM_HOST=$(kubectl get svc -n monitoring monitoring-kube-prometheus-prometheus \
+      -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
+    GRAFANA_HOST=$(kubectl get svc -n monitoring monitoring-grafana \
+      -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
+    [[ -n "$PROM_HOST" && -n "$GRAFANA_HOST" ]] && break
+    sleep 5
+  done
+
+  echo ""
+  if [[ -n "$PROM_HOST" ]]; then
+    ok "Prometheus: http://${PROM_HOST}:9090"
+    save_env_var "PROMETHEUS_URL" "http://${PROM_HOST}:9090"
+  else
+    warn "Prometheus LB pending — check: kubectl get svc -n monitoring"
+  fi
+
+  if [[ -n "$GRAFANA_HOST" ]]; then
+    ok "Grafana:    http://${GRAFANA_HOST}  (admin / workshop123)"
+    save_env_var "GRAFANA_URL" "http://${GRAFANA_HOST}"
+  else
+    warn "Grafana LB pending — check: kubectl get svc -n monitoring"
+  fi
+
   echo ""
   kubectl get pods -n monitoring
 }
@@ -263,6 +303,8 @@ validate_setup() {
   run_check "MCP container running"     "docker inspect mcp-server"
   run_check "MCP health endpoint"       "curl -sf http://localhost:8000/health"
   run_check "MCP kubectl-read works"    "curl -sf -X POST http://localhost:8000/tools/kubectl-read -H 'Content-Type: application/json' -d '{"command":"get nodes"}'"
+  run_check "MCP can reach K8s"         "curl -sf -X POST http://localhost:8000/tools/kubectl-read -H 'Content-Type: application/json' -d '{"command":"get pods -n kube-system"}' | grep -q output"
+  run_check "MCP write tool blocked"    "curl -s -X POST http://localhost:8000/tools/kubectl-read -H 'Content-Type: application/json' -d '{"command":"delete pod test"}' | grep -q 403"
   run_check "Gemini API key set"        "[ -n '$GEMINI_API_KEY' ]"
   run_check "Telegram token set"        "[ -n '$TELEGRAM_BOT_TOKEN' ]"
   run_check "Telegram chat ID set"      "[ -n '$TELEGRAM_CHAT_ID' ]"
@@ -271,11 +313,17 @@ validate_setup() {
   # ── Monitoring checks (required for Sessions 5+) ───────
   echo ""
   echo -e "  ${BOLD}Monitoring (needed for Sessions 5-8)${NC}"
-  run_warn "Prometheus running"   "kubectl get pods -n monitoring -l app.kubernetes.io/name=prometheus --field-selector=status.phase=Running 2>/dev/null | grep -q Running"
-  run_warn "Grafana running"      "kubectl get pods -n monitoring -l app.kubernetes.io/name=grafana --field-selector=status.phase=Running 2>/dev/null | grep -q Running"
-  run_warn "Alertmanager running" "kubectl get pods -n monitoring -l app.kubernetes.io/name=alertmanager --field-selector=status.phase=Running 2>/dev/null | grep -q Running"
-  run_warn "Prometheus NodePort"  "curl -sf http://${MASTER_IP}:30090/-/healthy"
-  run_warn "Grafana NodePort"     "curl -sf http://${MASTER_IP}:30030/api/health"
+  PROM_HOST=$(kubectl get svc -n monitoring monitoring-kube-prometheus-prometheus     -o jsonpath="{.status.loadBalancer.ingress[0].hostname}" 2>/dev/null)
+  GRAFANA_HOST=$(kubectl get svc -n monitoring monitoring-grafana     -o jsonpath="{.status.loadBalancer.ingress[0].hostname}" 2>/dev/null)
+
+  run_warn "Prometheus pod running"   "kubectl get pods -n monitoring -l app.kubernetes.io/name=prometheus 2>/dev/null | grep -q Running"
+  run_warn "Grafana pod running"      "kubectl get pods -n monitoring -l app.kubernetes.io/name=grafana 2>/dev/null | grep -q Running"
+  run_warn "Alertmanager pod running" "kubectl get pods -n monitoring -l app.kubernetes.io/name=alertmanager 2>/dev/null | grep -q Running"
+  run_warn "Prometheus LB reachable"  "[ -n '$PROM_HOST' ] && curl -sf http://${PROM_HOST}:9090/-/healthy"
+  run_warn "Grafana LB reachable"     "[ -n '$GRAFANA_HOST' ] && curl -sf http://${GRAFANA_HOST}/api/health"
+
+  [[ -n "$PROM_HOST" ]]   && echo -e "  ${CYAN}→ Prometheus: http://${PROM_HOST}:9090${NC}"
+  [[ -n "$GRAFANA_HOST" ]] && echo -e "  ${CYAN}→ Grafana:    http://${GRAFANA_HOST}  (admin/workshop123)${NC}"
 
   # ── Summary ────────────────────────────────────────────
   echo ""
