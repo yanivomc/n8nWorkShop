@@ -286,8 +286,8 @@ validate_setup() {
 
   local pass=0 fail=0 warn_count=0
 
-  check_pass() { ok "$1"; ((pass++)); }
-  check_fail() { err "$1"; ((fail++)); }
+  check_pass() { ok "$1"; ((++pass)); }
+  check_fail() { err "$1"; ((++fail)); }
 
   mcp_read_check() {
     local label=$1 cmd=$2
@@ -309,18 +309,18 @@ validate_setup() {
   pod_warn_check() {
     local label=$1 ns=$2 selector=$3
     if kubectl get pods -n "$ns" -l "$selector" 2>/dev/null | grep -q Running; then
-      ok "$label"; ((pass++))
+      ok "$label"; ((++pass))
     else
-      warn "$label (optional)"; ((warn_count++))
+      warn "$label (optional)"; ((++warn_count))
     fi
   }
 
   lb_warn_check() {
     local label=$1 url=$2
     if [[ -n "$url" ]] && curl -sf "$url" &>/dev/null; then
-      ok "$label"; ((pass++))
+      ok "$label"; ((++pass))
     else
-      warn "$label (optional)"; ((warn_count++))
+      warn "$label (optional)"; ((++warn_count))
     fi
   }
 
