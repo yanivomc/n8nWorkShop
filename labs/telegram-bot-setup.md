@@ -19,6 +19,20 @@
 3. It replies with your **Id** — e.g. `123456789`
    This is your `TELEGRAM_CHAT_ID`.
 
+## ⚠️ Critical: Start your bot before testing
+
+**Telegram blocks bots from sending messages to users who have never contacted them.**
+
+Before running any test:
+1. Open Telegram
+2. Search for your bot by username (e.g. `@yaniv_workshop_bot`)
+3. Tap **START** or send `/start`
+
+This is a one-time step. Without it, every API call returns:
+```json
+{"ok":false,"error_code":400,"description":"Bad Request: chat not found"}
+```
+
 ## Add to your workshop setup
 
 Run the setup menu and choose option 3:

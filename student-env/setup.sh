@@ -329,16 +329,27 @@ test_telegram() {
 
   if echo "$RESPONSE" | grep -q '"ok":true'; then
     ok "Message sent! Check your Telegram."
+  elif echo "$RESPONSE" | grep -q "chat not found"; then
+    err "Chat not found — you need to start the bot first."
+    echo ""
+    echo -e "  ${BOLD}Fix (30 seconds):${NC}"
+    echo "    1. Open Telegram on your phone"
+    echo "    2. Search for your bot by username"
+    echo "    3. Tap START or send /start"
+    echo "    4. Re-run this test (option 8)"
+    echo ""
+    echo "  Why: Telegram blocks bots from messaging users who never"
+    echo "  initiated contact. /start unlocks the conversation."
   else
     err "Failed to send message."
     echo "  Response: $RESPONSE"
     echo ""
     echo "  Troubleshooting:"
     echo "    1. Verify token: https://api.telegram.org/bot\${TELEGRAM_BOT_TOKEN}/getMe"
-    echo "    2. Make sure you sent /start to your bot first"
-    echo "    3. Check your chat ID via @userinfobot"
+    echo "    2. Check your chat ID via @userinfobot"
+    echo "    3. Make sure you sent /start to your bot"
     echo ""
-    echo "  Full setup guide: ~/n8nWorkShop/labs/telegram-bot-setup.md"
+    echo "  Full guide: ~/n8nWorkShop/labs/telegram-bot-setup.md"
   fi
 }
 
