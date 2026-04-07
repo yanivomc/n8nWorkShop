@@ -1,0 +1,95 @@
+# kube-prometheus-stack values for workshop
+# Install: helm upgrade --install monitoring prometheus-community/kube-prometheus-stack -n monitoring --create-namespace -f prometheus-values.yaml
+
+prometheus:
+  prometheusSpec:
+    retention: 24h
+    resources:
+      requests:
+        memory: 400Mi
+        cpu: 200m
+      limits:
+        memory: 800Mi
+
+  service:
+    type: NodePort
+    nodePort: 30090
+
+grafana:
+  enabled: true
+  adminPassword: workshop123
+  service:
+    type: NodePort
+    nodePort: 30030
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: workshop
+          folder: Workshop
+          type: file
+          options:
+            path: /var/lib/grafana/dashboards/workshop
+
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests:
+        memory: 100Mi
+
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      group_by: ['alertname', 'namespace']
+      group_wait: 10s
+      group_interval: 30s
+      repeat_interval: 1h
+      receiver: n8n-webhook
+    receivers:
+      - name: n8n-webhook
+        webhook_configs:
+          # Students replace <EC2_IP> with their own EC2 public IP
+          - url: 'http://<EC2_IP>:5678/webhook/prometheus-alert'
+            send_resolved: true
+
+additionalPrometheusRulesMap:
+  workshop-alerts:
+    groups:
+      - name: workshop.pods
+        rules:
+          - alert: PodCrashLooping
+            expr: rate(kube_pod_container_status_restarts_total[5m]) > 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: 'Pod {{ $labels.pod }} is crash looping'
+              description: 'Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has restarted {{ $value | humanize }} times in the last 5 minutes'
+
+          - alert: PodOOMKilled
+            expr: kube_pod_container_status_last_terminated_reason{reason='OOMKilled'} == 1
+            for: 0m
+            labels:
+              severity: critical
+            annotations:
+              summary: 'Pod {{ $labels.pod }} was OOMKilled'
+              description: 'Container {{ $labels.container }} in pod {{ $labels.pod }} was killed due to out of memory'
+
+          - alert: PodNotReady
+            expr: kube_pod_status_ready{condition='true'} == 0
+            for: 2m
+            labels:
+              severity: warning
+            annotations:
+              summary: 'Pod {{ $labels.pod }} not ready'
+              description: 'Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has been not ready for 2 minutes'
+
+          - alert: DeploymentReplicasMismatch
+            expr: kube_deployment_spec_replicas != kube_deployment_status_available_replicas
+            for: 3m
+            labels:
+              severity: warning
+            annotations:
+              summary: 'Deployment {{ $labels.deployment }} replica mismatch'
+              description: 'Deployment {{ $labels.deployment }} has {{ $value }} available replicas but spec requires more'
