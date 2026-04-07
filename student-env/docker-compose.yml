@@ -1,5 +1,8 @@
 version: '3.8'
 
+# CLUSTER_HOST and MASTER_IP are set automatically by setup.sh into .env
+# They solve the kops private DNS problem by injecting /etc/hosts into containers
+
 services:
   n8n:
     image: n8nio/n8n:latest
@@ -18,6 +21,8 @@ services:
       - GENERIC_TIMEZONE=Asia/Jerusalem
     volumes:
       - n8n_data:/home/node/.n8n
+    extra_hosts:
+      - "${CLUSTER_HOST}:${MASTER_IP}"
     depends_on:
       - mcp-server
     networks:
@@ -32,8 +37,11 @@ services:
     environment:
       - PROMETHEUS_URL=${PROMETHEUS_URL}
       - WRITE_APPROVAL_TOKEN=${WRITE_APPROVAL_TOKEN}
+      - KUBECONFIG=/root/.kube/config
     volumes:
-      - ${KUBECONFIG_PATH}:/root/.kube/config:ro
+      - ${KUBECONFIG_PATH:-~/.kube/config}:/root/.kube/config:ro
+    extra_hosts:
+      - "${CLUSTER_HOST}:${MASTER_IP}"
     networks:
       - workshop
 
