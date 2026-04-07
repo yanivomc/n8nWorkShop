@@ -156,7 +156,7 @@ show_status() {
     if docker ps --format '{{.Names}}' 2>/dev/null | grep -q n8n; then
       ok "n8n container running"
     else
-      warn "n8n container not running (docker-compose up -d)"
+      warn "n8n container not running (docker compose up -d)"
     fi
     if docker ps --format '{{.Names}}' 2>/dev/null | grep -q mcp-server; then
       ok "MCP server running"
@@ -188,7 +188,7 @@ start_stack() {
   hdr "Starting n8n + MCP Server"
   cd "$(dirname "$0")"
   load_env
-  docker-compose up -d --build
+  docker compose up -d --build
   echo ""
   ok "Stack started"
   echo "  n8n:  http://localhost:5678"
@@ -198,7 +198,7 @@ start_stack() {
 stop_stack() {
   hdr "Stopping Stack"
   cd "$(dirname "$0")"
-  docker-compose down
+  docker compose down
   ok "Stack stopped"
 }
 
