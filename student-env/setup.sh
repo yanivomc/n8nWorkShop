@@ -288,6 +288,37 @@ first_run() {
   fi
 }
 
+
+# ── Test Telegram bot ─────────────────────────────────────────────────
+test_telegram() {
+  hdr "Test Telegram Bot"
+  load_env
+
+  if [[ -z "$TELEGRAM_BOT_TOKEN" || -z "$TELEGRAM_CHAT_ID" ]]; then
+    err "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set — run option 3 first"
+    return
+  fi
+
+  echo "  Sending test message..."
+  RESPONSE=$(curl -sf "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+    -d "chat_id=${TELEGRAM_CHAT_ID}" \
+    -d "text=🚀 Workshop bot is alive! MCP + n8n ready." 2>&1)
+
+  if echo "$RESPONSE" | grep -q '"ok":true'; then
+    ok "Message sent! Check your Telegram."
+  else
+    err "Failed to send message."
+    echo "  Response: $RESPONSE"
+    echo ""
+    echo "  Troubleshooting:"
+    echo "    1. Verify token: https://api.telegram.org/bot\${TELEGRAM_BOT_TOKEN}/getMe"
+    echo "    2. Make sure you sent /start to your bot first"
+    echo "    3. Check your chat ID via @userinfobot"
+    echo ""
+    echo "  Full setup guide: ~/n8nWorkShop/labs/telegram-bot-setup.md"
+  fi
+}
+
 # ── Main menu ─────────────────────────────────────────────────────────
 menu() {
   while true; do
@@ -301,6 +332,7 @@ menu() {
     echo "  5) Stop stack"
     echo "  6) Install Prometheus + Grafana"
     echo "  7) Validate full setup"
+    echo "  8) Test Telegram bot"
     echo "  q) Quit"
     echo ""
     echo -n "  Choice: "
@@ -313,6 +345,7 @@ menu() {
       5) stop_stack ;;
       6) install_monitoring ;;
       7) validate_setup ;;
+      8) test_telegram ;;
       q|Q) echo ""; exit 0 ;;
       *) warn "Invalid choice" ;;
     esac
