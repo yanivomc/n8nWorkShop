@@ -243,28 +243,51 @@ validate_setup() {
   hdr "Validation"
   load_env
 
-  local pass=0 fail=0
+  local pass=0 fail=0 warn_count=0
 
   run_check() {
     local label=$1; shift
-    if "$@" &>/dev/null; then ok "$label"; ((pass++)); else err "$label"; ((fail++)); fi
+    if eval "$@" &>/dev/null; then ok "$label"; ((pass++)); else err "$label"; ((fail++)); fi
   }
 
-  run_check "kubectl cluster access"           kubectl get nodes
-  run_check "Docker daemon"                    docker info
-  run_check "n8n container"                   docker inspect n8n
-  run_check "MCP container"                   docker inspect mcp-server
-  run_check "MCP health endpoint"             curl -sf http://localhost:8000/health
-  run_check "MCP kubectl-read tool"           curl -sf -X POST http://localhost:8000/tools/kubectl-read \
-                                                -H "Content-Type: application/json" \
-                                                -d '{"command":"get nodes"}'
-  run_check "Gemini key set"                  [ -n "$GEMINI_API_KEY" ]
-  run_check "Telegram token set"              [ -n "$TELEGRAM_BOT_TOKEN" ]
-  run_check "Write approval token set"        [ -n "$WRITE_APPROVAL_TOKEN" ]
+  run_warn() {
+    local label=$1; shift
+    if eval "$@" &>/dev/null; then ok "$label"; ((pass++)); else warn "$label (optional)"; ((warn_count++)); fi
+  }
 
+  # ── Core checks (required) ─────────────────────────────
+  echo -e "  ${BOLD}Core${NC}"
+  run_check "kubectl cluster access"    "kubectl get nodes"
+  run_check "Docker daemon"             "docker info"
+  run_check "n8n container running"     "docker inspect n8n"
+  run_check "MCP container running"     "docker inspect mcp-server"
+  run_check "MCP health endpoint"       "curl -sf http://localhost:8000/health"
+  run_check "MCP kubectl-read works"    "curl -sf -X POST http://localhost:8000/tools/kubectl-read -H 'Content-Type: application/json' -d '{"command":"get nodes"}'"
+  run_check "Gemini API key set"        "[ -n '$GEMINI_API_KEY' ]"
+  run_check "Telegram token set"        "[ -n '$TELEGRAM_BOT_TOKEN' ]"
+  run_check "Telegram chat ID set"      "[ -n '$TELEGRAM_CHAT_ID' ]"
+  run_check "Write approval token set"  "[ -n '$WRITE_APPROVAL_TOKEN' ]"
+
+  # ── Monitoring checks (required for Sessions 5+) ───────
   echo ""
-  echo "  Passed: ${pass}  Failed: ${fail}"
-  [[ $fail -eq 0 ]] && ok "All checks passed — ready for the workshop!" || warn "Fix failing checks before starting"
+  echo -e "  ${BOLD}Monitoring (needed for Sessions 5-8)${NC}"
+  run_warn "Prometheus running"   "kubectl get pods -n monitoring -l app.kubernetes.io/name=prometheus --field-selector=status.phase=Running 2>/dev/null | grep -q Running"
+  run_warn "Grafana running"      "kubectl get pods -n monitoring -l app.kubernetes.io/name=grafana --field-selector=status.phase=Running 2>/dev/null | grep -q Running"
+  run_warn "Alertmanager running" "kubectl get pods -n monitoring -l app.kubernetes.io/name=alertmanager --field-selector=status.phase=Running 2>/dev/null | grep -q Running"
+  run_warn "Prometheus NodePort"  "curl -sf http://${MASTER_IP}:30090/-/healthy"
+  run_warn "Grafana NodePort"     "curl -sf http://${MASTER_IP}:30030/api/health"
+
+  # ── Summary ────────────────────────────────────────────
+  echo ""
+  echo "  ──────────────────────────────────"
+  echo "  Passed: ${pass}  Failed: ${fail}  Optional warnings: ${warn_count}"
+  if [[ $fail -eq 0 && $warn_count -eq 0 ]]; then
+    ok "Everything ready — let the workshop begin!"
+  elif [[ $fail -eq 0 ]]; then
+    ok "Core ready. Install monitoring (option 6) before Session 5."
+  else
+    err "${fail} core check(s) failed — fix before starting."
+  fi
 }
 
 # ── First-run check ───────────────────────────────────────────────────
