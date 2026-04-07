@@ -414,6 +414,28 @@ test_telegram() {
   fi
 }
 
+
+# ── First-run check ───────────────────────────────────────────────────
+first_run() {
+  [ ! -f "$ENV_FILE" ] && cp "$(dirname "$0")/.env.example" "$ENV_FILE"
+  load_env
+
+  if ! kubectl_works || [[ -z "$GEMINI_API_KEY" ]]; then
+    echo -e "${BOLD}${CYAN}"
+    echo "  ╔══════════════════════════════════════════╗"
+    echo "  ║   n8n DevOps Workshop — First Run Setup  ║"
+    echo "  ╚══════════════════════════════════════════╝"
+    echo -e "${NC}"
+    warn "First-time setup required. Running initial configuration..."
+    echo ""
+    setup_cluster
+    configure_keys
+    echo ""
+    ok "Initial setup complete. Starting menu..."
+    sleep 1
+  fi
+}
+
 # ── Main menu ─────────────────────────────────────────────────────────
 menu() {
   while true; do
