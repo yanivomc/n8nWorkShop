@@ -279,53 +279,88 @@ install_monitoring() {
 }
 
 # ── Validate setup ────────────────────────────────────────────────────
+# ── Validate setup ────────────────────────────────────────────────────
 validate_setup() {
   hdr "Validation"
   load_env
 
   local pass=0 fail=0 warn_count=0
 
-  run_check() {
-    local label=$1; shift
-    if eval "$@" &>/dev/null; then ok "$label"; ((pass++)); else err "$label"; ((fail++)); fi
+  check_pass() { ok "$1"; ((pass++)); }
+  check_fail() { err "$1"; ((fail++)); }
+
+  mcp_read_check() {
+    local label=$1 cmd=$2
+    local out
+    out=$(curl -sf -X POST http://localhost:8000/tools/kubectl-read \
+      -H "Content-Type: application/json" \
+      -d "{\"command\":\"${cmd}\"}" 2>/dev/null)
+    if echo "$out" | grep -q '"output"'; then check_pass "$label"; else check_fail "$label"; fi
   }
 
-  run_warn() {
-    local label=$1; shift
-    if eval "$@" &>/dev/null; then ok "$label"; ((pass++)); else warn "$label (optional)"; ((warn_count++)); fi
+  mcp_write_blocked_check() {
+    local out
+    out=$(curl -s -X POST http://localhost:8000/tools/kubectl-read \
+      -H "Content-Type: application/json" \
+      -d '{"command":"delete pod test"}' 2>/dev/null)
+    if echo "$out" | grep -q '"detail"'; then check_pass "MCP write tool blocked"; else check_fail "MCP write tool blocked"; fi
   }
 
-  # ── Core checks (required) ─────────────────────────────
+  pod_warn_check() {
+    local label=$1 ns=$2 selector=$3
+    if kubectl get pods -n "$ns" -l "$selector" 2>/dev/null | grep -q Running; then
+      ok "$label"; ((pass++))
+    else
+      warn "$label (optional)"; ((warn_count++))
+    fi
+  }
+
+  lb_warn_check() {
+    local label=$1 url=$2
+    if [[ -n "$url" ]] && curl -sf "$url" &>/dev/null; then
+      ok "$label"; ((pass++))
+    else
+      warn "$label (optional)"; ((warn_count++))
+    fi
+  }
+
+  # ── Core checks ───────────────────────────────────────
   echo -e "  ${BOLD}Core${NC}"
-  run_check "kubectl cluster access"    "kubectl get nodes"
-  run_check "Docker daemon"             "docker info"
-  run_check "n8n container running"     "docker inspect n8n"
-  run_check "MCP container running"     "docker inspect mcp-server"
-  run_check "MCP health endpoint"       "curl -sf http://localhost:8000/health"
-  run_check "MCP kubectl-read works"    "curl -sf -X POST http://localhost:8000/tools/kubectl-read -H 'Content-Type: application/json' -d '{"command":"get nodes"}'"
-  run_check "MCP can reach K8s"         "curl -sf -X POST http://localhost:8000/tools/kubectl-read -H 'Content-Type: application/json' -d '{"command":"get pods -n kube-system"}' | python3 -c 'import sys,json; d=json.load(sys.stdin); sys.exit(0 if d.get("output") else 1)'"
-  run_check "MCP write tool blocked"    "curl -s -X POST http://localhost:8000/tools/kubectl-read -H 'Content-Type: application/json' -d '{"command":"delete pod test"}' | python3 -c 'import sys,json; d=json.load(sys.stdin); sys.exit(0 if d.get("detail") and "403" in str(d) else 1)'"
-  run_check "Gemini API key set"        "[ -n '$GEMINI_API_KEY' ]"
-  run_check "Telegram token set"        "[ -n '$TELEGRAM_BOT_TOKEN' ]"
-  run_check "Telegram chat ID set"      "[ -n '$TELEGRAM_CHAT_ID' ]"
-  run_check "Write approval token set"  "[ -n '$WRITE_APPROVAL_TOKEN' ]"
 
-  # ── Monitoring checks (required for Sessions 5+) ───────
+  kubectl get nodes &>/dev/null     && check_pass "kubectl cluster access"    || check_fail "kubectl cluster access"
+  docker info &>/dev/null           && check_pass "Docker daemon"             || check_fail "Docker daemon"
+  docker inspect n8n &>/dev/null    && check_pass "n8n container running"     || check_fail "n8n container running"
+  docker inspect mcp-server &>/dev/null && check_pass "MCP container running" || check_fail "MCP container running"
+  curl -sf http://localhost:8000/health &>/dev/null && check_pass "MCP health endpoint" || check_fail "MCP health endpoint"
+
+  mcp_read_check "MCP kubectl-read works" "get nodes"
+  mcp_read_check "MCP can reach K8s"     "get pods -n kube-system"
+  mcp_write_blocked_check
+
+  [[ -n "$GEMINI_API_KEY" ]]       && check_pass "Gemini API key set"       || check_fail "Gemini API key set"
+  [[ -n "$TELEGRAM_BOT_TOKEN" ]]   && check_pass "Telegram token set"       || check_fail "Telegram token set"
+  [[ -n "$TELEGRAM_CHAT_ID" ]]     && check_pass "Telegram chat ID set"     || check_fail "Telegram chat ID set"
+  [[ -n "$WRITE_APPROVAL_TOKEN" ]] && check_pass "Write approval token set" || check_fail "Write approval token set"
+
+  # ── Monitoring checks (Sessions 5-8) ─────────────────
   echo ""
   echo -e "  ${BOLD}Monitoring (needed for Sessions 5-8)${NC}"
-  PROM_HOST=$(kubectl get svc -n monitoring monitoring-kube-prometheus-prometheus     -o jsonpath="{.status.loadBalancer.ingress[0].hostname}" 2>/dev/null)
-  GRAFANA_HOST=$(kubectl get svc -n monitoring monitoring-grafana     -o jsonpath="{.status.loadBalancer.ingress[0].hostname}" 2>/dev/null)
 
-  run_warn "Prometheus pod running"   "kubectl get pods -n monitoring -l app.kubernetes.io/name=prometheus 2>/dev/null | grep -q Running"
-  run_warn "Grafana pod running"      "kubectl get pods -n monitoring -l app.kubernetes.io/name=grafana 2>/dev/null | grep -q Running"
-  run_warn "Alertmanager pod running" "kubectl get pods -n monitoring -l app.kubernetes.io/name=alertmanager 2>/dev/null | grep -q Running"
-  run_warn "Prometheus LB reachable"  "[ -n '$PROM_HOST' ] && curl -sf http://${PROM_HOST}:9090/-/healthy"
-  run_warn "Grafana LB reachable"     "[ -n '$GRAFANA_HOST' ] && curl -sf http://${GRAFANA_HOST}/api/health"
+  PROM_HOST=$(kubectl get svc -n monitoring monitoring-kube-prometheus-prometheus \
+    -o jsonpath="{.status.loadBalancer.ingress[0].hostname}" 2>/dev/null)
+  GRAFANA_HOST=$(kubectl get svc -n monitoring monitoring-grafana \
+    -o jsonpath="{.status.loadBalancer.ingress[0].hostname}" 2>/dev/null)
 
-  [[ -n "$PROM_HOST" ]]   && echo -e "  ${CYAN}→ Prometheus: http://${PROM_HOST}:9090${NC}"
+  pod_warn_check "Prometheus pod running"   monitoring "app.kubernetes.io/name=prometheus"
+  pod_warn_check "Grafana pod running"      monitoring "app.kubernetes.io/name=grafana"
+  pod_warn_check "Alertmanager pod running" monitoring "app.kubernetes.io/name=alertmanager"
+  lb_warn_check  "Prometheus LB reachable"  "http://${PROM_HOST}:9090/-/healthy"
+  lb_warn_check  "Grafana LB reachable"     "http://${GRAFANA_HOST}/api/health"
+
+  [[ -n "$PROM_HOST" ]]    && echo -e "  ${CYAN}→ Prometheus: http://${PROM_HOST}:9090${NC}"
   [[ -n "$GRAFANA_HOST" ]] && echo -e "  ${CYAN}→ Grafana:    http://${GRAFANA_HOST}  (admin/workshop123)${NC}"
 
-  # ── Summary ────────────────────────────────────────────
+  # ── Summary ───────────────────────────────────────────
   echo ""
   echo "  ──────────────────────────────────"
   echo "  Passed: ${pass}  Failed: ${fail}  Optional warnings: ${warn_count}"
@@ -337,28 +372,6 @@ validate_setup() {
     err "${fail} core check(s) failed — fix before starting."
   fi
 }
-
-# ── First-run check ───────────────────────────────────────────────────
-first_run() {
-  [ ! -f "$ENV_FILE" ] && cp "$(dirname "$0")/.env.example" "$ENV_FILE"
-  load_env
-
-  if ! kubectl_works || [[ -z "$GEMINI_API_KEY" ]]; then
-    echo -e "${BOLD}${CYAN}"
-    echo "  ╔══════════════════════════════════════════╗"
-    echo "  ║   n8n DevOps Workshop — First Run Setup  ║"
-    echo "  ╚══════════════════════════════════════════╝"
-    echo -e "${NC}"
-    warn "First-time setup required. Running initial configuration..."
-    echo ""
-    setup_cluster
-    configure_keys
-    echo ""
-    ok "Initial setup complete. Starting menu..."
-    sleep 1
-  fi
-}
-
 
 # ── Test Telegram bot ─────────────────────────────────────────────────
 test_telegram() {
