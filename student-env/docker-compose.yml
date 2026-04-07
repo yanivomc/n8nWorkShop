@@ -20,6 +20,15 @@ services:
       - WEBHOOK_URL=http://${EC2_PUBLIC_IP}:5678
       - GENERIC_TIMEZONE=Asia/Jerusalem
       - N8N_SECURE_COOKIE=false
+      # ── Skip onboarding / telemetry ──────────────────────────
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - N8N_VERSION_NOTIFICATIONS_ENABLED=false
+      - N8N_HIDE_USAGE_PAGE=true
+      # ── Owner pre-configured (avoids setup wizard) ────────────
+      - N8N_EMAIL=${N8N_EMAIL:-admin@workshop.local}
+      - N8N_SKIP_WEBHOOK_DEREGISTRATION_SHUTDOWN=true
+      # ── Community nodes (allow install) ──────────────────────
+      - N8N_COMMUNITY_PACKAGES_ENABLED=true
     volumes:
       - n8n_data:/home/node/.n8n
     extra_hosts:
