@@ -1,5 +1,5 @@
 {
-  "name": "S2 - AI Agent + MCP Cluster Intelligence",
+  "name": "S2 - AI Agent + MCP Cluster Intelligence v1",
   "nodes": [
     {
       "parameters": {},
@@ -10,20 +10,14 @@
       "position": [
         240,
         304
-      ],
-      "notesInFlow": false,
-      "executeOnce": false,
-      "alwaysOutputData": false,
-      "retryOnFail": false,
-      "maxTries": 0,
-      "waitBetweenTries": 0
+      ]
     },
     {
       "parameters": {
         "promptType": "define",
-        "text": "={{ $json.query || 'What is the current health of the Kubernetes cluster? Check all namespaces for any issues.' }}",
+        "text": "={{ $json.query || 'Check cluster health: first get all pods with kubectl, then use PromQL to check CPU usage with rate(container_cpu_usage_seconds_total[5m]) and memory pressure. Use BOTH kubectl and PromQL tools.' }}",
         "options": {
-          "systemMessage": "You are an expert SRE assistant with direct access to a Kubernetes cluster.\n\nYou have tools:\n1. kubectl_read - run any read-only kubectl command (get, describe, logs, events, top)\n2. promql - run any PromQL query against Prometheus\n\nWhen investigating:\n- Start with: kubectl get pods -A\n- For unhealthy pods: kubectl describe pod <name> -n <namespace>\n- Check events: kubectl get events -A --sort-by=.lastTimestamp\n- Use PromQL for live metrics when relevant\n\nReturn a structured response:\nSUMMARY: one-line status\nSEVERITY: critical / warning / healthy\nROOT_CAUSE: your assessment\nCONFIDENCE: high / medium / low\nRECOMMENDED_ACTION: what should be done\nREQUIRES_APPROVAL: yes/no"
+          "systemMessage": "You are an expert SRE assistant with direct access to a Kubernetes cluster.\n\nYou have tools:\n1. kubectl_read - run any read-only kubectl command against the cluster.\n   Parameter: \"command\" (string) — the kubectl subcommand and flags to execute, e.g. \"get pods -A\", \"describe pod <name> -n <ns>\", \"logs <pod> -n <ns> --tail=50\", \"get events -A --sort-by=.lastTimestamp\".\n2. promql - run any PromQL query against Prometheus to get live metrics.\n   Parameter: \"query\" (string) — a valid PromQL expression, e.g. \"up\", \"rate(container_cpu_usage_seconds_total[5m])\", \"kube_pod_status_ready{condition=\\\"true\\\"}\".\n\nWhen investigating:\n- Start with: kubectl get pods -A\n- For unhealthy pods: kubectl describe pod <name> -n <namespace>\n- Check events: kubectl get events -A --sort-by=.lastTimestamp\n- Use PromQL for live metrics when relevant\n\nReturn a structured response:\nSUMMARY: one-line status\nSEVERITY: critical / warning / healthy\nROOT_CAUSE: your assessment\nCONFIDENCE: high / medium / low\nRECOMMENDED_ACTION: what should be done\nREQUIRES_APPROVAL: yes/no"
         }
       },
       "id": "a1b2c3d4-0002-0002-0002-000000000002",
@@ -34,15 +28,11 @@
         480,
         304
       ],
-      "notesInFlow": false,
-      "executeOnce": false,
-      "alwaysOutputData": false,
-      "retryOnFail": false,
-      "maxTries": 0,
-      "waitBetweenTries": 0
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
+        "modelName": "models/gemini-2.5-flash",
         "options": {}
       },
       "id": "a1b2c3d4-0003-0003-0003-000000000003",
@@ -53,12 +43,6 @@
         368,
         512
       ],
-      "notesInFlow": false,
-      "executeOnce": false,
-      "alwaysOutputData": false,
-      "retryOnFail": false,
-      "maxTries": 0,
-      "waitBetweenTries": 0,
       "credentials": {
         "googlePalmApi": {
           "id": "57EnyFD1KF7gSoQU",
@@ -72,10 +56,14 @@
         "method": "POST",
         "url": "http://mcp-server:8000/tools/kubectl-read",
         "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"command\": \"{command}\"}",
         "parametersBody": {
           "values": [
             {
-              "name": "command"
+              "name": "command",
+              "type": "string",
+              "description": "The kubectl subcommand and flags to execute, e.g. 'get pods -A' or 'describe pod my-pod -n default'"
             }
           ]
         }
@@ -87,13 +75,7 @@
       "position": [
         480,
         512
-      ],
-      "notesInFlow": false,
-      "executeOnce": false,
-      "alwaysOutputData": false,
-      "retryOnFail": false,
-      "maxTries": 0,
-      "waitBetweenTries": 0
+      ]
     },
     {
       "parameters": {
@@ -101,10 +83,14 @@
         "method": "POST",
         "url": "http://mcp-server:8000/tools/promql",
         "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"query\": \"{query}\"}",
         "parametersBody": {
           "values": [
             {
-              "name": "query"
+              "name": "query",
+              "type": "string",
+              "description": "A valid PromQL expression, e.g. 'up' or 'rate(container_cpu_usage_seconds_total[5m])'"
             }
           ]
         }
@@ -116,13 +102,7 @@
       "position": [
         624,
         512
-      ],
-      "notesInFlow": false,
-      "executeOnce": false,
-      "alwaysOutputData": false,
-      "retryOnFail": false,
-      "maxTries": 0,
-      "waitBetweenTries": 0
+      ]
     },
     {
       "parameters": {
@@ -157,13 +137,48 @@
       "position": [
         720,
         304
-      ],
-      "notesInFlow": false,
-      "executeOnce": false,
-      "alwaysOutputData": false,
-      "retryOnFail": false,
-      "maxTries": 0,
-      "waitBetweenTries": 0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "err1",
+              "name": "error",
+              "value": "={{ $json.error?.message || 'AI Agent failed' }}",
+              "type": "string"
+            },
+            {
+              "id": "err2",
+              "name": "timestamp",
+              "value": "={{ new Date().toISOString() }}",
+              "type": "string"
+            },
+            {
+              "id": "err3",
+              "name": "workflow",
+              "value": "S2 - AI Agent + MCP",
+              "type": "string"
+            },
+            {
+              "id": "err4",
+              "name": "severity",
+              "value": "error",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0007-0007-0007-000000000007",
+      "name": "Error Output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        720,
+        500
+      ]
     }
   ],
   "connections": {
@@ -183,6 +198,13 @@
         [
           {
             "node": "Format Output",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Output",
             "type": "main",
             "index": 0
           }
@@ -217,7 +239,7 @@
           {
             "node": "AI Agent",
             "type": "ai_tool",
-            "index": 1
+            "index": 0
           }
         ]
       ]
@@ -227,10 +249,7 @@
     "executionOrder": "v1",
     "saveManualExecutions": true,
     "saveDataErrorExecution": "all",
-    "saveDataSuccessExecution": "all",
-    "callerPolicy": "workflowsFromSameOwner",
-    "availableInMCP": false,
-    "binaryMode": "separate"
+    "saveDataSuccessExecution": "all"
   },
   "staticData": null
 }
