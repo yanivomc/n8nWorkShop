@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bad-image-app
+  labels:
+    app: bad-image-app
+    scenario: failed-deployment
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: bad-image-app
+  template:
+    metadata:
+      labels:
+        app: bad-image-app
+    spec:
+      containers:
+        - name: app
+          image: nginx:this-tag-does-not-exist-workshop-2026
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"

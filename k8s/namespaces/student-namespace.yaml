@@ -1,0 +1,8 @@
+# Replace STUDENT_NAME with actual student id (e.g. student01)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: prod-STUDENT_NAME
+  labels:
+    workshop: n8n-devops
+    student: STUDENT_NAME

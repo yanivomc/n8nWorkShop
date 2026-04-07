@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: resource-hungry
+  labels:
+    app: resource-hungry
+    scenario: pending
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: resource-hungry
+  template:
+    metadata:
+      labels:
+        app: resource-hungry
+    spec:
+      containers:
+        - name: app
+          image: nginx:alpine
+          resources:
+            requests:
+              memory: "4Gi"
+              cpu: "4"
+            limits:
+              memory: "4Gi"
+              cpu: "4"
