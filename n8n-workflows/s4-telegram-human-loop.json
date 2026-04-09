@@ -328,6 +328,20 @@
         1100,
         180
       ]
+    },
+    {
+      "parameters": {
+        "sessionKey": "={{ $('Route Message').first().json.chatId }}",
+        "contextWindowLength": 10
+      },
+      "id": "a1b2c3d4-0216-0216-0216-000000000216",
+      "name": "Chat Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        880,
+        520
+      ]
     }
   ],
   "connections": {
@@ -468,6 +482,17 @@
           {
             "node": "Send Answer",
             "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "K8s Assistant",
+            "type": "ai_memory",
             "index": 0
           }
         ]
