@@ -135,19 +135,33 @@ configure_keys() {
     err "EC2 IP not set — webhook URLs will be broken. Re-run option 3."
   fi
 
-  # TOTP 2FA setup
+  # TOTP 2FA setup — generate using MCP container (has pyotp installed)
   if [[ -z "$TOTP_SECRET" ]]; then
     echo ""
     ok "Generating TOTP secret for 2FA approval gate..."
-    TOTP_SECRET=$(python3 -c "import pyotp; print(pyotp.random_base32())" 2>/dev/null || openssl rand -base64 20 | tr -d '=' | tr '+/' 'AZ')
+    # Build MCP container first so pyotp is available
+    cd "$(dirname "$0")"
+    docker compose build mcp-server --quiet 2>/dev/null
+    TOTP_SECRET=$(docker run --rm student-env-mcp-server python3 -c "import pyotp; print(pyotp.random_base32())" 2>/dev/null)
+    if [[ -z "$TOTP_SECRET" ]]; then
+      err "Could not generate TOTP secret — is Docker running?"
+      return
+    fi
     save_env_var "TOTP_SECRET" "$TOTP_SECRET"
+    # Restart MCP with new secret
+    docker rm -f mcp-server 2>/dev/null || true
+    docker compose up -d mcp-server
     echo ""
     echo -e "  ${CYAN}📱 Add this key to Authy or Google Authenticator:${NC}"
-    echo -e "  ${BOLD}${TOTP_SECRET}${NC}"
-    echo -e "  ${CYAN}Or scan QR at: https://chart.googleapis.com/chart?chs=200x200&chld=M|0&cht=qr&chl=otpauth://totp/ClawOps:workshop?secret=${TOTP_SECRET}%26issuer=n8nWorkshop${NC}"
+    echo -e "  ${BOLD}  Account: ClawOps Workshop${NC}"
+    echo -e "  ${BOLD}  Key:     ${TOTP_SECRET}${NC}"
+    echo -e "  ${CYAN}  Or scan: https://chart.googleapis.com/chart?chs=200x200&chld=M|0&cht=qr&chl=otpauth://totp/ClawOps:workshop?secret=${TOTP_SECRET}%26issuer=n8nWorkshop${NC}"
     echo ""
+    ok "MCP server restarted with TOTP support"
   else
     ok "TOTP secret already configured (use Authy/Google Auth to get codes)"
+    echo -e "  ${CYAN}  Key: ${TOTP_SECRET}${NC}"
+    echo -e "  ${CYAN}  QR:  https://chart.googleapis.com/chart?chs=200x200&chld=M|0&cht=qr&chl=otpauth://totp/ClawOps:workshop?secret=${TOTP_SECRET}%26issuer=n8nWorkshop${NC}"
   fi
 
   echo -n "  ngrok static domain (optional, get free one at dashboard.ngrok.com/domains) [${NGROK_DOMAIN:-not set}]: "
@@ -234,6 +248,12 @@ start_stack() {
   docker compose up -d --build
   echo ""
   ok "Stack started"
+  # Verify TOTP is configured
+  if [[ -z "$TOTP_SECRET" ]]; then
+    warn "TOTP_SECRET not set — run option 3 to configure 2FA for the approval gate"
+  else
+    ok "TOTP 2FA active — use Authy/Google Authenticator for approvals"
+  fi
   echo "  n8n:  http://${EC2_PUBLIC_IP}:5678"
   echo "  MCP:  http://localhost:8000/docs"
   echo ""
