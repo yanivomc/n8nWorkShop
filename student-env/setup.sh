@@ -218,6 +218,20 @@ start_stack() {
   ok "Stack started"
   echo "  n8n:  http://${EC2_PUBLIC_IP}:5678"
   echo "  MCP:  http://localhost:8000/docs"
+  echo ""
+  # Check if ngrok is running
+  NGROK_URL=$(curl -sf http://localhost:4040/api/tunnels 2>/dev/null | python3 -c "
+import sys,json
+data=json.load(sys.stdin)
+for t in data.get('tunnels',[]):
+    if t.get('proto')=='https': print(t['public_url']); break
+" 2>/dev/null)
+  if [[ -n "$NGROK_URL" ]]; then
+    ok "ngrok tunnel active: $NGROK_URL"
+  else
+    warn "ngrok not running — required for S4 Telegram Trigger."
+    warn "Run option 10 before activating the S4 workflow."
+  fi
 }
 
 stop_stack() {
