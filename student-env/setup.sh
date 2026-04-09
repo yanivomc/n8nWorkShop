@@ -135,6 +135,9 @@ configure_keys() {
     err "EC2 IP not set — webhook URLs will be broken. Re-run option 3."
   fi
 
+  echo -n "  ngrok static domain (optional, get free one at dashboard.ngrok.com/domains) [${NGROK_DOMAIN:-not set}]: "
+  read val; [[ -n "$val" ]] && { save_env_var "NGROK_DOMAIN" "$val"; ok "ngrok domain saved"; } || ok "Kept existing"
+
   echo -n "  n8n admin password [${N8N_PASSWORD:-changeme123}]: "
   read val
   if [[ -n "$val" ]]; then
@@ -599,7 +602,13 @@ start_ngrok() {
 
   # Start tunnel in background
   echo "  Starting ngrok tunnel on port 5678..."
-  nohup ngrok http 5678 --log=stdout > /tmp/ngrok.log 2>&1 &
+  if [[ -n "$NGROK_DOMAIN" ]]; then
+    nohup ngrok http 5678 --domain="$NGROK_DOMAIN" --log=stdout > /tmp/ngrok.log 2>&1 &
+    ok "Using static domain: $NGROK_DOMAIN"
+  else
+    warn "No NGROK_DOMAIN set — URL will change on restart. Get a free static domain at: https://dashboard.ngrok.com/domains"
+    nohup ngrok http 5678 --log=stdout > /tmp/ngrok.log 2>&1 &
+  fi
   sleep 4
 
   # Get the HTTPS URL from ngrok local API

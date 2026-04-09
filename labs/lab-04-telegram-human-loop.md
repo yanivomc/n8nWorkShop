@@ -44,6 +44,8 @@ This will:
 4. Save the HTTPS URL to `.env` as `WEBHOOK_URL`
 5. Restart n8n so it registers the new webhook URL with Telegram
 
+> 💡 **Get a free static domain** at https://dashboard.ngrok.com/domains — add it to setup.sh option 3 as `NGROK_DOMAIN`. This prevents the URL from changing on every restart, which would break the Telegram webhook.
+
 > ⚠️ **Run option 10 before activating the S4 workflow.** If n8n hasn't picked up the ngrok URL, Telegram will reject the webhook registration.
 
 ---

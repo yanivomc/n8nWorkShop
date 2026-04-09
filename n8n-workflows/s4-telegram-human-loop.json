@@ -131,7 +131,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Check if AI recommended a write action\nconst output = $input.first().json.output || '';\nconst chatId = $('Route Message').first().json.chatId;\n\nconst writeMatch = output.match(/WRITE_NEEDED:\\s*(.+)/);\nif (writeMatch) {\n  const cmd = writeMatch[1].trim();\n  const token = process.env.WRITE_APPROVAL_TOKEN || 'TOKEN';\n  return [{\n    json: {\n      needsApproval: true,\n      command: cmd,\n      token,\n      chatId,\n      message: output.replace(/WRITE_NEEDED:.+/, '').trim(),\n      approvalPrompt: `\u26a0\ufe0f <b>Write action recommended:</b>\\n<code>kubectl ${cmd}</code>\\n\\nApprove?\\n\u2705 /approve ${token} ${cmd}\\n\u274c /deny`\n    }\n  }, null];\n}\nreturn [null, { json: { needsApproval: false, chatId, message: output } }];"
+        "jsCode": "const output = $input.first().json.output || '';\nconst chatId = $('Route Message').first().json.chatId;\n\nconst writeMatch = output.match(/WRITE_NEEDED:\\s*(.+)/);\nif (writeMatch) {\n  const cmd = writeMatch[1].trim();\n  const token = $env.WRITE_APPROVAL_TOKEN || 'TOKEN';\n  return [{ json: {\n    needsApproval: true,\n    command: cmd,\n    token,\n    chatId,\n    message: output.replace(/WRITE_NEEDED:.+/, '').trim(),\n    approvalPrompt: '\u26a0\ufe0f <b>Write action recommended:</b>\\n<code>kubectl ' + cmd + '</code>\\n\\nApprove?\\n\u2705 /approve ' + token + ' ' + cmd + '\\n\u274c /deny'\n  }}];\n}\nreturn [{ json: { needsApproval: false, chatId, message: output } }];"
       },
       "id": "a1b2c3d4-0207-0207-0207-000000000207",
       "name": "Check Write Needed",
@@ -155,7 +155,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        1320,
+        1540,
         100
       ],
       "credentials": {
@@ -178,7 +178,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        1320,
+        1540,
         220
       ],
       "credentials": {
@@ -296,6 +296,38 @@
         660,
         300
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond2",
+              "leftValue": "={{ $json.needsApproval }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0215-0215-0215-000000000215",
+      "name": "Needs Approval?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        180
+      ]
     }
   ],
   "connections": {
@@ -369,14 +401,7 @@
       "main": [
         [
           {
-            "node": "Send Approval Request",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Send Answer",
+            "node": "Needs Approval?",
             "type": "main",
             "index": 0
           }
@@ -424,6 +449,24 @@
         [
           {
             "node": "Validate Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Approval?": {
+      "main": [
+        [
+          {
+            "node": "Send Approval Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Answer",
             "type": "main",
             "index": 0
           }
