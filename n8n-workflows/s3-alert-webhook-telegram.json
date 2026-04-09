@@ -17,97 +17,28 @@
     },
     {
       "parameters": {
-        "assignments": {
-          "assignments": [
-            {
-              "id": "p001",
-              "name": "alertname",
-              "value": "={{ $json.alerts?.[0]?.labels?.alertname || $json.commonLabels?.alertname || 'UnknownAlert' }}",
-              "type": "string"
-            },
-            {
-              "id": "p002",
-              "name": "namespace",
-              "value": "={{ $json.alerts?.[0]?.labels?.namespace || $json.commonLabels?.namespace || 'default' }}",
-              "type": "string"
-            },
-            {
-              "id": "p003",
-              "name": "pod",
-              "value": "={{ $json.alerts?.[0]?.labels?.pod || 'unknown' }}",
-              "type": "string"
-            },
-            {
-              "id": "p004",
-              "name": "severity",
-              "value": "={{ $json.alerts?.[0]?.labels?.severity || $json.commonLabels?.severity || 'warning' }}",
-              "type": "string"
-            },
-            {
-              "id": "p005",
-              "name": "summary",
-              "value": "={{ $json.alerts?.[0]?.annotations?.summary || $json.commonAnnotations?.summary || 'No summary' }}",
-              "type": "string"
-            },
-            {
-              "id": "p006",
-              "name": "description",
-              "value": "={{ $json.alerts?.[0]?.annotations?.description || $json.commonAnnotations?.description || 'No description' }}",
-              "type": "string"
-            },
-            {
-              "id": "p007",
-              "name": "status",
-              "value": "={{ $json.status || 'firing' }}",
-              "type": "string"
-            },
-            {
-              "id": "p008",
-              "name": "startsAt",
-              "value": "={{ $json.alerts?.[0]?.startsAt || new Date().toISOString() }}",
-              "type": "string"
-            },
-            {
-              "id": "p009",
-              "name": "node",
-              "value": "={{ $json.alerts?.[0]?.labels?.node || $json.alerts?.[0]?.labels?.instance || 'unknown' }}",
-              "type": "string"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "id": "a1b2c3d4-0102-0102-0102-000000000102",
-      "name": "Parse Alert",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [440, 300]
-    },
-    {
-      "parameters": {
         "promptType": "define",
-        "text": "=🚨 ALERT RECEIVED — investigate and triage immediately.\n\nAlert Details:\n- Name: {{ $json.alertname }}\n- Severity: {{ $json.severity }}\n- Status: {{ $json.status }}\n- Namespace: {{ $json.namespace }}\n- Pod: {{ $json.pod }}\n- Node: {{ $json.node }}\n- Summary: {{ $json.summary }}\n- Description: {{ $json.description }}\n- Started: {{ $json.startsAt }}\n\nInvestigate this alert using your tools. Focus kubectl commands on namespace '{{ $json.namespace }}'. If a pod name is provided, describe it and tail its logs. Use PromQL for relevant live metrics.\n\nYour response MUST follow this exact format:\nSUMMARY: one-line status\nSEVERITY: critical / warning / healthy\nROOT_CAUSE: your root cause assessment in 1-2 sentences\nCONFIDENCE: high / medium / low\nRECOMMENDED_ACTION: specific actionable steps\nREQUIRES_APPROVAL: yes/no",
+        "text": "=Parse this raw Prometheus Alertmanager webhook payload and produce an investigation brief.\n\nRAW PAYLOAD:\n{{ JSON.stringify($json, null, 2) }}",
         "options": {
-          "systemMessage": "You are an expert SRE on-call assistant. You have been paged with a live Kubernetes alert. Your job is to investigate fast and triage accurately.\n\nYou have two tools:\n1. kubectl_read — run any read-only kubectl command.\n   Parameter: \"command\" — e.g. \"get pods -n prod\", \"describe pod payments-app-xyz -n prod\", \"logs payments-app-xyz -n prod --tail=30\", \"get events -n prod --sort-by=.lastTimestamp\"\n2. promql — run any PromQL query against Prometheus.\n   Parameter: \"query\" — e.g. \"rate(kube_pod_container_status_restarts_total[5m])\", \"kube_pod_status_ready{condition=\\\"true\\\"}\", \"container_memory_usage_bytes\"\n\nInvestigation strategy by alert type:\n- PodCrashLooping → kubectl describe pod + logs + restart rate PromQL\n- PodOOMKilled → kubectl describe pod + container_memory_usage_bytes PromQL\n- PodNotReady → kubectl get pods -n <ns> + describe pod + get events\n- DeploymentReplicasMismatch → kubectl get deployment + describe deployment + events\n- NodeMemoryPressure → kubectl describe node + node_memory_MemAvailable_bytes PromQL\n- NodeHighCPU → kubectl top nodes + rate(node_cpu_seconds_total[5m]) PromQL\n\nAlways run at least 2 tool calls: one kubectl + one PromQL.\nBe specific — use the namespace and pod name from the alert when running commands."
+          "systemMessage": "You are a Kubernetes SRE alert parser. You receive raw webhook payloads from Prometheus Alertmanager monitoring a Kubernetes cluster.\n\nYour job is to read the raw payload — whatever its structure — and understand what it means. Do NOT look for specific field names. Read it semantically.\n\nThe alert may be about any Kubernetes resource: pod, deployment, service, endpoint, node, HPA, PVC, ingress, statefulset, daemonset, job, or anything else. Do not assume it is always about a pod.\n\nFrom the payload, produce a concise investigation brief as a JSON object with exactly these fields:\n{\n  \"resource_type\": \"the kind of K8s resource affected, e.g. Pod, Deployment, Node, Service\",\n  \"resource_name\": \"name of the specific resource, or unknown\",\n  \"namespace\": \"namespace, or cluster-wide if none\",\n  \"symptom\": \"what is wrong in plain English\",\n  \"severity\": \"critical or warning or info\",\n  \"status\": \"firing or resolved\",\n  \"summary\": \"one-line human readable summary\",\n  \"kubectl_commands\": [\"2-3 targeted kubectl commands to investigate this specific resource type\"],\n  \"promql_queries\": [\"1-2 PromQL queries relevant to this symptom and resource type\"]\n}\n\nRules:\n- Return ONLY the JSON object. No markdown, no explanation, no code fences.\n- kubectl_commands must be specific to the resource type and name from the alert — not generic.\n- promql_queries must be relevant to the symptom — not generic.\n- If the alert is about a node, suggest node-level commands and queries. If a deployment, deployment-level. Etc.\n- If any field is truly unknown from the payload, use the string \"unknown\"."
         }
       },
-      "id": "a1b2c3d4-0103-0103-0103-000000000103",
-      "name": "AI Agent",
-      "type": "@n8n/n8n-nodes-langchain.agent",
-      "typeVersion": 1.7,
-      "position": [680, 300],
-      "onError": "continueErrorOutput"
+      "id": "a1b2c3d4-0102-0102-0102-000000000102",
+      "name": "LLM Alert Parser",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [440, 300]
     },
     {
       "parameters": {
         "modelName": "models/gemini-2.5-flash",
         "options": {}
       },
-      "id": "a1b2c3d4-0104-0104-0104-000000000104",
-      "name": "Gemini",
+      "id": "a1b2c3d4-0103-0103-0103-000000000103",
+      "name": "Gemini Parser",
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
-      "position": [560, 520],
+      "position": [320, 500],
       "credentials": {
         "googlePalmApi": {
           "id": "57EnyFD1KF7gSoQU",
@@ -117,7 +48,59 @@
     },
     {
       "parameters": {
-        "toolDescription": "Run any read-only kubectl command against the cluster. Examples: get pods -n prod, describe pod <name> -n <ns>, logs <pod> -n <ns> --tail=30, get events -n <ns> --sort-by=.lastTimestamp, get nodes, top nodes",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "p001",
+              "name": "brief",
+              "value": "={{ (() => { try { return JSON.parse($json.text) } catch(e) { return { resource_type: 'unknown', resource_name: 'unknown', namespace: 'unknown', symptom: $json.text, severity: 'warning', status: 'firing', summary: 'Alert received — parser could not extract structured brief', kubectl_commands: ['get pods -A', 'get events -A --sort-by=.lastTimestamp'], promql_queries: ['up'] } } })() }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0104-0104-0104-000000000104",
+      "name": "Parse LLM Output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=🚨 ALERT — investigate and triage.\n\nInvestigation Brief (produced by alert parser):\n- Resource Type: {{ $json.brief.resource_type }}\n- Resource Name: {{ $json.brief.resource_name }}\n- Namespace: {{ $json.brief.namespace }}\n- Symptom: {{ $json.brief.symptom }}\n- Severity: {{ $json.brief.severity }}\n- Status: {{ $json.brief.status }}\n- Summary: {{ $json.brief.summary }}\n\nSuggested kubectl commands: {{ JSON.stringify($json.brief.kubectl_commands) }}\nSuggested PromQL queries: {{ JSON.stringify($json.brief.promql_queries) }}\n\nInvestigate now. Start with the suggested commands but adapt based on what you find. Run at least one kubectl command and one PromQL query.\n\nReturn your findings in this exact format:\nSUMMARY: one-line status\nSEVERITY: critical / warning / healthy\nROOT_CAUSE: your assessment in 1-2 sentences\nCONFIDENCE: high / medium / low\nRECOMMENDED_ACTION: specific actionable steps\nREQUIRES_APPROVAL: yes/no",
+        "options": {
+          "systemMessage": "You are an expert SRE on-call assistant investigating a live Kubernetes alert. You have two tools:\n\n1. kubectl_read — run any read-only kubectl command.\n   Parameter: \"command\" — e.g. \"get pods -n prod\", \"describe deployment payments -n prod\", \"get events -n prod --sort-by=.lastTimestamp\", \"get nodes\"\n\n2. promql — run any PromQL query against Prometheus.\n   Parameter: \"query\" — e.g. \"kube_deployment_status_available_replicas\", \"rate(node_cpu_seconds_total[5m])\"\n\nAdapt your investigation to the resource type in the brief. The alert may be about any K8s resource — pods, deployments, nodes, services, endpoints, HPAs, PVCs, etc. Use commands appropriate for what is actually affected.\n\nAlways run at least 2 tool calls before concluding."
+        }
+      },
+      "id": "a1b2c3d4-0105-0105-0105-000000000105",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [880, 300],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-flash",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0106-0106-0106-000000000106",
+      "name": "Gemini Agent",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [760, 500],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "57EnyFD1KF7gSoQU",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Run any read-only kubectl command against the cluster. Adapt the command to whatever resource type is being investigated — pods, deployments, nodes, services, endpoints, HPAs, PVCs, etc.",
         "method": "POST",
         "url": "http://mcp-server:8000/tools/kubectl-read",
         "sendBody": true,
@@ -128,20 +111,20 @@
             {
               "name": "command",
               "type": "string",
-              "description": "The kubectl subcommand and flags, e.g. 'get pods -n prod' or 'describe pod my-pod -n prod'"
+              "description": "kubectl subcommand and flags appropriate for the resource being investigated"
             }
           ]
         }
       },
-      "id": "a1b2c3d4-0105-0105-0105-000000000105",
+      "id": "a1b2c3d4-0107-0107-0107-000000000107",
       "name": "kubectl_read",
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
       "typeVersion": 1.1,
-      "position": [680, 520]
+      "position": [880, 500]
     },
     {
       "parameters": {
-        "toolDescription": "Run any PromQL query against Prometheus for live metrics. Examples: rate(kube_pod_container_status_restarts_total[5m]), container_memory_usage_bytes{namespace=\"prod\"}, kube_pod_status_ready{condition=\"true\"}, node_memory_MemAvailable_bytes",
+        "toolDescription": "Run any PromQL query against Prometheus for live metrics. Use queries relevant to the resource type and symptom being investigated.",
         "method": "POST",
         "url": "http://mcp-server:8000/tools/promql",
         "sendBody": true,
@@ -152,16 +135,16 @@
             {
               "name": "query",
               "type": "string",
-              "description": "A valid PromQL expression"
+              "description": "A valid PromQL expression relevant to the symptom and resource type"
             }
           ]
         }
       },
-      "id": "a1b2c3d4-0106-0106-0106-000000000106",
+      "id": "a1b2c3d4-0108-0108-0108-000000000108",
       "name": "promql",
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
       "typeVersion": 1.1,
-      "position": [820, 520]
+      "position": [1020, 500]
     },
     {
       "parameters": {
@@ -170,36 +153,18 @@
             {
               "id": "f001",
               "name": "telegramMessage",
-              "value": "={{ (() => {\n  const sev = $('Parse Alert').first().json.severity;\n  const status = $('Parse Alert').first().json.status;\n  const emoji = status === 'resolved' ? '✅' : (sev === 'critical' ? '🔴' : '🟡');\n  const statusEmoji = status === 'resolved' ? '✅ RESOLVED' : '🚨 FIRING';\n  return [\n    emoji + ' *' + statusEmoji + ': ' + $('Parse Alert').first().json.alertname + '*',\n    '',\n    '📍 *Namespace:* ' + $('Parse Alert').first().json.namespace,\n    '🪲 *Pod:* ' + $('Parse Alert').first().json.pod,\n    '⚡ *Severity:* ' + $('Parse Alert').first().json.severity.toUpperCase(),\n    '',\n    '📋 *Summary:*',\n    $('Parse Alert').first().json.summary,\n    '',\n    '🤖 *AI Triage:*',\n    $json.output,\n    '',\n    '🕐 ' + new Date().toUTCString()\n  ].join('\\n');\n})() }}",
-              "type": "string"
-            },
-            {
-              "id": "f002",
-              "name": "alertname",
-              "value": "={{ $('Parse Alert').first().json.alertname }}",
-              "type": "string"
-            },
-            {
-              "id": "f003",
-              "name": "severity",
-              "value": "={{ $('Parse Alert').first().json.severity }}",
-              "type": "string"
-            },
-            {
-              "id": "f004",
-              "name": "namespace",
-              "value": "={{ $('Parse Alert').first().json.namespace }}",
+              "value": "={{ (() => {\n  const b = $('Parse LLM Output').first().json.brief;\n  const sev = b.severity || 'warning';\n  const status = b.status || 'firing';\n  const sevEmoji = status === 'resolved' ? '✅' : (sev === 'critical' ? '🔴' : '🟡');\n  const statusLabel = status === 'resolved' ? '✅ RESOLVED' : '🚨 FIRING';\n  return [\n    sevEmoji + ' *' + statusLabel + '*',\n    '',\n    '🔧 *Resource:* ' + b.resource_type + ' / ' + b.resource_name,\n    '📍 *Namespace:* ' + b.namespace,\n    '⚡ *Severity:* ' + sev.toUpperCase(),\n    '',\n    '📋 *Summary:* ' + b.summary,\n    '',\n    '🤖 *AI Triage:*',\n    $json.output,\n    '',\n    '🕐 ' + new Date().toUTCString()\n  ].join('\\n');\n})() }}",
               "type": "string"
             }
           ]
         },
         "options": {}
       },
-      "id": "a1b2c3d4-0107-0107-0107-000000000107",
+      "id": "a1b2c3d4-0109-0109-0109-000000000109",
       "name": "Format Telegram Message",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [940, 300]
+      "position": [1100, 300]
     },
     {
       "parameters": {
@@ -210,11 +175,11 @@
           "disable_web_page_preview": true
         }
       },
-      "id": "a1b2c3d4-0108-0108-0108-000000000108",
+      "id": "a1b2c3d4-0110-0110-0110-000000000110",
       "name": "Telegram Alert",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [1160, 300],
+      "position": [1300, 300],
       "credentials": {
         "telegramApi": {
           "id": "TELEGRAM_CREDENTIAL_ID",
@@ -229,39 +194,32 @@
             {
               "id": "e001",
               "name": "telegramMessage",
-              "value": "=❌ *WORKFLOW ERROR — S3 Alert Triage*\n\nAlert: {{ $('Parse Alert').first().json.alertname }}\nError: {{ $json.error?.message || 'AI Agent failed' }}\nTime: {{ new Date().toUTCString() }}\n\n_Manual investigation required._",
-              "type": "string"
-            },
-            {
-              "id": "e002",
-              "name": "error",
-              "value": "={{ $json.error?.message || 'AI Agent failed' }}",
+              "value": "=❌ *WORKFLOW ERROR — S3 Alert Triage*\n\nError: {{ $json.error?.message || 'Unknown failure' }}\nTime: {{ new Date().toUTCString() }}\n\n_Manual investigation required._",
               "type": "string"
             }
           ]
         },
         "options": {}
       },
-      "id": "a1b2c3d4-0109-0109-0109-000000000109",
+      "id": "a1b2c3d4-0111-0111-0111-000000000111",
       "name": "Format Error Message",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [940, 480]
+      "position": [1100, 480]
     },
     {
       "parameters": {
         "chatId": "={{ $vars.TELEGRAM_CHAT_ID || $env.TELEGRAM_CHAT_ID }}",
         "text": "={{ $json.telegramMessage }}",
         "additionalFields": {
-          "parse_mode": "Markdown",
-          "disable_web_page_preview": true
+          "parse_mode": "Markdown"
         }
       },
-      "id": "a1b2c3d4-0110-0110-0110-000000000110",
+      "id": "a1b2c3d4-0112-0112-0112-000000000112",
       "name": "Telegram Error",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [1160, 480],
+      "position": [1300, 480],
       "credentials": {
         "telegramApi": {
           "id": "TELEGRAM_CREDENTIAL_ID",
@@ -272,99 +230,37 @@
   ],
   "connections": {
     "Alertmanager Webhook": {
-      "main": [
-        [
-          {
-            "node": "Parse Alert",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "LLM Alert Parser", "type": "main", "index": 0 }]]
     },
-    "Parse Alert": {
-      "main": [
-        [
-          {
-            "node": "AI Agent",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+    "LLM Alert Parser": {
+      "main": [[{ "node": "Parse LLM Output", "type": "main", "index": 0 }]]
+    },
+    "Gemini Parser": {
+      "ai_languageModel": [[{ "node": "LLM Alert Parser", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Parse LLM Output": {
+      "main": [[{ "node": "AI Agent", "type": "main", "index": 0 }]]
     },
     "AI Agent": {
       "main": [
-        [
-          {
-            "node": "Format Telegram Message",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Format Error Message",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{ "node": "Format Telegram Message", "type": "main", "index": 0 }],
+        [{ "node": "Format Error Message", "type": "main", "index": 0 }]
       ]
     },
-    "Gemini": {
-      "ai_languageModel": [
-        [
-          {
-            "node": "AI Agent",
-            "type": "ai_languageModel",
-            "index": 0
-          }
-        ]
-      ]
+    "Gemini Agent": {
+      "ai_languageModel": [[{ "node": "AI Agent", "type": "ai_languageModel", "index": 0 }]]
     },
     "kubectl_read": {
-      "ai_tool": [
-        [
-          {
-            "node": "AI Agent",
-            "type": "ai_tool",
-            "index": 0
-          }
-        ]
-      ]
+      "ai_tool": [[{ "node": "AI Agent", "type": "ai_tool", "index": 0 }]]
     },
     "promql": {
-      "ai_tool": [
-        [
-          {
-            "node": "AI Agent",
-            "type": "ai_tool",
-            "index": 0
-          }
-        ]
-      ]
+      "ai_tool": [[{ "node": "AI Agent", "type": "ai_tool", "index": 0 }]]
     },
     "Format Telegram Message": {
-      "main": [
-        [
-          {
-            "node": "Telegram Alert",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Telegram Alert", "type": "main", "index": 0 }]]
     },
     "Format Error Message": {
-      "main": [
-        [
-          {
-            "node": "Telegram Error",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Telegram Error", "type": "main", "index": 0 }]]
     }
   },
   "settings": {

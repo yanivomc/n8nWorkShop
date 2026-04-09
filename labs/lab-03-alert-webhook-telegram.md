@@ -240,3 +240,29 @@ cd ~/n8nWorkShop/student-env
 ## What's Next
 
 **Lab 04** adds the human-in-the-loop: when the AI recommends a write action, Telegram sends YES/NO/INFO buttons. Your approval (or rejection) gates the `kubectl-write` tool on the MCP server.
+
+---
+
+## 📊 Slide Note — Good vs Bad Design (S3 Teaching Point)
+
+> **Add this as a "Good vs Bad" comparison slide when building the deck.**
+
+**❌ Bad — Hardcoded field parser (Set node):**
+```
+$json.alerts[0].labels.pod
+$json.alerts[0].labels.namespace
+$json.commonLabels.severity
+```
+- Breaks when alert schema changes
+- Breaks when a non-pod resource fires (Deployment, Service, Node, HPA...)
+- Requires a developer to update the workflow for every new alert type
+- Brittle, zero adaptability
+
+**✅ Good — LLM as semantic parser:**
+- System prompt anchors context: *"Alertmanager, Kubernetes cluster"*
+- LLM reads the raw payload and understands *meaning*, not field names
+- Output is always a consistent investigation brief regardless of input shape
+- Works today for pods, tomorrow for services, next week for HPAs — zero changes
+- Bonus: LLM can even suggest targeted investigation commands based on what it understood
+
+**The principle:** Use hardcoded parsers for stable, well-defined schemas. Use LLMs when the schema varies, evolves, or carries semantic meaning that needs interpretation.
