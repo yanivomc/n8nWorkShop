@@ -199,10 +199,24 @@ start_stack() {
   hdr "Starting n8n + MCP Server"
   cd "$(dirname "$0")"
   load_env
+
+  # Guard: Prometheus must be installed first so MCP gets the correct URL
+  if [[ -z "$PROMETHEUS_URL" ]]; then
+    err "PROMETHEUS_URL not set — run option 4 (Install Prometheus + Grafana) first."
+    err "The MCP server needs this URL to query metrics. Stack NOT started."
+    return
+  fi
+
+  # Guard: EC2 IP must be known for webhooks
+  if [[ -z "$EC2_PUBLIC_IP" ]]; then
+    err "EC2_PUBLIC_IP not set — run option 3 (Configure API keys) first."
+    return
+  fi
+
   docker compose up -d --build
   echo ""
   ok "Stack started"
-  echo "  n8n:  http://localhost:5678"
+  echo "  n8n:  http://${EC2_PUBLIC_IP}:5678"
   echo "  MCP:  http://localhost:8000/docs"
 }
 
@@ -276,6 +290,7 @@ install_monitoring() {
     save_env_var "PROMETHEUS_URL" "http://${PROM_HOST}:9090"
   else
     warn "Prometheus LB pending — check: kubectl get svc -n monitoring"
+    warn "Re-run option 4 once the LB is ready, then restart the stack (option 5)."
   fi
 
   if [[ -n "$GRAFANA_HOST" ]]; then
@@ -287,6 +302,17 @@ install_monitoring() {
 
   echo ""
   kubectl get pods -n monitoring
+
+  # Reload MCP server with updated PROMETHEUS_URL
+  # Must rm the container — restart alone does not reload .env variables
+  if docker ps -q -f name=mcp-server | grep -q .; then
+    echo ""
+    echo "  Reloading MCP server with new PROMETHEUS_URL..."
+    cd "$(dirname "$0")"
+    docker rm -f mcp-server
+    docker compose up -d mcp-server
+    ok "MCP server reloaded — Prometheus URL active"
+  fi
 }
 
 # ── Validate setup ────────────────────────────────────────────────────
@@ -544,9 +570,9 @@ menu() {
     echo "  1) Show status"
     echo "  2) Re-configure cluster (IP + kubeconfig)"
     echo "  3) Configure API keys (Gemini, Telegram, etc.)"
-    echo "  4) Start stack (n8n + MCP)"
-    echo "  5) Stop stack"
-    echo "  6) Install Prometheus + Grafana"
+    echo "  4) Install Prometheus + Grafana   <- run before 5"
+    echo "  5) Start stack (n8n + MCP)        <- requires 4 done"
+    echo "  6) Stop stack"
     echo "  7) Validate full setup"
     echo "  8) Test Telegram bot"
     echo "  9) Generate credentials file"
@@ -558,9 +584,9 @@ menu() {
       1) show_status ;;
       2) setup_cluster ;;
       3) configure_keys ;;
-      4) start_stack ;;
-      5) stop_stack ;;
-      6) install_monitoring ;;
+      4) install_monitoring ;;
+      5) start_stack ;;
+      6) stop_stack ;;
       7) validate_setup ;;
       8) test_telegram ;;
       9) generate_credentials ;;
