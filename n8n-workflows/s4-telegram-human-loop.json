@@ -117,7 +117,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const output = $input.first().json.output || '';\nconst chatId = $('Route Message').first().json.chatId;\n\nconst writeMatch = output.match(/WRITE_NEEDED:\\s*(.+)/);\nif (writeMatch) {\n  const cmd = writeMatch[1].trim();\n  const token = $vars.WRITE_APPROVAL_TOKEN || 'APPROVAL_TOKEN_NOT_SET';\n  return [{ json: {\n    needsApproval: true,\n    command: cmd,\n    token,\n    chatId,\n    message: output.replace(/WRITE_NEEDED:.+/, '').trim(),\n    approvalPrompt: '\u26a0\ufe0f <b>Write action recommended:</b>\\n<code>kubectl ' + cmd + '</code>\\n\\nApprove?\\n\u2705 /approve ' + token + ' ' + cmd + '\\n\u274c /deny'\n  }}];\n}\nreturn [{ json: { needsApproval: false, chatId, message: output } }];"
+        "jsCode": "const output=$input.first().json.output||'';\nconst chatId=$('Route Message').first().json.chatId;\nconst writeMatch=output.match(/WRITE_NEEDED:\\s*(.+)/);\nif(writeMatch){\n  const cmd=writeMatch[1].trim();\n  const token=$vars.WRITE_APPROVAL_TOKEN||'APPROVAL_TOKEN_NOT_SET';\n  return[{json:{needsApproval:true,command:cmd,token,chatId,message:output.replace(/WRITE_NEEDED:.+/,'').trim(),approvalPrompt:'\u26a0\ufe0f <b>Write action recommended:</b>\\n<code>kubectl '+cmd+'</code>\\n\\nApprove?\\n\u2705 /approve '+token+' '+cmd+'\\n\u274c /deny'}}];\n}\nreturn[{json:{needsApproval:false,chatId,message:output}}];"
       },
       "id": "dc329231-cc3c-4926-93d1-e6b4866df7b8",
       "name": "Check Write Needed",
