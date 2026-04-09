@@ -77,7 +77,7 @@
     },
     {
       "parameters": {
-        "toolDescription": "Run any read-only kubectl command. Examples: get pods -n prod, describe pod <n> -n <ns>, get nodes, get events -A --sort-by=.lastTimestamp",
+        "toolDescription": "Run kubectl commands to investigate the cluster state. Examples: get pods -n prod, describe pod <n> -n <ns>, get nodes, get events -A --sort-by=.lastTimestamp. Use this to gather information and diagnose issues.",
         "method": "POST",
         "url": "http://mcp-server:8000/tools/kubectl-read",
         "sendBody": true,
@@ -95,7 +95,7 @@
     },
     {
       "parameters": {
-        "toolDescription": "Run any PromQL query against Prometheus. Use single quotes for label selectors.",
+        "toolDescription": "Run PromQL queries against Prometheus to get live metrics. Use single quotes for label selectors.",
         "method": "POST",
         "url": "http://mcp-server:8000/tools/promql",
         "sendBody": true,
