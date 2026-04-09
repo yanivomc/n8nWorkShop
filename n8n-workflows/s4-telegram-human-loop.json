@@ -1,0 +1,241 @@
+{
+  "name": "S4 - Telegram Human Loop",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": ["message"],
+        "additionalFields": {}
+      },
+      "id": "a1b2c3d4-0201-0201-0201-000000000201",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [220, 300],
+      "webhookId": "telegram-bot",
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Route incoming Telegram message\n// /approve <token> <cmd>  → approval response\n// anything else           → conversational query\nconst msg = $input.first().json.message;\nconst text = (msg?.text || '').trim();\nconst chatId = msg?.chat?.id?.toString();\nconst from = msg?.from?.first_name || 'Engineer';\n\nif (text.startsWith('/approve ') || text.startsWith('/deny ')) {\n  return [{ json: { route: 'approval', text, chatId, from } }, null];\n}\nreturn [null, { json: { route: 'query', text, chatId, from } }];"
+      },
+      "id": "a1b2c3d4-0202-0202-0202-000000000202",
+      "name": "Route Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.from }} asks: {{ $json.text }}\n\nAnswer using kubectl_read and/or promql. Be concise — this is a Telegram chat reply.\nFormat your response clearly with emojis. Keep it under 300 words.",
+        "options": {
+          "systemMessage": "You are a Kubernetes SRE assistant answering questions via Telegram.\n\nYou have two tools:\n1. kubectl_read — any read-only kubectl command. Parameter: \"command\"\n2. promql — any PromQL query. Parameter: \"query\" (single quotes for label selectors)\n\nRules:\n- Be concise — this is a chat interface, not a report\n- Use emojis to make status clear (✅ ❌ ⚠️ 📊)\n- Always run at least one tool before answering\n- If asked about a specific namespace/pod, focus your commands there\n- If you recommend a write action (restart, scale, delete), end with:\n  WRITE_NEEDED: <kubectl command>\n  This will trigger the approval gate."
+        }
+      },
+      "id": "a1b2c3d4-0203-0203-0203-000000000203",
+      "name": "K8s Assistant",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [680, 200],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-flash",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0204-0204-0204-000000000204",
+      "name": "Gemini Assistant",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [560, 380],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "57EnyFD1KF7gSoQU",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Run any read-only kubectl command. Examples: get pods -n prod, describe pod <n> -n <ns>, get nodes, get events -A --sort-by=.lastTimestamp",
+        "method": "POST",
+        "url": "http://mcp-server:8000/tools/kubectl-read",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"command\": \"{command}\"}",
+        "parametersBody": {
+          "values": [{ "name": "command", "type": "string", "description": "kubectl subcommand and flags" }]
+        }
+      },
+      "id": "a1b2c3d4-0205-0205-0205-000000000205",
+      "name": "kubectl_read",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [680, 380]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Run any PromQL query against Prometheus. Use single quotes for label selectors.",
+        "method": "POST",
+        "url": "http://mcp-server:8000/tools/promql",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"query\": \"{query}\"}",
+        "parametersBody": {
+          "values": [{ "name": "query", "type": "string", "description": "PromQL expression" }]
+        }
+      },
+      "id": "a1b2c3d4-0206-0206-0206-000000000206",
+      "name": "promql",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [820, 380]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check if AI recommended a write action\nconst output = $input.first().json.output || '';\nconst chatId = $('Route Message').first().json.chatId;\n\nconst writeMatch = output.match(/WRITE_NEEDED:\\s*(.+)/);\nif (writeMatch) {\n  const cmd = writeMatch[1].trim();\n  const token = process.env.WRITE_APPROVAL_TOKEN || 'TOKEN';\n  return [{\n    json: {\n      needsApproval: true,\n      command: cmd,\n      token,\n      chatId,\n      message: output.replace(/WRITE_NEEDED:.+/, '').trim(),\n      approvalPrompt: `⚠️ <b>Write action recommended:</b>\\n<code>kubectl ${cmd}</code>\\n\\nApprove?\\n✅ /approve ${token} ${cmd}\\n❌ /deny`\n    }\n  }, null];\n}\nreturn [null, { json: { needsApproval: false, chatId, message: output } }];"
+      },
+      "id": "a1b2c3d4-0207-0207-0207-000000000207",
+      "name": "Check Write Needed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.approvalPrompt }}",
+        "additionalFields": { "parse_mode": "HTML" }
+      },
+      "id": "a1b2c3d4-0208-0208-0208-000000000208",
+      "name": "Send Approval Request",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1100, 140],
+      "credentials": {
+        "telegramApi": { "id": "TELEGRAM_CREDENTIAL_ID", "name": "Telegram Bot" }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.message }}",
+        "additionalFields": { "parse_mode": "HTML" }
+      },
+      "id": "a1b2c3d4-0209-0209-0209-000000000209",
+      "name": "Send Answer",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1100, 260],
+      "credentials": {
+        "telegramApi": { "id": "TELEGRAM_CREDENTIAL_ID", "name": "Telegram Bot" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle /approve or /deny from engineer\nconst text = $input.first().json.text;\nconst chatId = $input.first().json.chatId;\nconst from = $input.first().json.from;\nconst expectedToken = process.env.WRITE_APPROVAL_TOKEN || '';\n\nif (text.startsWith('/deny')) {\n  return [null, { json: { chatId, message: '❌ Action denied by ' + from + '. No changes made.' } }];\n}\n\n// /approve <token> <command>\nconst parts = text.split(' ');\nconst token = parts[1] || '';\nconst command = parts.slice(2).join(' ');\n\nif (!expectedToken || token !== expectedToken) {\n  return [null, { json: { chatId, message: '🔒 Invalid approval token. Action blocked.' } }];\n}\n\nreturn [{ json: { chatId, command, approvedBy: from, token } }, null];"
+      },
+      "id": "a1b2c3d4-0210-0210-0210-000000000210",
+      "name": "Validate Approval",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 420]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://mcp-server:8000/tools/kubectl-write",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ command: $json.command, approved_by: $json.approvedBy, approval_token: $json.token }) }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0211-0211-0211-000000000211",
+      "name": "Execute Write",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 380]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Validate Approval').first().json.chatId }}",
+        "text": "=✅ <b>Executed by {{ $('Validate Approval').first().json.approvedBy }}:</b>\n<code>kubectl {{ $('Validate Approval').first().json.command }}</code>\n\n{{ $json.output }}",
+        "additionalFields": { "parse_mode": "HTML" }
+      },
+      "id": "a1b2c3d4-0212-0212-0212-000000000212",
+      "name": "Send Execution Result",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1100, 380],
+      "credentials": {
+        "telegramApi": { "id": "TELEGRAM_CREDENTIAL_ID", "name": "Telegram Bot" }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.message }}",
+        "additionalFields": { "parse_mode": "HTML" }
+      },
+      "id": "a1b2c3d4-0213-0213-0213-000000000213",
+      "name": "Send Denial",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1100, 480],
+      "credentials": {
+        "telegramApi": { "id": "TELEGRAM_CREDENTIAL_ID", "name": "Telegram Bot" }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [[{ "node": "Route Message", "type": "main", "index": 0 }]]
+    },
+    "Route Message": {
+      "main": [
+        [{ "node": "Validate Approval", "type": "main", "index": 0 }],
+        [{ "node": "K8s Assistant", "type": "main", "index": 0 }]
+      ]
+    },
+    "Gemini Assistant": {
+      "ai_languageModel": [[{ "node": "K8s Assistant", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "kubectl_read": {
+      "ai_tool": [[{ "node": "K8s Assistant", "type": "ai_tool", "index": 0 }]]
+    },
+    "promql": {
+      "ai_tool": [[{ "node": "K8s Assistant", "type": "ai_tool", "index": 0 }]]
+    },
+    "K8s Assistant": {
+      "main": [[{ "node": "Check Write Needed", "type": "main", "index": 0 }]]
+    },
+    "Check Write Needed": {
+      "main": [
+        [{ "node": "Send Approval Request", "type": "main", "index": 0 }],
+        [{ "node": "Send Answer", "type": "main", "index": 0 }]
+      ]
+    },
+    "Validate Approval": {
+      "main": [
+        [{ "node": "Execute Write", "type": "main", "index": 0 }],
+        [{ "node": "Send Denial", "type": "main", "index": 0 }]
+      ]
+    },
+    "Execute Write": {
+      "main": [[{ "node": "Send Execution Result", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "staticData": null
+}
