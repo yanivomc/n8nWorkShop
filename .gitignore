@@ -8,3 +8,4 @@ __pycache__/
 n8n_data/
 CREDENTIALS.md
 n8n_data_seed.tar.gz
+keys
