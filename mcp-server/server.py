@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-import subprocess, requests, os, logging
+import subprocess, requests, os, logging, pyotp
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -13,6 +13,8 @@ app = FastAPI(
 
 PROMETHEUS_URL = os.getenv("PROMETHEUS_URL", "http://prometheus-server:9090")
 KUBECONFIG     = os.getenv("KUBECONFIG", "/root/.kube/config")
+TOTP_SECRET    = os.getenv("TOTP_SECRET", "")          # base32 secret for Authy/Google Auth
+WRITE_TOKEN    = os.getenv("WRITE_APPROVAL_TOKEN", "")  # fallback static token
 
 WRITE_VERBS = {
     "delete","apply","create","replace","patch",
@@ -20,15 +22,31 @@ WRITE_VERBS = {
 }
 
 class KubectlRequest(BaseModel):
-    command: str   # e.g. "get pods -n prod -l app=payments"
+    command: str
 
 class PromQLRequest(BaseModel):
-    query: str     # e.g. "rate(container_cpu_usage_seconds_total[5m])"
+    query: str
 
 class WriteRequest(BaseModel):
-    command:        str   # e.g. "rollout restart deployment/payments -n prod"
-    approved_by:    str   # engineer name from Telegram approval
-    approval_token: str   # token set in .env, passed by n8n after human YES
+    command:        str
+    approved_by:    str
+    approval_token: str  # TOTP code (6 digits) or static token
+
+
+def validate_token(supplied: str) -> bool:
+    """Validate TOTP code first, fallback to static token."""
+    # Try TOTP if secret is configured
+    if TOTP_SECRET:
+        try:
+            totp = pyotp.TOTP(TOTP_SECRET)
+            if totp.verify(supplied, valid_window=1):  # ±30s window
+                return True
+        except Exception as e:
+            logger.warning(f"TOTP validation error: {e}")
+    # Fallback: static token
+    if WRITE_TOKEN and supplied == WRITE_TOKEN:
+        return True
+    return False
 
 
 def is_write_command(cmd: str) -> bool:
@@ -85,10 +103,9 @@ async def kubectl_write(req: WriteRequest):
     n8n calls this ONLY after human approved via Telegram.
     Agent never calls this directly.
     """
-    expected = os.getenv("WRITE_APPROVAL_TOKEN", "")
-    if not expected or req.approval_token != expected:
+    if not validate_token(req.approval_token):
         logger.warning(f"Blocked write by {req.approved_by}: {req.command}")
-        raise HTTPException(status_code=403, detail="Invalid approval token.")
+        raise HTTPException(status_code=403, detail="Invalid token. Use TOTP code from Authy/Google Authenticator.")
     if not is_write_command(req.command):
         raise HTTPException(status_code=400, detail="Not a write command.")
 

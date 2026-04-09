@@ -135,6 +135,21 @@ configure_keys() {
     err "EC2 IP not set — webhook URLs will be broken. Re-run option 3."
   fi
 
+  # TOTP 2FA setup
+  if [[ -z "$TOTP_SECRET" ]]; then
+    echo ""
+    ok "Generating TOTP secret for 2FA approval gate..."
+    TOTP_SECRET=$(python3 -c "import pyotp; print(pyotp.random_base32())" 2>/dev/null || openssl rand -base64 20 | tr -d '=' | tr '+/' 'AZ')
+    save_env_var "TOTP_SECRET" "$TOTP_SECRET"
+    echo ""
+    echo -e "  ${CYAN}📱 Add this key to Authy or Google Authenticator:${NC}"
+    echo -e "  ${BOLD}${TOTP_SECRET}${NC}"
+    echo -e "  ${CYAN}Or scan QR at: https://qr.io/qr?text=otpauth://totp/ClawOps?secret=${TOTP_SECRET}&issuer=n8nWorkshop${NC}"
+    echo ""
+  else
+    ok "TOTP secret already configured (use Authy/Google Auth to get codes)"
+  fi
+
   echo -n "  ngrok static domain (optional, get free one at dashboard.ngrok.com/domains) [${NGROK_DOMAIN:-not set}]: "
   read val; [[ -n "$val" ]] && { save_env_var "NGROK_DOMAIN" "$val"; ok "ngrok domain saved"; } || ok "Kept existing"
 

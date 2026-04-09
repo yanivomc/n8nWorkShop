@@ -47,6 +47,7 @@ services:
     environment:
       - PROMETHEUS_URL=${PROMETHEUS_URL}
       - WRITE_APPROVAL_TOKEN=${WRITE_APPROVAL_TOKEN}
+      - TOTP_SECRET=${TOTP_SECRET}
       - KUBECONFIG=/root/.kube/config
     volumes:
       - ${KUBECONFIG_PATH:-~/.kube/config}:/root/.kube/config:ro
