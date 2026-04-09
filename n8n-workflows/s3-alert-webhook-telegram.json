@@ -34,43 +34,6 @@
     {
       "parameters": {
         "promptType": "define",
-        "text": "=Parse this raw Prometheus Alertmanager webhook payload and produce an investigation brief.\n\nRAW PAYLOAD:\n{{ JSON.stringify($json, null, 2) }}",
-        "options": {
-          "systemMessage": "You are a Kubernetes SRE alert parser. You receive raw webhook payloads from Prometheus Alertmanager monitoring a Kubernetes cluster.\n\nCRITICAL: You MUST respond with ONLY a raw JSON object. No markdown, no code fences, no explanation, no preamble, no backticks. The very first character of your response must be '{' and the last must be '}'.\n\nRead the raw payload semantically \u2014 do NOT look for specific field names. The alert may be about any Kubernetes resource: pod, deployment, service, endpoint, node, HPA, PVC, ingress, statefulset, daemonset, job, etc.\n\nReturn this exact JSON structure:\n{\n  \"resource_type\": \"K8s resource kind, e.g. Pod, Deployment, Node\",\n  \"resource_name\": \"specific resource name or unknown\",\n  \"namespace\": \"namespace or cluster-wide\",\n  \"symptom\": \"what is wrong in plain English\",\n  \"severity\": \"critical or warning or info\",\n  \"status\": \"firing or resolved\",\n  \"summary\": \"one-line human readable summary\",\n  \"kubectl_commands\": [\"2-3 targeted kubectl commands for this resource type\"],\n  \"promql_queries\": [\"1-2 PromQL queries for this symptom\"]\n}\n\nRules:\n- ONLY return the JSON object. Nothing else. Not a single extra character.\n- kubectl_commands must target the specific resource and namespace from the alert.\n- PromQL label selectors MUST use single quotes, e.g. {namespace='prod'} not {namespace=\"prod\"}.\n- If any field is unknown, use the string \"unknown\"."
-        }
-      },
-      "id": "a1b2c3d4-0102-0102-0102-000000000102",
-      "name": "LLM Alert Parser",
-      "type": "@n8n/n8n-nodes-langchain.chainLlm",
-      "typeVersion": 1.4,
-      "position": [
-        660,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "modelName": "models/gemini-2.5-flash",
-        "options": {}
-      },
-      "id": "a1b2c3d4-0103-0103-0103-000000000103",
-      "name": "Gemini Parser",
-      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
-      "typeVersion": 1,
-      "position": [
-        540,
-        500
-      ],
-      "credentials": {
-        "googlePalmApi": {
-          "id": "57EnyFD1KF7gSoQU",
-          "name": "Google Gemini(PaLM) Api account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "promptType": "define",
         "text": "=\ud83d\udea8 ALERT \u2014 investigate and triage.\n\nInvestigation Brief:\n- Resource Type: {{ $json.output.resource_type }}\n- Resource Name: {{ $json.output.resource_name }}\n- Namespace:     {{ $json.output.namespace }}\n- Symptom:       {{ $json.output.symptom }}\n- Severity:      {{ $json.output.severity }}\n- Status:        {{ $json.output.status }}\n- Summary:       {{ $json.output.summary }}\n\nSuggested kubectl commands: {{ JSON.stringify($json.output.kubectl_commands) }}\nSuggested PromQL queries:   {{ JSON.stringify($json.output.promql_queries) }}\n\nInvestigate now. Start with the suggested commands but adapt based on what you find. Run at least one kubectl command and one PromQL query.\n\nReturn your findings in this exact format:\nSUMMARY: one-line status\nSEVERITY: critical / warning / healthy\nROOT_CAUSE: your assessment in 1-2 sentences\nCONFIDENCE: high / medium / low\nRECOMMENDED_ACTION: specific actionable steps\nREQUIRES_APPROVAL: yes/no",
         "options": {
           "systemMessage": "You are an expert SRE on-call assistant investigating a live Kubernetes alert. You have two tools:\n\n1. kubectl_read \u2014 run any read-only kubectl command.\n   Parameter: \"command\" \u2014 e.g. \"get pods -n prod\", \"describe deployment payments -n prod\", \"get events -n prod --sort-by=.lastTimestamp\", \"get nodes\"\n\n2. promql \u2014 run any PromQL query against Prometheus.\n   Parameter: \"query\" \u2014 e.g. \"kube_deployment_status_available_replicas\", \"rate(node_cpu_seconds_total[5m])\"\n\nAdapt your investigation to the resource type in the brief. The alert may be about any K8s resource \u2014 pods, deployments, nodes, services, endpoints, HPAs, PVCs, etc. Use commands appropriate for what is actually affected.\n\nAlways run at least 2 tool calls before concluding.\n\nCRITICAL PromQL rule: label selectors MUST use single quotes, e.g. kube_pod_status_ready{condition='true'} \u2014 never double quotes inside PromQL. Double quotes inside JSON break the request."
@@ -255,15 +218,41 @@
     },
     {
       "parameters": {
-        "jsonSchema": "{\"type\": \"object\", \"properties\": {\"resource_type\": {\"type\": \"string\", \"description\": \"K8s resource kind e.g. Pod, Deployment, Node, Service\"}, \"resource_name\": {\"type\": \"string\", \"description\": \"Name of the specific resource\"}, \"namespace\": {\"type\": \"string\", \"description\": \"Kubernetes namespace or cluster-wide\"}, \"symptom\": {\"type\": \"string\", \"description\": \"What is wrong in plain English\"}, \"severity\": {\"type\": \"string\", \"enum\": [\"critical\", \"warning\", \"info\"]}, \"status\": {\"type\": \"string\", \"enum\": [\"firing\", \"resolved\"]}, \"summary\": {\"type\": \"string\", \"description\": \"One-line human readable summary\"}, \"kubectl_commands\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"2-3 targeted kubectl commands\"}, \"promql_queries\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"1-2 PromQL queries. MUST use single quotes for label selectors\"}}, \"required\": [\"resource_type\", \"resource_name\", \"namespace\", \"symptom\", \"severity\", \"status\", \"summary\", \"kubectl_commands\", \"promql_queries\"]}"
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ \"system_instruction\": { \"parts\": [{ \"text\": \"You are a Kubernetes SRE alert parser. You receive raw webhook payloads from Prometheus Alertmanager monitoring a Kubernetes cluster. Read the payload semantically \u2014 the alert may concern any K8s resource: Pod, Deployment, Service, Node, Endpoint, HPA, PVC, StatefulSet, DaemonSet, Job, Ingress, or anything else. Do not assume it is always about a pod. Extract meaning, not field names. PromQL label selectors MUST use single quotes, e.g. {namespace='prod'}.\" }] }, \"contents\": [{ \"parts\": [{ \"text\": \"Parse this Alertmanager webhook payload and return the investigation brief JSON:\\n\\n\" + JSON.stringify($json, null, 2) }] }], \"generationConfig\": { \"response_mime_type\": \"application/json\", \"response_schema\": { \"type\": \"OBJECT\", \"properties\": { \"resource_type\": { \"type\": \"STRING\" }, \"resource_name\": { \"type\": \"STRING\" }, \"namespace\": { \"type\": \"STRING\" }, \"symptom\": { \"type\": \"STRING\" }, \"severity\": { \"type\": \"STRING\" }, \"status\": { \"type\": \"STRING\" }, \"summary\": { \"type\": \"STRING\" }, \"kubectl_commands\": { \"type\": \"ARRAY\", \"items\": { \"type\": \"STRING\" } }, \"promql_queries\": { \"type\": \"ARRAY\", \"items\": { \"type\": \"STRING\" } } }, \"required\": [\"resource_type\",\"resource_name\",\"namespace\",\"symptom\",\"severity\",\"status\",\"summary\",\"kubectl_commands\",\"promql_queries\"] } } }) }}",
+        "options": {}
       },
-      "id": "a1b2c3d4-0113-0113-0113-000000000113",
-      "name": "Alert Brief Schema",
-      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
-      "typeVersion": 1.2,
+      "id": "a1b2c3d4-0114-0114-0114-000000000114",
+      "name": "Gemini JSON Parser",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         550,
-        520
+        300
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "57EnyFD1KF7gSoQU",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract the JSON brief from Gemini's response\n// With response_mime_type=application/json, Gemini returns valid JSON in parts[0].text\ntry {\n  const raw = $input.first().json.candidates[0].content.parts[0].text;\n  const brief = JSON.parse(raw);\n  return [{ json: { output: brief } }];\n} catch(e) {\n  // Fallback \u2014 never crash the pipeline\n  return [{ json: { output: {\n    resource_type: 'unknown',\n    resource_name: 'unknown',\n    namespace: 'unknown',\n    symptom: 'Parser failed: ' + e.message,\n    severity: 'warning',\n    status: 'firing',\n    summary: 'Alert received \u2014 Gemini parser error, manual investigation required',\n    kubectl_commands: ['get pods -A', 'get events -A --sort-by=.lastTimestamp'],\n    promql_queries: ['up']\n  }}}];\n}"
+      },
+      "id": "a1b2c3d4-0115-0115-0115-000000000115",
+      "name": "Extract Brief",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        750,
+        300
       ]
     }
   ],
@@ -274,28 +263,6 @@
           {
             "node": "Dedup Filter",
             "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "LLM Alert Parser": {
-      "main": [
-        [
-          {
-            "node": "AI Agent",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Gemini Parser": {
-      "ai_languageModel": [
-        [
-          {
-            "node": "LLM Alert Parser",
-            "type": "ai_languageModel",
             "index": 0
           }
         ]
@@ -378,19 +345,30 @@
       "main": [
         [
           {
-            "node": "LLM Alert Parser",
+            "node": "Gemini JSON Parser",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Alert Brief Schema": {
-      "ai_outputParser": [
+    "Gemini JSON Parser": {
+      "main": [
         [
           {
-            "node": "LLM Alert Parser",
-            "type": "ai_outputParser",
+            "node": "Extract Brief",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Brief": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
             "index": 0
           }
         ]
