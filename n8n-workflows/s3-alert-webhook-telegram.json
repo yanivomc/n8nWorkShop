@@ -1,36 +1,26 @@
 {
+  "updatedAt": "2026-04-09T10:54:04.905Z",
+  "createdAt": "2026-04-09T09:56:17.027Z",
   "name": "S3 - Alert Webhook + AI Triage + Telegram",
+  "description": null,
+  "active": true,
+  "isArchived": false,
   "nodes": [
     {
       "parameters": {
         "httpMethod": "POST",
         "path": "prometheus-alert",
-        "responseMode": "onReceived",
-        "options": {},
-        "responseData": "firstEntryJson"
+        "options": {}
       },
-      "id": "a1b2c3d4-0101-0101-0101-000000000101",
+      "id": "e8b5d709-b706-4acd-b27b-afb9a803dd0a",
       "name": "Alertmanager Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
-        220,
-        300
+        0,
+        0
       ],
       "webhookId": "prometheus-alert"
-    },
-    {
-      "parameters": {
-        "jsCode": "// Deduplication \u2014 block repeated Alertmanager firings for the same alert\n// If run_id label is present (set by force-alert.sh), always allow through\nconst body = $input.first().json;\nconst alerts = body.alerts || [];\n\nconst runId = alerts[0]?.labels?.run_id || body.commonLabels?.run_id;\nif (runId) {\n  console.log('DEDUP: test alert with run_id=' + runId + ' \u2014 bypassing dedup');\n  return [$input.first()];\n}\n\n// Real Alertmanager alert \u2014 apply dedup window\nconst DEDUP_WINDOW_MS = 10 * 60 * 1000; // 10 minutes\nconst key = [\n  body.commonLabels?.alertname || alerts[0]?.labels?.alertname || 'unknown',\n  body.commonLabels?.namespace || alerts[0]?.labels?.namespace || 'unknown',\n  body.status || 'firing'\n].join(':');\n\nconst now = Date.now();\nconst store = $getWorkflowStaticData('global');\nif (!store.dedup) store.dedup = {};\n\n// Clean up old entries\nfor (const k of Object.keys(store.dedup)) {\n  if (now - store.dedup[k] > DEDUP_WINDOW_MS) delete store.dedup[k];\n}\n\nif (store.dedup[key]) {\n  const age = Math.round((now - store.dedup[key]) / 1000);\n  console.log('DEDUP: dropping repeated alert ' + key + ' (' + age + 's ago)');\n  return [];\n}\n\nstore.dedup[key] = now;\nconsole.log('DEDUP: new alert accepted ' + key);\nreturn [$input.first()];"
-      },
-      "id": "a1b2c3d4-0100-0100-0100-000000000100",
-      "name": "Dedup Filter",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        330,
-        300
-      ]
     },
     {
       "parameters": {
@@ -40,32 +30,31 @@
           "systemMessage": "You are an expert SRE on-call assistant investigating a live Kubernetes alert. You have two tools:\n\n1. kubectl_read \u2014 run any read-only kubectl command.\n   Parameter: \"command\" \u2014 e.g. \"get pods -n prod\", \"describe deployment payments -n prod\", \"get events -n prod --sort-by=.lastTimestamp\", \"get nodes\"\n\n2. promql \u2014 run any PromQL query against Prometheus.\n   Parameter: \"query\" \u2014 e.g. \"kube_deployment_status_available_replicas\", \"rate(node_cpu_seconds_total[5m])\"\n\nAdapt your investigation to the resource type in the brief. The alert may be about any K8s resource \u2014 pods, deployments, nodes, services, endpoints, HPAs, PVCs, etc. Use commands appropriate for what is actually affected.\n\nAlways run at least 2 tool calls before concluding.\n\nCRITICAL PromQL rule: label selectors MUST use single quotes, e.g. kube_pod_status_ready{condition='true'} \u2014 never double quotes inside PromQL. Double quotes inside JSON break the request."
         }
       },
-      "id": "a1b2c3d4-0105-0105-0105-000000000105",
+      "id": "6046432a-d939-4426-884b-457aa81fba94",
       "name": "AI Agent",
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 1.7,
       "position": [
-        1100,
-        300
+        880,
+        0
       ],
       "onError": "continueErrorOutput"
     },
     {
       "parameters": {
-        "modelName": "models/gemini-2.5-flash",
         "options": {}
       },
-      "id": "a1b2c3d4-0106-0106-0106-000000000106",
+      "id": "bf607cf6-f3cb-4138-a815-d63c5e469b91",
       "name": "Gemini Agent",
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        980,
-        500
+        768,
+        208
       ],
       "credentials": {
         "googlePalmApi": {
-          "id": "57EnyFD1KF7gSoQU",
+          "id": "4Jw86EqmWdx0n1FD",
           "name": "Google Gemini(PaLM) Api account"
         }
       }
@@ -77,24 +66,15 @@
         "url": "http://mcp-server:8000/tools/kubectl-read",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\"command\": \"{command}\"}",
-        "parametersBody": {
-          "values": [
-            {
-              "name": "command",
-              "type": "string",
-              "description": "kubectl subcommand and flags appropriate for the resource being investigated"
-            }
-          ]
-        }
+        "jsonBody": "={\"command\": \"{command}\"}"
       },
-      "id": "a1b2c3d4-0107-0107-0107-000000000107",
+      "id": "99e4fe9a-f1d7-4c00-bd71-2154519d61c8",
       "name": "kubectl_read",
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
       "typeVersion": 1.1,
       "position": [
-        1100,
-        500
+        880,
+        208
       ]
     },
     {
@@ -104,24 +84,15 @@
         "url": "http://mcp-server:8000/tools/promql",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\"query\": \"{query}\"}",
-        "parametersBody": {
-          "values": [
-            {
-              "name": "query",
-              "type": "string",
-              "description": "A valid PromQL expression relevant to the symptom and resource type"
-            }
-          ]
-        }
+        "jsonBody": "={\"query\": \"{query}\"}"
       },
-      "id": "a1b2c3d4-0108-0108-0108-000000000108",
+      "id": "15ab728a-e544-49c1-ab9d-ec6ce0e1d7ec",
       "name": "promql",
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
       "typeVersion": 1.1,
       "position": [
-        1240,
-        500
+        1024,
+        208
       ]
     },
     {
@@ -131,43 +102,44 @@
             {
               "id": "f001",
               "name": "telegramMessage",
-              "value": "={{ (() => {\n  const b = $('Extract Brief').first().json.output;\n  const sev = b.severity || 'warning';\n  const status = b.status || 'firing';\n  const sevEmoji = status === 'resolved' ? '\u2705' : (sev === 'critical' ? '\ud83d\udd34' : '\ud83d\udfe1');\n  const statusLabel = status === 'resolved' ? '\u2705 RESOLVED' : '\ud83d\udea8 FIRING';\n  return [\n    sevEmoji + ' *' + statusLabel + '*',\n    '',\n    '\ud83d\udd27 *Resource:* ' + b.resource_type + ' / ' + b.resource_name,\n    '\ud83d\udccd *Namespace:* ' + b.namespace,\n    '\u26a1 *Severity:* ' + sev.toUpperCase(),\n    '',\n    '\ud83d\udccb *Summary:* ' + b.summary,\n    '',\n    '\ud83e\udd16 *AI Triage:*',\n    $json.output,\n    '',\n    '\ud83d\udd50 ' + new Date().toUTCString()\n  ].join('\\n');\n})() }}",
+              "value": "={{ (() => {\n  const b = $('Extract Brief').first().json.output;\n  const sev = b.severity || 'warning';\n  const status = b.status || 'firing';\n  const sevEmoji = status === 'resolved' ? '\u2705' : (sev === 'critical' ? '\ud83d\udd34' : '\ud83d\udfe1');\n  const statusLabel = status === 'resolved' ? '\u2705 RESOLVED' : '\ud83d\udea8 FIRING';\n  return [\n    sevEmoji + ' <b>' + statusLabel + '</b>',\n    '',\n    '\ud83d\udd27 <b>Resource:</b> ' + b.resource_type + ' / ' + b.resource_name,\n    '\ud83d\udccd <b>Namespace:</b> ' + b.namespace,\n    '\u26a1 <b>Severity:</b> ' + sev.toUpperCase(),\n    '',\n    '\ud83d\udccb <b>Summary:</b> ' + b.summary,\n    '',\n    '\ud83e\udd16 <b>AI Triage:</b>',\n    $json.output,\n    '',\n    '\ud83d\udd50 ' + new Date().toUTCString()\n  ].join('\n');\n})() }}",
               "type": "string"
             }
           ]
         },
         "options": {}
       },
-      "id": "a1b2c3d4-0109-0109-0109-000000000109",
+      "id": "c8070eb2-2785-41ce-941d-abf3af25ff3b",
       "name": "Format Telegram Message",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1320,
-        300
+        1104,
+        0
       ]
     },
     {
       "parameters": {
-        "chatId": "={{ $vars.TELEGRAM_CHAT_ID }}",
+        "chatId": "=5926921251",
         "text": "={{ $json.telegramMessage }}",
         "additionalFields": {
-          "parse_mode": "Markdown",
-          "disable_web_page_preview": true
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML"
         }
       },
-      "id": "a1b2c3d4-0110-0110-0110-000000000110",
+      "id": "a03cf0cd-af46-417c-88b3-3f0c515a6482",
       "name": "Telegram Alert",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        1520,
-        300
+        1312,
+        0
       ],
+      "webhookId": "b0928f34-e468-4764-9808-21f7fbccfab7",
       "credentials": {
         "telegramApi": {
-          "id": "TELEGRAM_CREDENTIAL_ID",
-          "name": "Telegram Bot"
+          "id": "jcA0ZMKocCJNhas2",
+          "name": "Telegram account"
         }
       }
     },
@@ -178,20 +150,20 @@
             {
               "id": "e001",
               "name": "telegramMessage",
-              "value": "=\u274c *WORKFLOW ERROR \u2014 S3 Alert Triage*\n\nError: {{ $json.error?.message || 'Unknown failure' }}\nTime: {{ new Date().toUTCString() }}\n\n_Manual investigation required._",
+              "value": "=\u274c <b>WORKFLOW ERROR \u2014 S3 Alert Triage</b>\n\nError: {{ $json.error?.message || \"Unknown failure\" }}\nTime: {{ new Date().toUTCString() }}\n\n<i>Manual investigation required.</i>",
               "type": "string"
             }
           ]
         },
         "options": {}
       },
-      "id": "a1b2c3d4-0111-0111-0111-000000000111",
+      "id": "8c160a45-8d18-49c3-bd83-f8e6925b8a6a",
       "name": "Format Error Message",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1320,
-        480
+        1104,
+        192
       ]
     },
     {
@@ -199,28 +171,29 @@
         "chatId": "={{ $vars.TELEGRAM_CHAT_ID }}",
         "text": "={{ $json.telegramMessage }}",
         "additionalFields": {
-          "parse_mode": "Markdown"
+          "parse_mode": "HTML"
         }
       },
-      "id": "a1b2c3d4-0112-0112-0112-000000000112",
+      "id": "260c6d26-0dc9-4aee-9da0-570ae1d24b3c",
       "name": "Telegram Error",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        1520,
-        480
+        1312,
+        192
       ],
+      "webhookId": "41305d88-ffab-4440-b952-cacd2eb5dc1f",
       "credentials": {
         "telegramApi": {
-          "id": "TELEGRAM_CREDENTIAL_ID",
-          "name": "Telegram Bot"
+          "id": "jcA0ZMKocCJNhas2",
+          "name": "Telegram account"
         }
       }
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "googlePalmApi",
         "sendBody": true,
@@ -228,32 +201,26 @@
         "jsonBody": "={{ JSON.stringify({ \"system_instruction\": { \"parts\": [{ \"text\": \"You are a Kubernetes SRE alert parser. You receive raw webhook payloads from Prometheus Alertmanager monitoring a Kubernetes cluster. Read the payload semantically \u2014 the alert may concern any K8s resource: Pod, Deployment, Service, Node, Endpoint, HPA, PVC, StatefulSet, DaemonSet, Job, Ingress, or anything else. Do not assume it is always about a pod. Extract meaning, not field names. PromQL label selectors MUST use single quotes, e.g. {namespace='prod'}.\" }] }, \"contents\": [{ \"parts\": [{ \"text\": \"Parse this Alertmanager webhook payload and return the investigation brief JSON:\\n\\n\" + JSON.stringify($json, null, 2) }] }], \"generationConfig\": { \"response_mime_type\": \"application/json\", \"response_schema\": { \"type\": \"OBJECT\", \"properties\": { \"resource_type\": { \"type\": \"STRING\" }, \"resource_name\": { \"type\": \"STRING\" }, \"namespace\": { \"type\": \"STRING\" }, \"symptom\": { \"type\": \"STRING\" }, \"severity\": { \"type\": \"STRING\" }, \"status\": { \"type\": \"STRING\" }, \"summary\": { \"type\": \"STRING\" }, \"kubectl_commands\": { \"type\": \"ARRAY\", \"items\": { \"type\": \"STRING\" } }, \"promql_queries\": { \"type\": \"ARRAY\", \"items\": { \"type\": \"STRING\" } } }, \"required\": [\"resource_type\",\"resource_name\",\"namespace\",\"symptom\",\"severity\",\"status\",\"summary\",\"kubectl_commands\",\"promql_queries\"] } } }) }}",
         "options": {}
       },
-      "id": "a1b2c3d4-0114-0114-0114-000000000114",
+      "id": "58c160c5-ad47-4644-a59c-c12f72d7fb03",
       "name": "Gemini JSON Parser",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        550,
-        300
-      ],
-      "credentials": {
-        "googlePalmApi": {
-          "id": "57EnyFD1KF7gSoQU",
-          "name": "Google Gemini(PaLM) Api account"
-        }
-      }
+        336,
+        0
+      ]
     },
     {
       "parameters": {
         "jsCode": "// Extract the JSON brief from Gemini's response\n// With response_mime_type=application/json, Gemini returns valid JSON in parts[0].text\ntry {\n  const raw = $input.first().json.candidates[0].content.parts[0].text;\n  const brief = JSON.parse(raw);\n  return [{ json: { output: brief } }];\n} catch(e) {\n  // Fallback \u2014 never crash the pipeline\n  return [{ json: { output: {\n    resource_type: 'unknown',\n    resource_name: 'unknown',\n    namespace: 'unknown',\n    symptom: 'Parser failed: ' + e.message,\n    severity: 'warning',\n    status: 'firing',\n    summary: 'Alert received \u2014 Gemini parser error, manual investigation required',\n    kubectl_commands: ['get pods -A', 'get events -A --sort-by=.lastTimestamp'],\n    promql_queries: ['up']\n  }}}];\n}"
       },
-      "id": "a1b2c3d4-0115-0115-0115-000000000115",
+      "id": "ef1b0240-97d0-4bfe-abe2-c965e113cdb4",
       "name": "Extract Brief",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        750,
-        300
+        544,
+        0
       ]
     }
   ],
@@ -262,7 +229,7 @@
       "main": [
         [
           {
-            "node": "Dedup Filter",
+            "node": "Gemini JSON Parser",
             "type": "main",
             "index": 0
           }
@@ -342,17 +309,6 @@
         ]
       ]
     },
-    "Dedup Filter": {
-      "main": [
-        [
-          {
-            "node": "Gemini JSON Parser",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Gemini JSON Parser": {
       "main": [
         [
@@ -382,5 +338,39 @@
     "saveDataErrorExecution": "all",
     "saveDataSuccessExecution": "all"
   },
-  "staticData": null
+  "staticData": {
+    "global": {
+      "dedup": {
+        "unknown:unknown:firing": 1775731858405
+      }
+    }
+  },
+  "pinData": {},
+  "activeVersionId": "97e03e59-cb6d-4f2c-89c9-e986eb25ea5a",
+  "versionCounter": 16,
+  "triggerCount": 1,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-04-09T09:56:17.031Z",
+      "createdAt": "2026-04-09T09:56:17.031Z",
+      "role": "workflow:owner",
+      "workflowId": "j5QhV5JZP10rPmD3",
+      "projectId": "Z5ZsysJ0rW35XOYF",
+      "project": {
+        "updatedAt": "2026-04-09T09:55:44.875Z",
+        "createdAt": "2026-04-09T09:55:12.447Z",
+        "id": "Z5ZsysJ0rW35XOYF",
+        "name": "YANIV COHEN <yanivomc@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "affeaca1-1d97-4aa4-aadf-ee88aaf990f0"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": "Version 97e03e59",
+    "description": ""
+  }
 }
