@@ -153,13 +153,13 @@ configure_keys() {
     echo -e "  ${CYAN}📱 Add this key to Authy or Google Authenticator:${NC}"
     echo -e "  ${BOLD}  Account: ClawOps Workshop${NC}"
     echo -e "  ${BOLD}  Key:     ${TOTP_SECRET}${NC}"
-    echo -e "  ${CYAN}  QR Code: https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=otpauth%3A%2F%2Ftotp%2FClawOps%3Asecret%3D${TOTP_SECRET}%26issuer%3Dn8nWorkshop${NC}"
+    echo -e "  ${CYAN}  QR Code: https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=otpauth%3A%2F%2Ftotp%2FClawOps%2520Workshop%3Fsecret%3D${TOTP_SECRET}%26issuer%3Dn8nWorkshop${NC}"
     echo ""
     ok "MCP server restarted with TOTP support"
   else
     ok "TOTP secret already configured (use Authy/Google Auth to get codes)"
     echo -e "  ${CYAN}  Key: ${TOTP_SECRET}${NC}"
-    echo -e "  ${CYAN}  QR:  https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=otpauth%3A%2F%2Ftotp%2FClawOps%3Asecret%3D${TOTP_SECRET}%26issuer%3Dn8nWorkshop${NC}"
+    echo -e "  ${CYAN}  QR:  https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=otpauth%3A%2F%2Ftotp%2FClawOps%2520Workshop%3Fsecret%3D${TOTP_SECRET}%26issuer%3Dn8nWorkshop${NC}"
   fi
 
   echo -n "  ngrok static domain (optional, get free one at dashboard.ngrok.com/domains) [${NGROK_DOMAIN:-not set}]: "
