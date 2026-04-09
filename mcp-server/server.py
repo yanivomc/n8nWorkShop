@@ -34,13 +34,18 @@ class WriteRequest(BaseModel):
 def is_write_command(cmd: str) -> bool:
     return cmd.strip().split()[0].lower() in WRITE_VERBS
 
-def run_kubectl(cmd: str, timeout: int = 30) -> str:
+def run_kubectl(cmd: str, timeout: int = 30) -> dict:
     full = f"kubectl {cmd} --kubeconfig={KUBECONFIG}"
     logger.info(f"kubectl: {full}")
     r = subprocess.run(full, shell=True, capture_output=True, text=True, timeout=timeout)
     if r.returncode != 0:
-        raise HTTPException(status_code=500, detail=f"kubectl error: {r.stderr.strip()}")
-    return r.stdout.strip()
+        # Return the actual kubectl error message — not a 500.
+        # "pod not found", "namespace not found" etc. are valid K8s responses
+        # the AI Agent can read and reason about.
+        error_msg = r.stderr.strip() or r.stdout.strip() or "kubectl returned no output"
+        logger.warning(f"kubectl non-zero exit ({r.returncode}): {error_msg}")
+        return {"output": error_msg, "exit_code": r.returncode, "error": True}
+    return {"output": r.stdout.strip(), "exit_code": 0, "error": False}
 
 
 # ── Tool 1: READ (agent calls freely) ───────────────────────────────
@@ -52,7 +57,8 @@ async def kubectl_read(req: KubectlRequest):
             status_code=403,
             detail=f"Write command blocked. Use /tools/kubectl-write with approval. cmd={req.command}"
         )
-    return {"output": run_kubectl(req.command), "command": f"kubectl {req.command}"}
+    result = run_kubectl(req.command)
+    return {"output": result["output"], "command": f"kubectl {req.command}", "error": result["error"], "exit_code": result["exit_code"]}
 
 
 # ── Tool 2: PROMQL (agent calls freely) ─────────────────────────────
@@ -87,12 +93,13 @@ async def kubectl_write(req: WriteRequest):
         raise HTTPException(status_code=400, detail="Not a write command.")
 
     logger.info(f"WRITE approved by {req.approved_by}: kubectl {req.command}")
-    output = run_kubectl(req.command, timeout=60)
+    result = run_kubectl(req.command, timeout=60)
     return {
-        "output":      output,
+        "output":      result["output"],
         "command":     f"kubectl {req.command}",
         "approved_by": req.approved_by,
-        "status":      "executed"
+        "status":      "executed" if not result["error"] else "failed",
+        "error":       result["error"]
     }
 
 

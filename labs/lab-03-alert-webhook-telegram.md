@@ -266,3 +266,22 @@ $json.commonLabels.severity
 - Bonus: LLM can even suggest targeted investigation commands based on what it understood
 
 **The principle:** Use hardcoded parsers for stable, well-defined schemas. Use LLMs when the schema varies, evolves, or carries semantic meaning that needs interpretation.
+
+---
+
+## 📊 Slide Note — LLM Parser: Why JSON-only matters
+
+> **Add this as a teaching point in the slides when covering the LLM Parser node.**
+
+**The problem with LLM output in pipelines:**
+LLMs default to being helpful and formatted — they add markdown, headers, code fences. In a conversational context that's great. Inside an automation pipeline it breaks everything downstream.
+
+**The pattern to teach:**
+- System prompt must say *"ONLY return raw JSON — first character must be `{`, last must be `}`"*
+- Always add a strip step before `JSON.parse()` to remove any ```` ```json ```` fences Gemini might still add
+- Always add a fallback in case JSON.parse fails — the pipeline must never crash on bad LLM output
+
+**Good vs Bad:**
+- ❌ Bad: `JSON.parse($json.text)` — crashes if LLM adds a single markdown character
+- ✅ Good: strip fences → parse → catch → sensible fallback
+
