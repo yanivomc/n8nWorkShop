@@ -121,8 +121,19 @@ configure_keys() {
     read val; [[ -n "$val" ]] && { save_env_var "WRITE_APPROVAL_TOKEN" "$val"; ok "Token saved"; } || ok "Kept existing"
   fi
 
-  echo -n "  EC2 public IP (for n8n webhooks) [${EC2_PUBLIC_IP:-not set}]: "
-  read val; [[ -n "$val" ]] && { save_env_var "EC2_PUBLIC_IP" "$val"; ok "EC2 IP saved"; }
+  # Auto-detect EC2 public IP from AWS instance metadata
+  DETECTED_IP=$(curl -sf --max-time 2 http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null)
+  [[ -n "$DETECTED_IP" && -z "$EC2_PUBLIC_IP" ]] && { save_env_var "EC2_PUBLIC_IP" "$DETECTED_IP"; EC2_PUBLIC_IP="$DETECTED_IP"; ok "EC2 IP auto-detected: $EC2_PUBLIC_IP"; }
+  [[ -n "$DETECTED_IP" && -n "$EC2_PUBLIC_IP" && "$DETECTED_IP" != "$EC2_PUBLIC_IP" ]] && warn "  New EC2 IP detected ($DETECTED_IP) — differs from saved ($EC2_PUBLIC_IP)"
+  echo -n "  EC2 public IP [${EC2_PUBLIC_IP:-could not auto-detect, enter manually}]: "
+  read val
+  if [[ -n "$val" ]]; then
+    save_env_var "EC2_PUBLIC_IP" "$val"; ok "EC2 IP saved: $val"
+  elif [[ -n "$EC2_PUBLIC_IP" ]]; then
+    ok "EC2 IP confirmed: $EC2_PUBLIC_IP"
+  else
+    err "EC2 IP not set — webhook URLs will be broken. Re-run option 3."
+  fi
 
   echo -n "  n8n admin password [${N8N_PASSWORD:-changeme123}]: "
   read val

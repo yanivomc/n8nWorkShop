@@ -5,7 +5,23 @@
 # Use this to test S3 without waiting for Prometheus to fire.
 # =============================================================================
 
-EC2_IP="${EC2_PUBLIC_IP:-54.246.254.41}"
+# Source .env to pick up EC2_PUBLIC_IP and other vars
+ENV_FILE="$(dirname "$0")/../../student-env/.env"
+[[ -f "$ENV_FILE" ]] && source "$ENV_FILE"
+
+# Auto-detect EC2 public IP from AWS metadata if not set in .env
+if [[ -z "$EC2_PUBLIC_IP" ]]; then
+  EC2_PUBLIC_IP=$(curl -sf --max-time 2 http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null)
+fi
+
+# Final fallback — tell the student clearly
+if [[ -z "$EC2_PUBLIC_IP" ]]; then
+  echo "❌ ERROR: EC2_PUBLIC_IP not set and could not auto-detect."
+  echo "   Run: cd ~/n8nWorkShop/student-env && ./setup.sh  → option 3"
+  exit 1
+fi
+
+EC2_IP="${EC2_PUBLIC_IP}"
 WEBHOOK_URL="http://${EC2_IP}:5678/webhook/prometheus-alert"
 NAMESPACE="${NAMESPACE:-prod}"
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
