@@ -144,7 +144,7 @@ configure_keys() {
     echo ""
     echo -e "  ${CYAN}📱 Add this key to Authy or Google Authenticator:${NC}"
     echo -e "  ${BOLD}${TOTP_SECRET}${NC}"
-    echo -e "  ${CYAN}Or scan QR at: https://qr.io/qr?text=otpauth://totp/ClawOps?secret=${TOTP_SECRET}&issuer=n8nWorkshop${NC}"
+    echo -e "  ${CYAN}Or scan QR at: https://chart.googleapis.com/chart?chs=200x200&chld=M|0&cht=qr&chl=otpauth://totp/ClawOps:workshop?secret=${TOTP_SECRET}%26issuer=n8nWorkshop${NC}"
     echo ""
   else
     ok "TOTP secret already configured (use Authy/Google Auth to get codes)"
