@@ -112,13 +112,11 @@ configure_keys() {
   read val; [[ -n "$val" ]] && { save_env_var "TELEGRAM_CHAT_ID" "$val"; ok "Chat ID saved"; } || ok "Kept existing"
 
   # Auto-generate write approval token if not set
+  # Write approval token kept for fallback — primary auth is TOTP (configured below)
   if [[ -z "$WRITE_APPROVAL_TOKEN" ]]; then
     TOKEN=$(openssl rand -hex 32)
     save_env_var "WRITE_APPROVAL_TOKEN" "$TOKEN"
-    ok "Write approval token generated: ${TOKEN:0:16}..."
-  else
-    echo -n "  Write approval token [set, enter to keep or type new]: "
-    read val; [[ -n "$val" ]] && { save_env_var "WRITE_APPROVAL_TOKEN" "$val"; ok "Token saved"; } || ok "Kept existing"
+    ok "Write approval token generated (fallback)"
   fi
 
   # Auto-detect EC2 public IP from AWS instance metadata
@@ -155,13 +153,13 @@ configure_keys() {
     echo -e "  ${CYAN}📱 Add this key to Authy or Google Authenticator:${NC}"
     echo -e "  ${BOLD}  Account: ClawOps Workshop${NC}"
     echo -e "  ${BOLD}  Key:     ${TOTP_SECRET}${NC}"
-    echo -e "  ${CYAN}  Or scan: https://chart.googleapis.com/chart?chs=200x200&chld=M|0&cht=qr&chl=otpauth://totp/ClawOps:workshop?secret=${TOTP_SECRET}%26issuer=n8nWorkshop${NC}"
+    echo -e "  ${CYAN}  QR Code: https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=otpauth%3A%2F%2Ftotp%2FClawOps%3Asecret%3D${TOTP_SECRET}%26issuer%3Dn8nWorkshop${NC}"
     echo ""
     ok "MCP server restarted with TOTP support"
   else
     ok "TOTP secret already configured (use Authy/Google Auth to get codes)"
     echo -e "  ${CYAN}  Key: ${TOTP_SECRET}${NC}"
-    echo -e "  ${CYAN}  QR:  https://chart.googleapis.com/chart?chs=200x200&chld=M|0&cht=qr&chl=otpauth://totp/ClawOps:workshop?secret=${TOTP_SECRET}%26issuer=n8nWorkshop${NC}"
+    echo -e "  ${CYAN}  QR:  https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=otpauth%3A%2F%2Ftotp%2FClawOps%3Asecret%3D${TOTP_SECRET}%26issuer%3Dn8nWorkshop${NC}"
   fi
 
   echo -n "  ngrok static domain (optional, get free one at dashboard.ngrok.com/domains) [${NGROK_DOMAIN:-not set}]: "
