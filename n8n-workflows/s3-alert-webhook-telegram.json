@@ -1,0 +1,377 @@
+{
+  "name": "S3 - Alert Webhook + AI Triage + Telegram",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "prometheus-alert",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0101-0101-0101-000000000101",
+      "name": "Alertmanager Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [220, 300],
+      "webhookId": "prometheus-alert"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "p001",
+              "name": "alertname",
+              "value": "={{ $json.alerts?.[0]?.labels?.alertname || $json.commonLabels?.alertname || 'UnknownAlert' }}",
+              "type": "string"
+            },
+            {
+              "id": "p002",
+              "name": "namespace",
+              "value": "={{ $json.alerts?.[0]?.labels?.namespace || $json.commonLabels?.namespace || 'default' }}",
+              "type": "string"
+            },
+            {
+              "id": "p003",
+              "name": "pod",
+              "value": "={{ $json.alerts?.[0]?.labels?.pod || 'unknown' }}",
+              "type": "string"
+            },
+            {
+              "id": "p004",
+              "name": "severity",
+              "value": "={{ $json.alerts?.[0]?.labels?.severity || $json.commonLabels?.severity || 'warning' }}",
+              "type": "string"
+            },
+            {
+              "id": "p005",
+              "name": "summary",
+              "value": "={{ $json.alerts?.[0]?.annotations?.summary || $json.commonAnnotations?.summary || 'No summary' }}",
+              "type": "string"
+            },
+            {
+              "id": "p006",
+              "name": "description",
+              "value": "={{ $json.alerts?.[0]?.annotations?.description || $json.commonAnnotations?.description || 'No description' }}",
+              "type": "string"
+            },
+            {
+              "id": "p007",
+              "name": "status",
+              "value": "={{ $json.status || 'firing' }}",
+              "type": "string"
+            },
+            {
+              "id": "p008",
+              "name": "startsAt",
+              "value": "={{ $json.alerts?.[0]?.startsAt || new Date().toISOString() }}",
+              "type": "string"
+            },
+            {
+              "id": "p009",
+              "name": "node",
+              "value": "={{ $json.alerts?.[0]?.labels?.node || $json.alerts?.[0]?.labels?.instance || 'unknown' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0102-0102-0102-000000000102",
+      "name": "Parse Alert",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=🚨 ALERT RECEIVED — investigate and triage immediately.\n\nAlert Details:\n- Name: {{ $json.alertname }}\n- Severity: {{ $json.severity }}\n- Status: {{ $json.status }}\n- Namespace: {{ $json.namespace }}\n- Pod: {{ $json.pod }}\n- Node: {{ $json.node }}\n- Summary: {{ $json.summary }}\n- Description: {{ $json.description }}\n- Started: {{ $json.startsAt }}\n\nInvestigate this alert using your tools. Focus kubectl commands on namespace '{{ $json.namespace }}'. If a pod name is provided, describe it and tail its logs. Use PromQL for relevant live metrics.\n\nYour response MUST follow this exact format:\nSUMMARY: one-line status\nSEVERITY: critical / warning / healthy\nROOT_CAUSE: your root cause assessment in 1-2 sentences\nCONFIDENCE: high / medium / low\nRECOMMENDED_ACTION: specific actionable steps\nREQUIRES_APPROVAL: yes/no",
+        "options": {
+          "systemMessage": "You are an expert SRE on-call assistant. You have been paged with a live Kubernetes alert. Your job is to investigate fast and triage accurately.\n\nYou have two tools:\n1. kubectl_read — run any read-only kubectl command.\n   Parameter: \"command\" — e.g. \"get pods -n prod\", \"describe pod payments-app-xyz -n prod\", \"logs payments-app-xyz -n prod --tail=30\", \"get events -n prod --sort-by=.lastTimestamp\"\n2. promql — run any PromQL query against Prometheus.\n   Parameter: \"query\" — e.g. \"rate(kube_pod_container_status_restarts_total[5m])\", \"kube_pod_status_ready{condition=\\\"true\\\"}\", \"container_memory_usage_bytes\"\n\nInvestigation strategy by alert type:\n- PodCrashLooping → kubectl describe pod + logs + restart rate PromQL\n- PodOOMKilled → kubectl describe pod + container_memory_usage_bytes PromQL\n- PodNotReady → kubectl get pods -n <ns> + describe pod + get events\n- DeploymentReplicasMismatch → kubectl get deployment + describe deployment + events\n- NodeMemoryPressure → kubectl describe node + node_memory_MemAvailable_bytes PromQL\n- NodeHighCPU → kubectl top nodes + rate(node_cpu_seconds_total[5m]) PromQL\n\nAlways run at least 2 tool calls: one kubectl + one PromQL.\nBe specific — use the namespace and pod name from the alert when running commands."
+        }
+      },
+      "id": "a1b2c3d4-0103-0103-0103-000000000103",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [680, 300],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-flash",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0104-0104-0104-000000000104",
+      "name": "Gemini",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [560, 520],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "57EnyFD1KF7gSoQU",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Run any read-only kubectl command against the cluster. Examples: get pods -n prod, describe pod <name> -n <ns>, logs <pod> -n <ns> --tail=30, get events -n <ns> --sort-by=.lastTimestamp, get nodes, top nodes",
+        "method": "POST",
+        "url": "http://mcp-server:8000/tools/kubectl-read",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"command\": \"{command}\"}",
+        "parametersBody": {
+          "values": [
+            {
+              "name": "command",
+              "type": "string",
+              "description": "The kubectl subcommand and flags, e.g. 'get pods -n prod' or 'describe pod my-pod -n prod'"
+            }
+          ]
+        }
+      },
+      "id": "a1b2c3d4-0105-0105-0105-000000000105",
+      "name": "kubectl_read",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [680, 520]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Run any PromQL query against Prometheus for live metrics. Examples: rate(kube_pod_container_status_restarts_total[5m]), container_memory_usage_bytes{namespace=\"prod\"}, kube_pod_status_ready{condition=\"true\"}, node_memory_MemAvailable_bytes",
+        "method": "POST",
+        "url": "http://mcp-server:8000/tools/promql",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"query\": \"{query}\"}",
+        "parametersBody": {
+          "values": [
+            {
+              "name": "query",
+              "type": "string",
+              "description": "A valid PromQL expression"
+            }
+          ]
+        }
+      },
+      "id": "a1b2c3d4-0106-0106-0106-000000000106",
+      "name": "promql",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [820, 520]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f001",
+              "name": "telegramMessage",
+              "value": "={{ (() => {\n  const sev = $('Parse Alert').first().json.severity;\n  const status = $('Parse Alert').first().json.status;\n  const emoji = status === 'resolved' ? '✅' : (sev === 'critical' ? '🔴' : '🟡');\n  const statusEmoji = status === 'resolved' ? '✅ RESOLVED' : '🚨 FIRING';\n  return [\n    emoji + ' *' + statusEmoji + ': ' + $('Parse Alert').first().json.alertname + '*',\n    '',\n    '📍 *Namespace:* ' + $('Parse Alert').first().json.namespace,\n    '🪲 *Pod:* ' + $('Parse Alert').first().json.pod,\n    '⚡ *Severity:* ' + $('Parse Alert').first().json.severity.toUpperCase(),\n    '',\n    '📋 *Summary:*',\n    $('Parse Alert').first().json.summary,\n    '',\n    '🤖 *AI Triage:*',\n    $json.output,\n    '',\n    '🕐 ' + new Date().toUTCString()\n  ].join('\\n');\n})() }}",
+              "type": "string"
+            },
+            {
+              "id": "f002",
+              "name": "alertname",
+              "value": "={{ $('Parse Alert').first().json.alertname }}",
+              "type": "string"
+            },
+            {
+              "id": "f003",
+              "name": "severity",
+              "value": "={{ $('Parse Alert').first().json.severity }}",
+              "type": "string"
+            },
+            {
+              "id": "f004",
+              "name": "namespace",
+              "value": "={{ $('Parse Alert').first().json.namespace }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0107-0107-0107-000000000107",
+      "name": "Format Telegram Message",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [940, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $vars.TELEGRAM_CHAT_ID || $env.TELEGRAM_CHAT_ID }}",
+        "text": "={{ $json.telegramMessage }}",
+        "additionalFields": {
+          "parse_mode": "Markdown",
+          "disable_web_page_preview": true
+        }
+      },
+      "id": "a1b2c3d4-0108-0108-0108-000000000108",
+      "name": "Telegram Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1160, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e001",
+              "name": "telegramMessage",
+              "value": "=❌ *WORKFLOW ERROR — S3 Alert Triage*\n\nAlert: {{ $('Parse Alert').first().json.alertname }}\nError: {{ $json.error?.message || 'AI Agent failed' }}\nTime: {{ new Date().toUTCString() }}\n\n_Manual investigation required._",
+              "type": "string"
+            },
+            {
+              "id": "e002",
+              "name": "error",
+              "value": "={{ $json.error?.message || 'AI Agent failed' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0109-0109-0109-000000000109",
+      "name": "Format Error Message",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [940, 480]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $vars.TELEGRAM_CHAT_ID || $env.TELEGRAM_CHAT_ID }}",
+        "text": "={{ $json.telegramMessage }}",
+        "additionalFields": {
+          "parse_mode": "Markdown",
+          "disable_web_page_preview": true
+        }
+      },
+      "id": "a1b2c3d4-0110-0110-0110-000000000110",
+      "name": "Telegram Error",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1160, 480],
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Alertmanager Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Alert": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Format Telegram Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Error Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "kubectl_read": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "promql": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Telegram Message": {
+      "main": [
+        [
+          {
+            "node": "Telegram Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Error Message": {
+      "main": [
+        [
+          {
+            "node": "Telegram Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "staticData": null
+}
