@@ -70,31 +70,8 @@
     },
     {
       "parameters": {
-        "assignments": {
-          "assignments": [
-            {
-              "id": "p001",
-              "name": "brief",
-              "value": "={{ (() => { try { let raw = $json.text || ''; raw = raw.replace(/```json\\s*/gi, '').replace(/```\\s*/g, '').trim(); return JSON.parse(raw); } catch(e) { return { resource_type: 'unknown', resource_name: 'unknown', namespace: 'unknown', symptom: $json.text, severity: 'warning', status: 'firing', summary: 'Alert received \u2014 parser returned non-JSON, check LLM Parser node', kubectl_commands: ['get pods -A', 'get events -A --sort-by=.lastTimestamp'], promql_queries: ['up'] } } })() }}",
-              "type": "object"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "id": "a1b2c3d4-0104-0104-0104-000000000104",
-      "name": "Parse LLM Output",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [
-        880,
-        300
-      ]
-    },
-    {
-      "parameters": {
         "promptType": "define",
-        "text": "=\ud83d\udea8 ALERT \u2014 investigate and triage.\n\nInvestigation Brief (produced by alert parser):\n- Resource Type: {{ $json.brief.resource_type }}\n- Resource Name: {{ $json.brief.resource_name }}\n- Namespace: {{ $json.brief.namespace }}\n- Symptom: {{ $json.brief.symptom }}\n- Severity: {{ $json.brief.severity }}\n- Status: {{ $json.brief.status }}\n- Summary: {{ $json.brief.summary }}\n\nSuggested kubectl commands: {{ JSON.stringify($json.brief.kubectl_commands) }}\nSuggested PromQL queries: {{ JSON.stringify($json.brief.promql_queries) }}\n\nInvestigate now. Start with the suggested commands but adapt based on what you find. Run at least one kubectl command and one PromQL query.\n\nReturn your findings in this exact format:\nSUMMARY: one-line status\nSEVERITY: critical / warning / healthy\nROOT_CAUSE: your assessment in 1-2 sentences\nCONFIDENCE: high / medium / low\nRECOMMENDED_ACTION: specific actionable steps\nREQUIRES_APPROVAL: yes/no",
+        "text": "=\ud83d\udea8 ALERT \u2014 investigate and triage.\n\nInvestigation Brief:\n- Resource Type: {{ $json.output.resource_type }}\n- Resource Name: {{ $json.output.resource_name }}\n- Namespace:     {{ $json.output.namespace }}\n- Symptom:       {{ $json.output.symptom }}\n- Severity:      {{ $json.output.severity }}\n- Status:        {{ $json.output.status }}\n- Summary:       {{ $json.output.summary }}\n\nSuggested kubectl commands: {{ JSON.stringify($json.output.kubectl_commands) }}\nSuggested PromQL queries:   {{ JSON.stringify($json.output.promql_queries) }}\n\nInvestigate now. Start with the suggested commands but adapt based on what you find. Run at least one kubectl command and one PromQL query.\n\nReturn your findings in this exact format:\nSUMMARY: one-line status\nSEVERITY: critical / warning / healthy\nROOT_CAUSE: your assessment in 1-2 sentences\nCONFIDENCE: high / medium / low\nRECOMMENDED_ACTION: specific actionable steps\nREQUIRES_APPROVAL: yes/no",
         "options": {
           "systemMessage": "You are an expert SRE on-call assistant investigating a live Kubernetes alert. You have two tools:\n\n1. kubectl_read \u2014 run any read-only kubectl command.\n   Parameter: \"command\" \u2014 e.g. \"get pods -n prod\", \"describe deployment payments -n prod\", \"get events -n prod --sort-by=.lastTimestamp\", \"get nodes\"\n\n2. promql \u2014 run any PromQL query against Prometheus.\n   Parameter: \"query\" \u2014 e.g. \"kube_deployment_status_available_replicas\", \"rate(node_cpu_seconds_total[5m])\"\n\nAdapt your investigation to the resource type in the brief. The alert may be about any K8s resource \u2014 pods, deployments, nodes, services, endpoints, HPAs, PVCs, etc. Use commands appropriate for what is actually affected.\n\nAlways run at least 2 tool calls before concluding.\n\nCRITICAL PromQL rule: label selectors MUST use single quotes, e.g. kube_pod_status_ready{condition='true'} \u2014 never double quotes inside PromQL. Double quotes inside JSON break the request."
         }
@@ -190,7 +167,7 @@
             {
               "id": "f001",
               "name": "telegramMessage",
-              "value": "={{ (() => {\n  const b = $('Parse LLM Output').first().json.brief;\n  const sev = b.severity || 'warning';\n  const status = b.status || 'firing';\n  const sevEmoji = status === 'resolved' ? '\u2705' : (sev === 'critical' ? '\ud83d\udd34' : '\ud83d\udfe1');\n  const statusLabel = status === 'resolved' ? '\u2705 RESOLVED' : '\ud83d\udea8 FIRING';\n  return [\n    sevEmoji + ' *' + statusLabel + '*',\n    '',\n    '\ud83d\udd27 *Resource:* ' + b.resource_type + ' / ' + b.resource_name,\n    '\ud83d\udccd *Namespace:* ' + b.namespace,\n    '\u26a1 *Severity:* ' + sev.toUpperCase(),\n    '',\n    '\ud83d\udccb *Summary:* ' + b.summary,\n    '',\n    '\ud83e\udd16 *AI Triage:*',\n    $json.output,\n    '',\n    '\ud83d\udd50 ' + new Date().toUTCString()\n  ].join('\\n');\n})() }}",
+              "value": "={{ (() => {\n  const b = $('LLM Alert Parser').first().json.output;\n  const sev = b.severity || 'warning';\n  const status = b.status || 'firing';\n  const sevEmoji = status === 'resolved' ? '\u2705' : (sev === 'critical' ? '\ud83d\udd34' : '\ud83d\udfe1');\n  const statusLabel = status === 'resolved' ? '\u2705 RESOLVED' : '\ud83d\udea8 FIRING';\n  return [\n    sevEmoji + ' *' + statusLabel + '*',\n    '',\n    '\ud83d\udd27 *Resource:* ' + b.resource_type + ' / ' + b.resource_name,\n    '\ud83d\udccd *Namespace:* ' + b.namespace,\n    '\u26a1 *Severity:* ' + sev.toUpperCase(),\n    '',\n    '\ud83d\udccb *Summary:* ' + b.summary,\n    '',\n    '\ud83e\udd16 *AI Triage:*',\n    $json.output,\n    '',\n    '\ud83d\udd50 ' + new Date().toUTCString()\n  ].join('\\n');\n})() }}",
               "type": "string"
             }
           ]
@@ -275,6 +252,19 @@
           "name": "Telegram Bot"
         }
       }
+    },
+    {
+      "parameters": {
+        "jsonSchema": "{\"type\": \"object\", \"properties\": {\"resource_type\": {\"type\": \"string\", \"description\": \"K8s resource kind e.g. Pod, Deployment, Node, Service\"}, \"resource_name\": {\"type\": \"string\", \"description\": \"Name of the specific resource\"}, \"namespace\": {\"type\": \"string\", \"description\": \"Kubernetes namespace or cluster-wide\"}, \"symptom\": {\"type\": \"string\", \"description\": \"What is wrong in plain English\"}, \"severity\": {\"type\": \"string\", \"enum\": [\"critical\", \"warning\", \"info\"]}, \"status\": {\"type\": \"string\", \"enum\": [\"firing\", \"resolved\"]}, \"summary\": {\"type\": \"string\", \"description\": \"One-line human readable summary\"}, \"kubectl_commands\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"2-3 targeted kubectl commands\"}, \"promql_queries\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"1-2 PromQL queries. MUST use single quotes for label selectors\"}}, \"required\": [\"resource_type\", \"resource_name\", \"namespace\", \"symptom\", \"severity\", \"status\", \"summary\", \"kubectl_commands\", \"promql_queries\"]}"
+      },
+      "id": "a1b2c3d4-0113-0113-0113-000000000113",
+      "name": "Alert Brief Schema",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        550,
+        520
+      ]
     }
   ],
   "connections": {
@@ -293,7 +283,7 @@
       "main": [
         [
           {
-            "node": "Parse LLM Output",
+            "node": "AI Agent",
             "type": "main",
             "index": 0
           }
@@ -306,17 +296,6 @@
           {
             "node": "LLM Alert Parser",
             "type": "ai_languageModel",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse LLM Output": {
-      "main": [
-        [
-          {
-            "node": "AI Agent",
-            "type": "main",
             "index": 0
           }
         ]
@@ -401,6 +380,17 @@
           {
             "node": "LLM Alert Parser",
             "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Brief Schema": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "LLM Alert Parser",
+            "type": "ai_outputParser",
             "index": 0
           }
         ]
