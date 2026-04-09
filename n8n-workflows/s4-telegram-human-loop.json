@@ -1,10 +1,6 @@
 {
-  "updatedAt": "2026-04-09T12:53:42.396Z",
-  "createdAt": "2026-04-09T11:16:42.570Z",
   "name": "S4 - Telegram Human Loop",
-  "description": null,
   "active": true,
-  "isArchived": false,
   "nodes": [
     {
       "parameters": {
@@ -178,7 +174,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Handle /approve or /deny from engineer\nconst text = $input.first().json.text;\nconst chatId = $input.first().json.chatId;\nconst from = $input.first().json.from;\nconst expectedToken = process.env.WRITE_APPROVAL_TOKEN || '';\n\nif (text.startsWith('/deny')) {\n  return [null, { json: { chatId, message: '\u274c Action denied by ' + from + '. No changes made.' } }];\n}\n\n// /approve <token> <command>\nconst parts = text.split(' ');\nconst token = parts[1] || '';\nconst command = parts.slice(2).join(' ');\n\nif (!expectedToken || token !== expectedToken) {\n  return [null, { json: { chatId, message: '\ud83d\udd12 Invalid approval token. Action blocked.' } }];\n}\n\nreturn [{ json: { chatId, command, approvedBy: from, token } }, null];"
+        "jsCode": "const text = $input.first().json.text;\nconst chatId = $input.first().json.chatId;\nconst from = $input.first().json.from;\nconst expectedToken = $vars.WRITE_APPROVAL_TOKEN || '';\n\n// Route field so IF node can split\nif (text.startsWith('/deny')) {\n  return [{ json: { route: 'deny', chatId, message: '\u274c Action denied by ' + from + '. No changes made.' } }];\n}\n\nconst parts = text.split(' ');\nconst token = parts[1] || '';\nconst command = parts.slice(2).join(' ');\n\nif (!expectedToken || token !== expectedToken) {\n  return [{ json: { route: 'deny', chatId, message: '\ud83d\udd12 Invalid approval token. Action blocked.' } }];\n}\n\nreturn [{ json: { route: 'approve', chatId, command, approvedBy: from, token } }];"
       },
       "id": "9303dd3d-422d-425b-81e2-cfef7ac558a9",
       "name": "Validate Approval",
@@ -333,6 +329,38 @@
         -1376,
         352
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond3",
+              "leftValue": "={{ $json.route }}",
+              "rightValue": "approve",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0217-0217-0217-000000000217",
+      "name": "Approval Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1050,
+        528
+      ]
     }
   ],
   "connections": {
@@ -417,7 +445,7 @@
       "main": [
         [
           {
-            "node": "Execute Write",
+            "node": "Approval Valid?",
             "type": "main",
             "index": 0
           }
@@ -481,6 +509,24 @@
           }
         ]
       ]
+    },
+    "Approval Valid?": {
+      "main": [
+        [
+          {
+            "node": "Execute Write",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Denial",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -489,33 +535,5 @@
     "saveDataErrorExecution": "all",
     "saveDataSuccessExecution": "all"
   },
-  "staticData": null,
-  "pinData": {},
-  "activeVersionId": "49cd99ae-50f6-4e55-be26-f9c90498b1c6",
-  "versionCounter": 92,
-  "triggerCount": 1,
-  "tags": [],
-  "shared": [
-    {
-      "updatedAt": "2026-04-09T11:16:42.572Z",
-      "createdAt": "2026-04-09T11:16:42.572Z",
-      "role": "workflow:owner",
-      "workflowId": "5rc6BaRwcJzpAkKX",
-      "projectId": "Z5ZsysJ0rW35XOYF",
-      "project": {
-        "updatedAt": "2026-04-09T09:55:44.875Z",
-        "createdAt": "2026-04-09T09:55:12.447Z",
-        "id": "Z5ZsysJ0rW35XOYF",
-        "name": "YANIV COHEN <yanivomc@gmail.com>",
-        "type": "personal",
-        "icon": null,
-        "description": null,
-        "creatorId": "affeaca1-1d97-4aa4-aadf-ee88aaf990f0"
-      }
-    }
-  ],
-  "versionMetadata": {
-    "name": "Version 49cd99ae",
-    "description": ""
-  }
+  "staticData": null
 }
