@@ -46,6 +46,11 @@ The first time n8n starts it shows a setup wizard.
 
 **Verify:** The credential card shows `Last updated just now` — no error banner.
 
+> 🔑 **Important — credentials are NOT in the `.env` file.**  
+> The `GEMINI_API_KEY` in `.env` is only used by `setup.sh` to generate `CREDENTIALS.md`.  
+> n8n stores credentials in its **internal database** (the Docker volume).  
+> **If the EC2 instance is replaced or the volume is lost, you must re-enter this credential manually** — every time, on every new instance. This is the first thing to check if the AI Agent reports "Node does not have any credentials set".
+
 ---
 
 ## Step 3 — Connect Gemini to n8n Chat

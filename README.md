@@ -34,7 +34,7 @@ Each student gets:
 | # | Session | Duration |
 |---|---------|----------|
 | S1 | Security Foundation | 60 min |
-| S2 | n8n AI Agent + Gemini + MCP | 60 min |
+| S2 | n8n AI Agent + Gemini + MCP | 60 min | ✅ READY |
 | S3 | Reacting to Kubernetes Events | 60 min |
 | S4 | The Telegram Human Loop | 60 min |
 | S5 | Prometheus Alert Intelligence | 60 min |
