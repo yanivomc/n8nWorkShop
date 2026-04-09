@@ -20,6 +20,19 @@
     },
     {
       "parameters": {
+        "jsCode": "// Deduplication \u2014 block repeated Alertmanager firings for the same alert\n// Alertmanager re-fires every repeat_interval even without changes.\n// We track alertname+namespace+status and drop duplicates within 10 minutes.\n\nconst DEDUP_WINDOW_MS = 10 * 60 * 1000; // 10 minutes\n\nconst body = $input.first().json;\nconst alerts = body.alerts || [];\nconst key = [\n  body.commonLabels?.alertname || alerts[0]?.labels?.alertname || 'unknown',\n  body.commonLabels?.namespace || alerts[0]?.labels?.namespace || 'unknown',\n  body.status || 'firing'\n].join(':');\n\nconst now = Date.now();\nconst store = $getWorkflowStaticData('global');\n\nif (!store.dedup) store.dedup = {};\n\n// Clean up old entries\nfor (const k of Object.keys(store.dedup)) {\n  if (now - store.dedup[k] > DEDUP_WINDOW_MS) delete store.dedup[k];\n}\n\nif (store.dedup[key]) {\n  const ageSeconds = Math.round((now - store.dedup[key]) / 1000);\n  console.log(`DEDUP: dropping repeated alert '${key}' (${ageSeconds}s ago)`);\n  return []; // drop \u2014 returns empty, workflow stops here\n}\n\nstore.dedup[key] = now;\nconsole.log(`DEDUP: new alert accepted '${key}'`);\nreturn [$input.first()];"
+      },
+      "id": "a1b2c3d4-0100-0100-0100-000000000100",
+      "name": "Dedup Filter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        330,
+        300
+      ]
+    },
+    {
+      "parameters": {
         "promptType": "define",
         "text": "=Parse this raw Prometheus Alertmanager webhook payload and produce an investigation brief.\n\nRAW PAYLOAD:\n{{ JSON.stringify($json, null, 2) }}",
         "options": {
@@ -31,7 +44,7 @@
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.4,
       "position": [
-        440,
+        660,
         300
       ]
     },
@@ -45,7 +58,7 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        320,
+        540,
         500
       ],
       "credentials": {
@@ -74,7 +87,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        660,
+        880,
         300
       ]
     },
@@ -91,7 +104,7 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 1.7,
       "position": [
-        880,
+        1100,
         300
       ],
       "onError": "continueErrorOutput"
@@ -106,7 +119,7 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        760,
+        980,
         500
       ],
       "credentials": {
@@ -139,7 +152,7 @@
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
       "typeVersion": 1.1,
       "position": [
-        880,
+        1100,
         500
       ]
     },
@@ -166,7 +179,7 @@
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
       "typeVersion": 1.1,
       "position": [
-        1020,
+        1240,
         500
       ]
     },
@@ -189,7 +202,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1100,
+        1320,
         300
       ]
     },
@@ -207,7 +220,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        1300,
+        1520,
         300
       ],
       "credentials": {
@@ -236,7 +249,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1100,
+        1320,
         480
       ]
     },
@@ -253,7 +266,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        1300,
+        1520,
         480
       ],
       "credentials": {
@@ -269,7 +282,7 @@
       "main": [
         [
           {
-            "node": "LLM Alert Parser",
+            "node": "Dedup Filter",
             "type": "main",
             "index": 0
           }
@@ -376,6 +389,17 @@
         [
           {
             "node": "Telegram Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dedup Filter": {
+      "main": [
+        [
+          {
+            "node": "LLM Alert Parser",
             "type": "main",
             "index": 0
           }
