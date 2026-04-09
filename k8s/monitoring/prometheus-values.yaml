@@ -85,7 +85,11 @@ alertmanager:
         memory: 128Mi
 
   service:
-    type: ClusterIP   # internal only — n8n webhook is the output channel
+    type: LoadBalancer
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-type: "classic"
+      service.beta.kubernetes.io/aws-load-balancer-internal: "false"
+    port: 9093
 
   config:
     global:

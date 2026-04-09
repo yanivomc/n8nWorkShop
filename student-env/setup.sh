@@ -300,6 +300,14 @@ install_monitoring() {
     warn "Grafana LB pending — check: kubectl get svc -n monitoring"
   fi
 
+  ALERTMANAGER_HOST=$(kubectl get svc -n monitoring monitoring-kube-prometheus-alertmanager     -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
+  if [[ -n "$ALERTMANAGER_HOST" ]]; then
+    ok "Alertmanager: http://${ALERTMANAGER_HOST}:9093"
+    save_env_var "ALERTMANAGER_URL" "http://${ALERTMANAGER_HOST}:9093"
+  else
+    warn "Alertmanager LB pending — check: kubectl get svc -n monitoring"
+  fi
+
   echo ""
   kubectl get pods -n monitoring
 
@@ -461,8 +469,9 @@ generate_credentials() {
   local EC2_IP
   EC2_IP=$(curl -sf http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || echo "${EC2_PUBLIC_IP}")
 
-  local PROM_HOST GRAFANA_HOST
+  local PROM_HOST GRAFANA_HOST ALERTMANAGER_HOST
   PROM_HOST=$(kubectl get svc -n monitoring monitoring-kube-prometheus-prometheus     -o jsonpath="{.status.loadBalancer.ingress[0].hostname}" 2>/dev/null)
+  ALERTMANAGER_HOST=$(kubectl get svc -n monitoring monitoring-kube-prometheus-alertmanager     -o jsonpath="{.status.loadBalancer.ingress[0].hostname}" 2>/dev/null)
   GRAFANA_HOST=$(kubectl get svc -n monitoring monitoring-grafana     -o jsonpath="{.status.loadBalancer.ingress[0].hostname}" 2>/dev/null)
 
   cat > "$outfile" << MDEOF
@@ -484,6 +493,7 @@ Generated: $(date)
 | **Terminal** | http://${EC2_IP}:5000 | — | — |
 | **Prometheus** | http://${PROM_HOST}:9090 | — | — |
 | **Grafana** | http://${GRAFANA_HOST} | admin | workshop123 |
+| **Alertmanager** | http://${ALERTMANAGER_HOST}:9093 | — | — |
 
 ---
 
