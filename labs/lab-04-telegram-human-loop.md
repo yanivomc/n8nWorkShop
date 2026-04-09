@@ -27,6 +27,27 @@ Telegram Trigger → Route Message
 
 ---
 
+
+## Prerequisites — ngrok HTTPS Tunnel
+
+> Telegram **requires HTTPS** for webhooks. n8n runs on HTTP. ngrok solves this by creating an HTTPS tunnel to your local n8n instance.
+
+```bash
+cd ~/n8nWorkShop/student-env
+./setup.sh  # option 10 — Start ngrok tunnel
+```
+
+This will:
+1. Install ngrok if not present
+2. Ask for your ngrok auth token (free at https://dashboard.ngrok.com)
+3. Start the tunnel on port 5678
+4. Save the HTTPS URL to `.env` as `WEBHOOK_URL`
+5. Restart n8n so it registers the new webhook URL with Telegram
+
+> ⚠️ **Run option 10 before activating the S4 workflow.** If n8n hasn't picked up the ngrok URL, Telegram will reject the webhook registration.
+
+---
+
 ## Part 1 — Conversational K8s Assistant
 
 ### What you can ask

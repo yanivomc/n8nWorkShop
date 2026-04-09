@@ -549,6 +549,75 @@ MDEOF
   echo -e "  ${CYAN}→ MCP docs:   http://${EC2_IP}:8000/docs${NC}"
 }
 
+
+# ── Start ngrok HTTPS tunnel ───────────────────────────────────────────
+start_ngrok() {
+  hdr "Start ngrok HTTPS Tunnel (for Telegram Webhook)"
+  load_env
+
+  # Install ngrok if missing
+  if ! command -v ngrok &>/dev/null; then
+    echo "  Installing ngrok..."
+    curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+    echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list >/dev/null
+    sudo apt-get update -qq && sudo apt-get install -y ngrok
+    ok "ngrok installed"
+  else
+    ok "ngrok: $(ngrok version 2>/dev/null | head -1)"
+  fi
+
+  # Auth token
+  if [[ -z "$NGROK_AUTH_TOKEN" ]]; then
+    echo ""
+    warn "ngrok requires a free auth token."
+    echo "  Get yours at: https://dashboard.ngrok.com/get-started/your-authtoken"
+    echo -n "  Paste your ngrok auth token: "
+    read NGROK_AUTH_TOKEN
+    [[ -z "$NGROK_AUTH_TOKEN" ]] && { err "Token required — aborting."; return; }
+    save_env_var "NGROK_AUTH_TOKEN" "$NGROK_AUTH_TOKEN"
+  fi
+
+  ngrok config add-authtoken "$NGROK_AUTH_TOKEN" &>/dev/null
+
+  # Kill any existing ngrok
+  pkill -f "ngrok http" 2>/dev/null || true
+  sleep 1
+
+  # Start tunnel in background
+  echo "  Starting ngrok tunnel on port 5678..."
+  nohup ngrok http 5678 --log=stdout > /tmp/ngrok.log 2>&1 &
+  sleep 4
+
+  # Get the HTTPS URL from ngrok local API
+  NGROK_URL=$(curl -sf http://localhost:4040/api/tunnels 2>/dev/null | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+tunnels = data.get('tunnels', [])
+for t in tunnels:
+    if t.get('proto') == 'https':
+        print(t['public_url'])
+        break
+" 2>/dev/null)
+
+  if [[ -z "$NGROK_URL" ]]; then
+    err "Could not get ngrok URL — check /tmp/ngrok.log"
+    return
+  fi
+
+  ok "ngrok tunnel: $NGROK_URL"
+  save_env_var "WEBHOOK_URL" "$NGROK_URL"
+
+  # Restart n8n so it picks up the new WEBHOOK_URL
+  echo "  Restarting n8n with new WEBHOOK_URL..."
+  cd "$(dirname "$0")"
+  docker rm -f n8n
+  docker compose up -d n8n
+  ok "n8n restarted — Telegram webhooks will use: $NGROK_URL"
+  echo ""
+  echo -e "  ${CYAN}→ n8n: http://${EC2_PUBLIC_IP}:5678${NC}"
+  echo -e "  ${CYAN}→ ngrok dashboard: http://localhost:4040${NC}"
+}
+
 # ── First-run check ───────────────────────────────────────────────────
 first_run() {
   [ ! -f "$ENV_FILE" ] && cp "$(dirname "$0")/.env.example" "$ENV_FILE"
@@ -586,6 +655,7 @@ menu() {
     echo "  7) Validate full setup"
     echo "  8) Test Telegram bot"
     echo "  9) Generate credentials file"
+    echo " 10) Start ngrok tunnel (required for Telegram Trigger)"
     echo "  q) Quit"
     echo ""
     echo -n "  Choice: "
@@ -600,6 +670,7 @@ menu() {
       7) validate_setup ;;
       8) test_telegram ;;
       9) generate_credentials ;;
+      10) start_ngrok ;;
       q|Q) echo ""; exit 0 ;;
       *) warn "Invalid choice" ;;
     esac
