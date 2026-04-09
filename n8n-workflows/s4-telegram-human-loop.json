@@ -117,7 +117,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const output = $input.first().json.output || '';\nconst chatId = $('Route Message').first().json.chatId;\nconst match = output.match(/SRE_ACTION:\\s*(.+)/);\nif (match) {\n  const cmd = match[1].trim();\n  const token = $vars.WRITE_APPROVAL_TOKEN || 'APPROVAL_TOKEN_NOT_SET';\n  return [{ json: {\n    needsApproval: true,\n    command: cmd,\n    token,\n    chatId,\n    message: output.replace(/SRE_ACTION:.+/, '').trim(),\n    approvalPrompt: '\u26a0\ufe0f <b>SRE Action suggested:</b>\\n<code>kubectl ' + cmd + '</code>\\n\\nApprove?\\n\u2705 /approve ' + token + ' ' + cmd + '\\n\u274c /deny'\n  }}];\n}\nreturn [{ json: { needsApproval: false, chatId, message: output } }];"
+        "jsCode": "const output = $input.first().json.output || '';\nconst chatId = $('Route Message').first().json.chatId;\nconst match = output.match(/SRE_ACTION:\\s*(.+)/);\nif (match) {\n  const cmd = match[1].trim();\n  const token = $vars.WRITE_APPROVAL_TOKEN || 'APPROVAL_TOKEN_NOT_SET';\n  // Don't send Gemini's body text \u2014 just show the clean approval prompt\n  return [{ json: {\n    needsApproval: true,\n    command: cmd,\n    token,\n    chatId,\n    message: '',\n    approvalPrompt: '\u26a0\ufe0f <b>SRE Action suggested:</b>\\n<code>kubectl ' + cmd + '</code>\\n\\nApprove?\\n\u2705 /approve ' + token + ' ' + cmd + '\\n\u274c /deny'\n  }}];\n}\n// No action needed \u2014 send Gemini's answer as-is\nreturn [{ json: { needsApproval: false, chatId, message: output } }];"
       },
       "id": "538bf030-a32c-4f38-8ae5-7ae6c234c7a7",
       "name": "Check Write Needed",
