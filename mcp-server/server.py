@@ -109,7 +109,7 @@ async def kubectl_write(req: WriteRequest):
     if not is_write_command(req.command):
         raise HTTPException(status_code=400, detail="Not a write command.")
 
-    logger.info(f"WRITE approved by {req.approved_by}: kubectl {req.command}")
+    logger.info(f"AUDIT | WRITE_EXECUTED | approved_by={req.approved_by} | command=kubectl {req.command} | timestamp=" + __import__("datetime").datetime.utcnow().isoformat())
     result = run_kubectl(req.command, timeout=60)
     return {
         "output":      result["output"],

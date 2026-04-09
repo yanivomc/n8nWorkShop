@@ -113,7 +113,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const output = $input.first().json.output || '';\nconst chatId = $('Route Message').first().json.chatId;\nconst match = output.match(/SRE_ACTION:\\s*(.+)/);\nif (match) {\n  const cmd = match[1].trim();\n  // Store command \u2014 user only needs to send TOTP code\n  const store = $getWorkflowStaticData('global');\n  if (!store.pending) store.pending = {};\n  store.pending[chatId] = { command: cmd };\n  return [{ json: {\n    needsApproval: true,\n    chatId,\n    approvalPrompt: '\u26a0\ufe0f <b>SRE Action suggested:</b>\\n<code>kubectl ' + cmd + '</code>\\n\\n\ud83d\udd10 Enter your 6-digit Authenticator code to approve:\\n\u2705 <code>/approve &lt;6-digit-code&gt;</code>\\n\u274c <code>/deny</code>'\n  }}];\n}\nreturn [{ json: { needsApproval: false, chatId, message: output } }];"
+        "jsCode": "const output = $input.first().json.output || '';\nconst chatId = $('Route Message').first().json.chatId;\nconst match = output.match(/SRE_ACTION:\\s*(.+)/);\nif (match) {\n  // Strip leading 'kubectl ' if Gemini included it\n  const cmd = match[1].trim().replace(/^kubectl\\s+/i, '');\n  const store = $getWorkflowStaticData('global');\n  if (!store.pending) store.pending = {};\n  store.pending[chatId] = { command: cmd };\n  return [{ json: {\n    needsApproval: true,\n    chatId,\n    approvalPrompt: '\u26a0\ufe0f <b>SRE Action suggested:</b>\\n<code>kubectl ' + cmd + '</code>\\n\\n\ud83d\udd10 Enter your 6-digit Authenticator code:\\n\u2705 <code>/approve &lt;6-digit-code&gt;</code>\\n\u274c <code>/deny</code>'\n  }}];\n}\nreturn [{ json: { needsApproval: false, chatId, message: output } }];"
       },
       "id": "538bf030-a32c-4f38-8ae5-7ae6c234c7a7",
       "name": "Check Write Needed",
@@ -174,7 +174,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const text = $input.first().json.text.trim();\nconst chatId = $input.first().json.chatId;\nconst from = $input.first().json.from;\n\nif (text.startsWith('/deny')) {\n  return [{ json: { route: 'deny', chatId, message: '\u274c Action denied by ' + from + '. No changes made.' } }];\n}\n\n// /approve <totp-code>\nconst parts = text.split(' ');\nconst totpCode = parts[1] || '';\n\nconst store = $getWorkflowStaticData('global');\nconst pending = store.pending?.[chatId];\n\nif (!pending) {\n  return [{ json: { route: 'deny', chatId, message: '\u26a0\ufe0f No pending action found. Ask your question first.' } }];\n}\n\n// Clean up\ndelete store.pending[chatId];\n\n// Pass TOTP code to MCP \u2014 MCP validates against TOTP_SECRET\nreturn [{ json: { route: 'approve', chatId, command: pending.command, approvedBy: from, token: totpCode } }];"
+        "jsCode": "const text = $input.first().json.text.trim();\nconst chatId = $input.first().json.chatId;\nconst from = $input.first().json.from;\nconst userId = $input.first().json.json?.message?.from?.id || 'unknown';\nconst username = $input.first().json.json?.message?.from?.username || from;\n\nif (text.startsWith('/deny')) {\n  // Audit log\n  console.log(JSON.stringify({ event: 'DENIED', user: from, userId, chatId, timestamp: new Date().toISOString() }));\n  return [{ json: { route: 'deny', chatId, message: '\u274c Action denied by ' + from + '. No changes made.' } }];\n}\n\nconst parts = text.split(' ');\nconst totpCode = parts[1] || '';\nconst store = $getWorkflowStaticData('global');\nconst pending = store.pending?.[chatId];\n\nif (!pending) {\n  return [{ json: { route: 'deny', chatId, message: '\u26a0\ufe0f No pending action. Ask your question first.' } }];\n}\n\ndelete store.pending[chatId];\n\n// Audit log \u2014 TOTP validation happens in MCP\nconsole.log(JSON.stringify({ event: 'APPROVE_ATTEMPT', user: from, userId, username, chatId, command: pending.command, timestamp: new Date().toISOString() }));\n\nreturn [{ json: { route: 'approve', chatId, command: pending.command, approvedBy: from, userId, username, token: totpCode } }];"
       },
       "id": "9303dd3d-422d-425b-81e2-cfef7ac558a9",
       "name": "Validate Approval",
@@ -206,7 +206,7 @@
     {
       "parameters": {
         "chatId": "={{ $('Validate Approval').first().json.chatId }}",
-        "text": "=\u2705 <b>Executed by {{ $('Validate Approval').first().json.approvedBy }}:</b>\n<code>kubectl {{ $('Validate Approval').first().json.command }}</code>\n\n{{ $json.output }}",
+        "text": "=\u2705 <b>Executed by {{ $('Validate Approval').first().json.approvedBy }}</b> (@{{ $('Validate Approval').first().json.username }} / ID: {{ $('Validate Approval').first().json.userId }}):\n<code>kubectl {{ $('Validate Approval').first().json.command }}</code>\n\n{{ $json.output }}\n\n\ud83d\udd50 {{ new Date().toUTCString() }}",
         "additionalFields": {
           "parse_mode": "HTML"
         }
