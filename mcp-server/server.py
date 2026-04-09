@@ -17,7 +17,7 @@ TOTP_SECRET    = os.getenv("TOTP_SECRET", "")          # base32 secret for Authy
 WRITE_TOKEN    = os.getenv("WRITE_APPROVAL_TOKEN", "")  # fallback static token
 
 WRITE_VERBS = {
-    "delete","apply","create","replace","patch",
+    "delete","apply","create","replace","patch","run",
     "rollout","scale","cordon","drain","taint","label","annotate"
 }
 
