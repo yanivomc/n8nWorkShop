@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-04-09T12:01:21.868Z",
+  "updatedAt": "2026-04-09T12:30:44.087Z",
   "createdAt": "2026-04-09T11:16:42.570Z",
   "name": "S4 - Telegram Human Loop",
   "description": null,
@@ -13,13 +13,13 @@
         ],
         "additionalFields": {}
       },
-      "id": "f1323726-28b0-4602-a846-45f12b63f48c",
+      "id": "b20bd0a0-cd8f-4ffa-808c-7256654cc011",
       "name": "Telegram Trigger",
       "type": "n8n-nodes-base.telegramTrigger",
       "typeVersion": 1.1,
       "position": [
-        -2128,
-        656
+        -1888,
+        608
       ],
       "webhookId": "telegram-bot",
       "credentials": {
@@ -33,13 +33,13 @@
       "parameters": {
         "jsCode": "const msg = $input.first().json.message;\nconst text = (msg?.text || '').trim();\nconst chatId = msg?.chat?.id?.toString();\nconst from = msg?.from?.first_name || 'Engineer';\nconst route = (text.startsWith('/approve ') || text.startsWith('/deny ')) ? 'approval' : 'query';\nreturn [{ json: { route, text, chatId, from } }];"
       },
-      "id": "02b6bc4e-bb9f-4d8b-872d-0526f1542925",
+      "id": "3db501ee-684a-46fe-8bf4-740c550c2178",
       "name": "Route Message",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1904,
-        656
+        -1664,
+        608
       ]
     },
     {
@@ -47,16 +47,16 @@
         "promptType": "define",
         "text": "={{ $json.from }} asks: {{ $json.text }}\n\nAnswer using kubectl_read and/or promql. Be concise \u2014 this is a Telegram chat reply.\nFormat your response clearly with emojis. Keep it under 300 words.",
         "options": {
-          "systemMessage": "You are a Kubernetes SRE assistant answering questions via Telegram.\n\nYou have two tools:\n1. kubectl_read \u2014 any read-only kubectl command. Parameter: \"command\"\n2. promql \u2014 any PromQL query. Parameter: \"query\" (single quotes for label selectors)\n\nRules:\n- Be concise \u2014 this is a chat interface, not a report\n- Use emojis to make status clear (\u2705 \u274c \u26a0\ufe0f \ud83d\udcca)\n- Always run at least one tool before answering\n- If asked about a specific namespace/pod, focus your commands there\n- If you recommend a write action (restart, scale, delete), end with:\n  WRITE_NEEDED: <kubectl command>\n  This will trigger the approval gate."
+          "systemMessage": "You are a Kubernetes SRE assistant answering questions via Telegram.\n\nYou have two tools:\n1. kubectl_read \u2014 any read-only kubectl command. Parameter: \"command\"\n2. promql \u2014 any PromQL query. Parameter: \"query\" (single quotes for label selectors)\n\nRules:\n- Be concise \u2014 this is a chat interface, not a report\n- Use emojis to make status clear (\u2705 \u274c \u26a0\ufe0f \ud83d\udcca)\n- Always run at least one tool before answering\n- If asked about a specific namespace/pod, focus your commands there\n\nIf you diagnose an issue that requires a write action (restart, scale, rollback, delete, apply, cordon, drain), end your response with exactly:\nWRITE_NEEDED: <kubectl command>\nExample: WRITE_NEEDED: rollout restart deployment/payments-app -n prod\n\nDo NOT say you cannot execute commands. Your job is to diagnose and recommend \u2014 a human approves all write actions."
         }
       },
-      "id": "41c1d1c8-766c-4392-925a-ca640dc26d86",
+      "id": "3f942e69-888a-4377-ab32-a5d2c5c23a72",
       "name": "K8s Assistant",
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 1.7,
       "position": [
-        -1392,
-        400
+        -1088,
+        352
       ],
       "onError": "continueErrorOutput"
     },
@@ -64,13 +64,13 @@
       "parameters": {
         "options": {}
       },
-      "id": "76e4b938-42bd-45fa-b194-64632b7a06db",
+      "id": "afcc77ea-3424-492f-a2df-a6f81b30d3fa",
       "name": "Gemini Assistant",
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        -1456,
-        624
+        -1216,
+        576
       ],
       "credentials": {
         "googlePalmApi": {
@@ -88,13 +88,13 @@
         "specifyBody": "json",
         "jsonBody": "={\"command\": \"{command}\"}"
       },
-      "id": "58453dad-1e83-425d-9dd8-3a2f74b90abe",
+      "id": "d41d332d-9b51-4d3e-9217-5a4856824768",
       "name": "kubectl_read",
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
       "typeVersion": 1.1,
       "position": [
-        -1328,
-        624
+        -960,
+        576
       ]
     },
     {
@@ -106,26 +106,26 @@
         "specifyBody": "json",
         "jsonBody": "={\"query\": \"{query}\"}"
       },
-      "id": "3b74c966-1745-48c4-a86a-d831afbffc31",
+      "id": "92239ca8-7b51-4815-9c43-441326649043",
       "name": "promql",
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
       "typeVersion": 1.1,
       "position": [
-        -1200,
-        624
+        -832,
+        576
       ]
     },
     {
       "parameters": {
-        "jsCode": "const output = $input.first().json.output || '';\nconst chatId = $('Route Message').first().json.chatId;\n\nconst writeMatch = output.match(/WRITE_NEEDED:\\s*(.+)/);\nif (writeMatch) {\n  const cmd = writeMatch[1].trim();\n  const token = $env.WRITE_APPROVAL_TOKEN || 'TOKEN';\n  return [{ json: {\n    needsApproval: true,\n    command: cmd,\n    token,\n    chatId,\n    message: output.replace(/WRITE_NEEDED:.+/, '').trim(),\n    approvalPrompt: '\u26a0\ufe0f <b>Write action recommended:</b>\\n<code>kubectl ' + cmd + '</code>\\n\\nApprove?\\n\u2705 /approve ' + token + ' ' + cmd + '\\n\u274c /deny'\n  }}];\n}\nreturn [{ json: { needsApproval: false, chatId, message: output } }];"
+        "jsCode": "const output = $input.first().json.output || '';\nconst chatId = $('Route Message').first().json.chatId;\n\nconst writeMatch = output.match(/WRITE_NEEDED:\\s*(.+)/);\nif (writeMatch) {\n  const cmd = writeMatch[1].trim();\n  const token = $vars.WRITE_APPROVAL_TOKEN || 'APPROVAL_TOKEN_NOT_SET';\n  return [{ json: {\n    needsApproval: true,\n    command: cmd,\n    token,\n    chatId,\n    message: output.replace(/WRITE_NEEDED:.+/, '').trim(),\n    approvalPrompt: '\u26a0\ufe0f <b>Write action recommended:</b>\\n<code>kubectl ' + cmd + '</code>\\n\\nApprove?\\n\u2705 /approve ' + token + ' ' + cmd + '\\n\u274c /deny'\n  }}];\n}\nreturn [{ json: { needsApproval: false, chatId, message: output } }];"
       },
-      "id": "9d3d26aa-3b11-4b9b-bff7-eb5b5399483d",
+      "id": "dc329231-cc3c-4926-93d1-e6b4866df7b8",
       "name": "Check Write Needed",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -992,
-        512
+        -624,
+        464
       ]
     },
     {
@@ -136,94 +136,15 @@
           "parse_mode": "HTML"
         }
       },
-      "id": "a8a48369-369f-4c2a-82d0-a8e3df704bc2",
+      "id": "d5ca71a3-a960-411c-975b-85fccd13fea7",
       "name": "Send Approval Request",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        -544,
-        416
+        -176,
+        368
       ],
-      "webhookId": "920b558c-8852-49ec-8a7d-92d20065736d",
-      "credentials": {
-        "telegramApi": {
-          "id": "E0198RtjFa4kAscP",
-          "name": "Telegram account 2"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "chatId": "={{ $json.chatId }}",
-        "text": "={{ $json.message }}",
-        "additionalFields": {
-          "parse_mode": "HTML"
-        }
-      },
-      "id": "812b5aef-af87-402b-b7fd-ff0f5939b179",
-      "name": "Send Answer",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
-      "position": [
-        -544,
-        608
-      ],
-      "webhookId": "681cd962-b48b-42b2-9ad8-c4d4b44a0d88",
-      "credentials": {
-        "telegramApi": {
-          "id": "E0198RtjFa4kAscP",
-          "name": "Telegram account 2"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "// Handle /approve or /deny from engineer\nconst text = $input.first().json.text;\nconst chatId = $input.first().json.chatId;\nconst from = $input.first().json.from;\nconst expectedToken = process.env.WRITE_APPROVAL_TOKEN || '';\n\nif (text.startsWith('/deny')) {\n  return [null, { json: { chatId, message: '\u274c Action denied by ' + from + '. No changes made.' } }];\n}\n\n// /approve <token> <command>\nconst parts = text.split(' ');\nconst token = parts[1] || '';\nconst command = parts.slice(2).join(' ');\n\nif (!expectedToken || token !== expectedToken) {\n  return [null, { json: { chatId, message: '\ud83d\udd12 Invalid approval token. Action blocked.' } }];\n}\n\nreturn [{ json: { chatId, command, approvedBy: from, token } }, null];"
-      },
-      "id": "3a8efd5a-c410-41ca-8567-ff25a92e287f",
-      "name": "Validate Approval",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -1328,
-        800
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "http://mcp-server:8000/tools/kubectl-write",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ command: $json.command, approved_by: $json.approvedBy, approval_token: $json.token }) }}",
-        "options": {}
-      },
-      "id": "d7b4e836-5d56-4cf5-8b7e-6679f9af95bd",
-      "name": "Execute Write",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        -992,
-        800
-      ]
-    },
-    {
-      "parameters": {
-        "chatId": "={{ $('Validate Approval').first().json.chatId }}",
-        "text": "=\u2705 <b>Executed by {{ $('Validate Approval').first().json.approvedBy }}:</b>\n<code>kubectl {{ $('Validate Approval').first().json.command }}</code>\n\n{{ $json.output }}",
-        "additionalFields": {
-          "parse_mode": "HTML"
-        }
-      },
-      "id": "2462b223-fe17-48da-b49a-c616b17f4b57",
-      "name": "Send Execution Result",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
-      "position": [
-        -768,
-        800
-      ],
-      "webhookId": "1b06c124-3a12-440a-bc90-5672b3e17efb",
+      "webhookId": "fd5872aa-7fb2-4ca8-a05a-1090b58f21aa",
       "credentials": {
         "telegramApi": {
           "id": "jcA0ZMKocCJNhas2",
@@ -239,19 +160,98 @@
           "parse_mode": "HTML"
         }
       },
-      "id": "f93a9919-5167-4be0-ae42-936f0c6038fc",
+      "id": "7dd7d029-bcf4-4e94-8bca-533e11ad0c01",
+      "name": "Send Answer",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -176,
+        560
+      ],
+      "webhookId": "109c2e40-5bfc-483f-8481-4fa886c211f2",
+      "credentials": {
+        "telegramApi": {
+          "id": "jcA0ZMKocCJNhas2",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle /approve or /deny from engineer\nconst text = $input.first().json.text;\nconst chatId = $input.first().json.chatId;\nconst from = $input.first().json.from;\nconst expectedToken = process.env.WRITE_APPROVAL_TOKEN || '';\n\nif (text.startsWith('/deny')) {\n  return [null, { json: { chatId, message: '\u274c Action denied by ' + from + '. No changes made.' } }];\n}\n\n// /approve <token> <command>\nconst parts = text.split(' ');\nconst token = parts[1] || '';\nconst command = parts.slice(2).join(' ');\n\nif (!expectedToken || token !== expectedToken) {\n  return [null, { json: { chatId, message: '\ud83d\udd12 Invalid approval token. Action blocked.' } }];\n}\n\nreturn [{ json: { chatId, command, approvedBy: from, token } }, null];"
+      },
+      "id": "dbcef65c-b896-49ac-af85-c0f55f4eb55f",
+      "name": "Validate Approval",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1024,
+        752
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://mcp-server:8000/tools/kubectl-write",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ command: $json.command, approved_by: $json.approvedBy, approval_token: $json.token }) }}",
+        "options": {}
+      },
+      "id": "7edde8a4-536e-4800-9b04-0e0844138d4b",
+      "name": "Execute Write",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -624,
+        752
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Validate Approval').first().json.chatId }}",
+        "text": "=\u2705 <b>Executed by {{ $('Validate Approval').first().json.approvedBy }}:</b>\n<code>kubectl {{ $('Validate Approval').first().json.command }}</code>\n\n{{ $json.output }}",
+        "additionalFields": {
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "d24ec3d2-c9dd-439c-a0a8-33f3c16b772b",
+      "name": "Send Execution Result",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -400,
+        752
+      ],
+      "webhookId": "0ef3c1bb-8646-4cc1-ba91-b7486a54376a",
+      "credentials": {
+        "telegramApi": {
+          "id": "jcA0ZMKocCJNhas2",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "5a0c2335-ee6c-4261-bdfa-ccc083b1ccb6",
       "name": "Send Denial",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        -2128,
-        1024
+        -1888,
+        976
       ],
-      "webhookId": "83b608ee-38d1-46d2-b237-5d29354057d7",
+      "webhookId": "6ce97b27-7ab7-41b9-8855-1c37e41ee25a",
       "credentials": {
         "telegramApi": {
-          "id": "E0198RtjFa4kAscP",
-          "name": "Telegram account 2"
+          "id": "jcA0ZMKocCJNhas2",
+          "name": "Telegram account"
         }
       }
     },
@@ -278,13 +278,13 @@
         },
         "options": {}
       },
-      "id": "cfb27e78-c2ba-46c6-b280-43750c0c7e0d",
+      "id": "16ad0d8a-8caa-47ba-a825-6f8fd204b9f8",
       "name": "Is Query?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        -1680,
-        656
+        -1440,
+        608
       ]
     },
     {
@@ -310,27 +310,28 @@
         },
         "options": {}
       },
-      "id": "535c94bc-7888-4463-8128-6796725dab02",
+      "id": "f8aff179-8cec-4b1a-8616-bf843aaf4c02",
       "name": "Needs Approval?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        -768,
-        512
+        -400,
+        464
       ]
     },
     {
       "parameters": {
+        "sessionIdType": "customKey",
         "sessionKey": "={{ $('Route Message').first().json.chatId }}",
         "contextWindowLength": 10
       },
-      "id": "a1b2c3d4-0216-0216-0216-000000000216",
+      "id": "89a8fb80-6811-4650-b6d1-782a14529efc",
       "name": "Chat Memory",
       "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
       "typeVersion": 1.3,
       "position": [
-        880,
-        520
+        -1088,
+        576
       ]
     }
   ],
@@ -490,8 +491,8 @@
   },
   "staticData": null,
   "pinData": {},
-  "activeVersionId": "381f5bcc-498f-4a54-bb5e-7d87bc247f67",
-  "versionCounter": 58,
+  "activeVersionId": "3fd7a301-358b-4d69-88a7-5f9969a27959",
+  "versionCounter": 75,
   "triggerCount": 1,
   "tags": [],
   "shared": [
@@ -514,7 +515,7 @@
     }
   ],
   "versionMetadata": {
-    "name": "Version 381f5bcc",
+    "name": "Version 3fd7a301",
     "description": ""
   }
 }
