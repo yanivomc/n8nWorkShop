@@ -25,6 +25,7 @@ EC2_IP="${EC2_PUBLIC_IP}"
 WEBHOOK_URL="http://${EC2_IP}:5678/webhook/prometheus-alert"
 NAMESPACE="${NAMESPACE:-prod}"
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+RUN_ID="test-$(date +%s)"  # unique per run — bypasses dedup filter
 
 usage() {
   echo ""
@@ -94,7 +95,8 @@ scenario_01() {
     "alertname": "PodCrashLooping",
     "namespace": "${NAMESPACE}",
     "severity": "critical",
-    "workshop": "true"
+    "workshop": "true",
+        "run_id": "${RUN_ID}"
   },
   "commonAnnotations": {
     "summary": "Pod payments-app is crash looping",
@@ -110,7 +112,8 @@ scenario_01() {
         "namespace": "${NAMESPACE}",
         "pod": "payments-app-7d9f8b6c4-xkp2q",
         "severity": "critical",
-        "workshop": "true"
+        "workshop": "true",
+        "run_id": "${RUN_ID}"
       },
       "annotations": {
         "summary": "Pod payments-app is crash looping",
@@ -140,7 +143,8 @@ scenario_02() {
     "alertname": "PodOOMKilled",
     "namespace": "${NAMESPACE}",
     "severity": "critical",
-    "workshop": "true"
+    "workshop": "true",
+        "run_id": "${RUN_ID}"
   },
   "commonAnnotations": {
     "summary": "Pod memory-hog OOMKilled",
@@ -156,7 +160,8 @@ scenario_02() {
         "namespace": "${NAMESPACE}",
         "pod": "memory-hog-6b8d9f5c7-r4t2n",
         "severity": "critical",
-        "workshop": "true"
+        "workshop": "true",
+        "run_id": "${RUN_ID}"
       },
       "annotations": {
         "summary": "Pod memory-hog OOMKilled",
@@ -186,7 +191,8 @@ scenario_03() {
     "alertname": "PodNotReady",
     "namespace": "${NAMESPACE}",
     "severity": "warning",
-    "workshop": "true"
+    "workshop": "true",
+        "run_id": "${RUN_ID}"
   },
   "commonAnnotations": {
     "summary": "Pod pending-victim not ready",
@@ -201,7 +207,8 @@ scenario_03() {
         "namespace": "${NAMESPACE}",
         "pod": "pending-victim-5c9d7b8f4-m2p6k",
         "severity": "warning",
-        "workshop": "true"
+        "workshop": "true",
+        "run_id": "${RUN_ID}"
       },
       "annotations": {
         "summary": "Pod pending-victim not ready",
@@ -231,7 +238,8 @@ scenario_04() {
     "alertname": "DeploymentReplicasMismatch",
     "namespace": "${NAMESPACE}",
     "severity": "warning",
-    "workshop": "true"
+    "workshop": "true",
+        "run_id": "${RUN_ID}"
   },
   "commonAnnotations": {
     "summary": "Deployment bad-deploy replica mismatch",
@@ -246,7 +254,8 @@ scenario_04() {
         "deployment": "bad-deploy",
         "namespace": "${NAMESPACE}",
         "severity": "warning",
-        "workshop": "true"
+        "workshop": "true",
+        "run_id": "${RUN_ID}"
       },
       "annotations": {
         "summary": "Deployment bad-deploy replica mismatch",
@@ -275,7 +284,8 @@ scenario_05() {
   "commonLabels": {
     "alertname": "NodeHighCPU",
     "severity": "warning",
-    "workshop": "true"
+    "workshop": "true",
+        "run_id": "${RUN_ID}"
   },
   "commonAnnotations": {
     "summary": "Node ip-10-0-1-42 CPU > 85%",
@@ -290,7 +300,8 @@ scenario_05() {
         "instance": "ip-10-0-1-42.eu-west-1.compute.internal",
         "node": "ip-10-0-1-42.eu-west-1.compute.internal",
         "severity": "warning",
-        "workshop": "true"
+        "workshop": "true",
+        "run_id": "${RUN_ID}"
       },
       "annotations": {
         "summary": "Node ip-10-0-1-42 CPU > 85%",
