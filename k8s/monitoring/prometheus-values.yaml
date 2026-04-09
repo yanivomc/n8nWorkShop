@@ -99,16 +99,15 @@ alertmanager:
       group_wait: 10s
       group_interval: 5m
       repeat_interval: 12h
-      receiver: n8n-webhook
+      receiver: null-receiver
       routes:
         - matchers:
-            - severity = critical
+            - workshop = "true"
           receiver: n8n-webhook
           group_wait: 5s
-        - matchers:
-            - severity = warning
-          receiver: n8n-webhook
+          repeat_interval: 12h
     receivers:
+      - name: null-receiver
       - name: n8n-webhook
         webhook_configs:
           # Injected by setup.sh option 6 from EC2_PUBLIC_IP in .env
