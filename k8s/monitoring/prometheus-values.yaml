@@ -18,6 +18,8 @@ prometheus:
         cpu: 500m
     podMonitorSelectorNilUsesHelmValues: false
     serviceMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    ruleNamespaceSelector: {}  # watch ALL namespaces for PrometheusRules
 
   service:
     type: LoadBalancer
@@ -160,6 +162,48 @@ additionalPrometheusRulesMap:
             annotations:
               summary: "Deployment {{ $labels.deployment }} replica mismatch"
               description: "Expected vs available replicas mismatch for {{ $labels.deployment }} in {{ $labels.namespace }}"
+
+      - name: workshop.target-app
+        rules:
+          - alert: TargetAppCPUStress
+            expr: target_chaos_cpu_active{namespace="workshop"} == 1
+            for: 10s
+            labels:
+              severity: warning
+              workshop: "true"
+            annotations:
+              summary: "CPU stress active on {{ $labels.pod }}"
+              description: "target-app pod {{ $labels.pod }} is running CPU stress scenario"
+
+          - alert: TargetAppMemoryLeak
+            expr: target_chaos_memory_active{namespace="workshop"} == 1
+            for: 10s
+            labels:
+              severity: warning
+              workshop: "true"
+            annotations:
+              summary: "Memory leak active on {{ $labels.pod }}"
+              description: "target-app pod {{ $labels.pod }} is leaking memory"
+
+          - alert: TargetAppMemoryCritical
+            expr: target_chaos_memory_bytes{namespace="workshop"} > 400 * 1024 * 1024
+            for: 10s
+            labels:
+              severity: critical
+              workshop: "true"
+            annotations:
+              summary: "Memory leak critical on {{ $labels.pod }}"
+              description: "target-app pod {{ $labels.pod }} allocated over 400MB"
+
+          - alert: TargetAppCrashLooping
+            expr: increase(kube_pod_container_status_restarts_total{namespace="workshop", pod=~"target-app.*"}[5m]) > 1
+            for: 0s
+            labels:
+              severity: critical
+              workshop: "true"
+            annotations:
+              summary: "target-app is crash looping"
+              description: "Pod {{ $labels.pod }} restarted >1 time in 5 minutes"
 
       - name: workshop.nodes
         rules:
