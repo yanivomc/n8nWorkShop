@@ -801,33 +801,35 @@ menu() {
     load_env
     echo -e "\n${BOLD}${CYAN}  n8n Workshop — Student Console${NC}"
     echo "  ══════════════════════════════"
-    echo "  1) Show status"
-    echo "  2) Re-configure cluster (IP + kubeconfig)"
-    echo "  3) Configure API keys (Gemini, Telegram, etc.)"
-    echo "  4) Install Prometheus + Grafana   <- run before 5"
-    echo "  5) Start stack (n8n + MCP)        <- requires 4 done"
-    echo "  6) Stop stack"
-    echo "  7) Validate full setup"
-    echo "  8) Test Telegram bot"
-    echo "  9) Generate credentials file"
-    echo " 10) Start ngrok tunnel (required for Telegram Trigger)"
-    echo " 11) Deploy Dashboard + Target App to Kubernetes"
+    echo "  ── Setup (run in order) ──────────────────────"
+    echo "  1) Configure cluster       (IP + kubeconfig)"
+    echo "  2) Configure API keys      (Gemini, Telegram, TOTP, ngrok)"
+    echo "  3) Install Prometheus + Grafana"
+    echo "  4) Start stack             (n8n + MCP)  <- needs 1-3"
+    echo "  5) Start ngrok tunnel      (Telegram Trigger HTTPS)"
+    echo "  6) Deploy Dashboard + Target App to Kubernetes"
+    echo "  ── Operations ────────────────────────────────"
+    echo "  7) Stop stack"
+    echo "  8) Validate full setup"
+    echo "  9) Test Telegram bot"
+    echo " 10) Show status"
+    echo " 11) Generate credentials file"
     echo "  q) Quit"
     echo ""
     echo -n "  Choice: "
     read choice
     case $choice in
-      1) show_status ;;
-      2) setup_cluster ;;
-      3) configure_keys ;;
-      4) install_monitoring ;;
-      5) start_stack ;;
-      6) stop_stack ;;
-      7) validate_setup ;;
-      8) test_telegram ;;
-      9) generate_credentials ;;
-      10) start_ngrok ;;
-      11) deploy_to_k8s ;;
+      1) setup_cluster ;;
+      2) configure_keys ;;
+      3) install_monitoring ;;
+      4) start_stack ;;
+      5) start_ngrok ;;
+      6) deploy_to_k8s ;;
+      7) stop_stack ;;
+      8) validate_setup ;;
+      9) test_telegram ;;
+      10) show_status ;;
+      11) generate_credentials ;;
       q|Q) echo ""; exit 0 ;;
       *) warn "Invalid choice" ;;
     esac
