@@ -65,3 +65,17 @@ spec:
     - port: 80
       targetPort: 80
       name: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: clawops-dashboard-internal
+  namespace: workshop
+spec:
+  type: ClusterIP
+  selector:
+    app: clawops-dashboard
+  ports:
+    - port: 80
+      targetPort: 80
+      name: http

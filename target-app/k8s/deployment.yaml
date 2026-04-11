@@ -38,7 +38,9 @@ spec:
             - name: APP_NAME
               value: "target-app"
             - name: DASHBOARD_URL
-              value: ""   # set to dashboard service URL when deployed
+              value: "http://clawops-dashboard-internal.workshop.svc.cluster.local"
+            - name: SKIP_REGISTRATION
+              value: "false"
           resources:
             requests:
               cpu: "100m"

@@ -525,7 +525,7 @@ function toast(msg,type){
   c.appendChild(t);setTimeout(()=>t.remove(),3200);
 }
 
-const cfg=loadCfg();applyCfg(cfg);
+const cfg=loadCfg();applyCfg(cfg);window._mcpUrl=cfg.mcp;
 log('info','Dashboard initialized');
 log('info','Prometheus: '+cfg.prom);
 setInterval(()=>{document.getElementById('clock').textContent=new Date().toISOString().replace('T',' ').slice(0,19)+' UTC';},1000);

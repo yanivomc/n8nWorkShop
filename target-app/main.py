@@ -1,3 +1,4 @@
+import asyncio
 import httpx
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
@@ -10,22 +11,39 @@ from routes.metrics import router as metrics_router
 
 async def register_with_dashboard():
     """Register this instance with the central dashboard on startup."""
+    import os
+    if os.getenv("SKIP_REGISTRATION", "false").lower() == "true":
+        logger.info("SKIP_REGISTRATION=true — skipping dashboard registration")
+        return
     if not DASHBOARD_URL:
         logger.info("No DASHBOARD_URL set — skipping registration")
         return
-    try:
-        payload = {
-            "app": APP_NAME,
-            "version": APP_VERSION,
-            "namespace": NAMESPACE,
-            "pod": POD_NAME,
-            "port": PORT,
-        }
-        async with httpx.AsyncClient(timeout=5) as client:
-            r = await client.post(f"{DASHBOARD_URL}/api/register", json=payload)
-            logger.info(f"Registered with dashboard | status={r.status_code}")
-    except Exception as e:
-        logger.warning(f"Dashboard registration failed (non-fatal): {e}")
+
+    payload = {
+        "app": APP_NAME,
+        "version": APP_VERSION,
+        "namespace": NAMESPACE,
+        "pod": POD_NAME,
+        "port": PORT,
+    }
+
+    max_retries = 10
+    retry_delay = 5
+    for attempt in range(1, max_retries + 1):
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                r = await client.post(f"{DASHBOARD_URL}/api/register", json=payload)
+            logger.info(f"Registered with dashboard | status={r.status_code} | attempt={attempt}")
+            return
+        except Exception as e:
+            logger.warning(f"Dashboard registration attempt {attempt}/{max_retries} failed: {e}")
+            if attempt < max_retries:
+                logger.info(f"Retrying in {retry_delay}s...")
+                await asyncio.sleep(retry_delay)
+
+    logger.error(f"Dashboard registration failed after {max_retries} attempts — exiting so K8s restarts pod")
+    import sys
+    sys.exit(1)
 
 
 @asynccontextmanager
