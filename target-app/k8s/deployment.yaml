@@ -81,3 +81,21 @@ spec:
       targetPort: 8080
       nodePort: 30080
       name: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: target-app-lb
+  namespace: workshop
+  labels:
+    app: target-app
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+spec:
+  type: LoadBalancer
+  selector:
+    app: target-app
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http

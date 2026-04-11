@@ -1,40 +1,19 @@
 import os, time, logging, sys, asyncio
 import httpx
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
-from contextlib import asynccontextmanager
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
     format="%(asctime)s | %(levelname)-8s | dashboard | %(message)s")
 logger = logging.getLogger("dashboard")
 
-_instances: dict = {}
-
-async def poll_chaos_status():
-    """Server-side background task — polls each registered instance internally."""
-    while True:
-        for inst_id, inst in list(_instances.items()):
-            try:
-                url = inst["internal_url"]
-                async with httpx.AsyncClient(timeout=3) as client:
-                    r = await client.get(f"{url}/chaos/status")
-                inst["chaos"] = r.json()
-                inst["alive"] = True
-            except Exception:
-                inst["alive"] = False
-        await asyncio.sleep(5)
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    task = asyncio.create_task(poll_chaos_status())
-    yield
-    task.cancel()
-
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+_instances: dict = {}
 
 class RegisterPayload(BaseModel):
     app: str = "target-app"
@@ -54,9 +33,9 @@ async def register(payload: RegisterPayload):
             "version": payload.version,
             "namespace": payload.namespace,
             "pod": payload.pod,
-            "internal_url": internal_url,
+            "url": internal_url,
             "chaos": {},
-            "alive": True,
+            "alive": False,
             "registered_at": time.time(),
         }
         logger.info(f"REGISTERED | {inst_id} | {internal_url}")
@@ -67,39 +46,29 @@ async def register(payload: RegisterPayload):
 
 @app.get("/api/instances")
 async def get_instances():
-    result = [{
-        "id": i["id"], "app": i["app"], "version": i["version"],
-        "namespace": i["namespace"], "pod": i["pod"],
-        "chaos": i.get("chaos", {}), "alive": i.get("alive", True),
-        "registered_at": i["registered_at"],
-    } for i in _instances.values()]
-    return {"instances": result, "count": len(result)}
+    return {"instances": list(_instances.values()), "count": len(_instances)}
 
-@app.post("/api/chaos/{inst_id:path}/action/{scenario}")
-async def trigger_chaos(inst_id: str, scenario: str, request: Request):
-    """Proxy chaos trigger from browser to target-app internally."""
+@app.post("/api/chaos/{inst_id:path}")
+async def trigger_chaos(inst_id: str, request: dict):
+    """Proxy chaos commands server-side to target-app internal URL."""
     inst = _instances.get(inst_id)
     if not inst:
         return JSONResponse({"error": "instance not found"}, status_code=404)
     try:
-        body = {}
-        if request.headers.get("content-length", "0") != "0":
-            body = await request.json()
-        url = inst["internal_url"]
+        chaos_type = request.get("type")
+        method = request.get("method", "POST")
+        body = request.get("body", {})
+        url = f"{inst['url']}/chaos/{chaos_type}"
         async with httpx.AsyncClient(timeout=10) as client:
-            if request.method == "DELETE":
-                r = await client.delete(f"{url}/chaos/{scenario}")
+            if method == "DELETE":
+                r = await client.delete(url)
             else:
-                r = await client.post(f"{url}/chaos/{scenario}", json=body)
-        logger.info(f"CHAOS | {inst_id} | {scenario} | {r.status_code}")
+                r = await client.post(url, json=body)
+        logger.info(f"CHAOS | {inst_id} | {chaos_type} | status={r.status_code}")
         return r.json()
     except Exception as e:
         logger.error(f"Chaos proxy error: {e}")
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-@app.delete("/api/chaos/{inst_id:path}/action/{scenario}")
-async def trigger_chaos_delete(inst_id: str, scenario: str, request: Request):
-    return await trigger_chaos(inst_id, scenario, request)
+        return JSONResponse({"status": "error", "detail": str(e)}, status_code=500)
 
 @app.delete("/api/instances/{inst_id:path}")
 async def remove_instance(inst_id: str):
@@ -122,5 +91,31 @@ async def config_js():
   n8n:     "{os.getenv('N8N_URL', 'http://localhost:5678')}",
 }};"""
     return Response(content=js, media_type="application/javascript")
+
+async def poll_instances():
+    """Background task — polls /chaos/status server-side via internal K8s DNS."""
+    while True:
+        for inst_id, inst in list(_instances.items()):
+            try:
+                async with httpx.AsyncClient(timeout=3) as client:
+                    r = await client.get(f"{inst['url']}/chaos/status")
+                    if r.status_code == 200:
+                        data = r.json()
+                        inst["chaos"] = {
+                            "cpu": data.get("cpu_active", False),
+                            "memory": data.get("memory_active", False),
+                            "memMb": data.get("memory_current_mb", 0),
+                        }
+                        inst["alive"] = True
+                    else:
+                        inst["alive"] = False
+            except Exception:
+                inst["alive"] = False
+        await asyncio.sleep(5)
+
+@app.on_event("startup")
+async def startup():
+    asyncio.create_task(poll_instances())
+    logger.info("Background instance poller started")
 
 app.mount("/", StaticFiles(directory="/app/static", html=True), name="static")
