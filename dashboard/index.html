@@ -461,7 +461,7 @@ async function checkProm(){
     const r=await fetch(cfg.prom+'/api/v1/alerts',{signal:AbortSignal.timeout(4000)});
     if(!r.ok)throw new Error('HTTP '+r.status);
     const data=await r.json();
-    const alerts=(data.data&&data.data.alerts||[]).filter(a=>a.state==='firing');
+    const alerts=(data.data&&data.data.alerts||[]).filter(a=>a.state==='firing'&&a.labels&&a.labels.workshop==='true');
     document.getElementById('led-prom').className='led ok';
     document.getElementById('st-prom').textContent='PROMETHEUS CONNECTED';
     renderAlerts(alerts);
