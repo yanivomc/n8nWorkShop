@@ -1,19 +1,40 @@
-import os, time, logging, sys
-from fastapi import FastAPI
+import os, time, logging, sys, asyncio
+import httpx
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
+from contextlib import asynccontextmanager
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
     format="%(asctime)s | %(levelname)-8s | dashboard | %(message)s")
 logger = logging.getLogger("dashboard")
 
-app = FastAPI()
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-
-# In-memory instance registry
 _instances: dict = {}
+
+async def poll_chaos_status():
+    """Server-side background task — polls each registered instance internally."""
+    while True:
+        for inst_id, inst in list(_instances.items()):
+            try:
+                url = inst["internal_url"]
+                async with httpx.AsyncClient(timeout=3) as client:
+                    r = await client.get(f"{url}/chaos/status")
+                inst["chaos"] = r.json()
+                inst["alive"] = True
+            except Exception:
+                inst["alive"] = False
+        await asyncio.sleep(5)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = asyncio.create_task(poll_chaos_status())
+    yield
+    task.cancel()
+
+app = FastAPI(lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 class RegisterPayload(BaseModel):
     app: str = "target-app"
@@ -21,24 +42,24 @@ class RegisterPayload(BaseModel):
     namespace: str = "default"
     pod: str = "unknown"
     port: int = 8080
-    public_url: str = ""  # external URL the browser can reach
 
 @app.post("/api/register")
 async def register(payload: RegisterPayload):
     try:
         inst_id = f"{payload.namespace}/{payload.pod}"
-        # Use public_url if provided, otherwise fall back to internal service DNS
-        url = payload.public_url or f"http://{payload.app}.{payload.namespace}.svc.cluster.local:{payload.port}"
+        internal_url = f"http://{payload.app}.{payload.namespace}.svc.cluster.local:{payload.port}"
         _instances[inst_id] = {
             "id": inst_id,
             "app": payload.app,
             "version": payload.version,
             "namespace": payload.namespace,
             "pod": payload.pod,
-            "url": url,
+            "internal_url": internal_url,
+            "chaos": {},
+            "alive": True,
             "registered_at": time.time(),
         }
-        logger.info(f"REGISTERED | {inst_id} | {url}")
+        logger.info(f"REGISTERED | {inst_id} | {internal_url}")
         return {"status": "registered", "id": inst_id}
     except Exception as e:
         logger.error(f"Register error: {e}")
@@ -46,8 +67,39 @@ async def register(payload: RegisterPayload):
 
 @app.get("/api/instances")
 async def get_instances():
-    logger.info(f"INSTANCES requested | count={len(_instances)}")
-    return {"instances": list(_instances.values()), "count": len(_instances)}
+    result = [{
+        "id": i["id"], "app": i["app"], "version": i["version"],
+        "namespace": i["namespace"], "pod": i["pod"],
+        "chaos": i.get("chaos", {}), "alive": i.get("alive", True),
+        "registered_at": i["registered_at"],
+    } for i in _instances.values()]
+    return {"instances": result, "count": len(result)}
+
+@app.post("/api/chaos/{inst_id:path}/action/{scenario}")
+async def trigger_chaos(inst_id: str, scenario: str, request: Request):
+    """Proxy chaos trigger from browser to target-app internally."""
+    inst = _instances.get(inst_id)
+    if not inst:
+        return JSONResponse({"error": "instance not found"}, status_code=404)
+    try:
+        body = {}
+        if request.headers.get("content-length", "0") != "0":
+            body = await request.json()
+        url = inst["internal_url"]
+        async with httpx.AsyncClient(timeout=10) as client:
+            if request.method == "DELETE":
+                r = await client.delete(f"{url}/chaos/{scenario}")
+            else:
+                r = await client.post(f"{url}/chaos/{scenario}", json=body)
+        logger.info(f"CHAOS | {inst_id} | {scenario} | {r.status_code}")
+        return r.json()
+    except Exception as e:
+        logger.error(f"Chaos proxy error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.delete("/api/chaos/{inst_id:path}/action/{scenario}")
+async def trigger_chaos_delete(inst_id: str, scenario: str, request: Request):
+    return await trigger_chaos(inst_id, scenario, request)
 
 @app.delete("/api/instances/{inst_id:path}")
 async def remove_instance(inst_id: str):
@@ -63,7 +115,6 @@ async def health():
 
 @app.get("/config.js")
 async def config_js():
-    """Inject env vars into config.js at runtime."""
     js = f"""window.CLAWOPS_CONFIG = {{
   prom:    "{os.getenv('PROMETHEUS_URL', 'http://localhost:9090')}",
   grafana: "{os.getenv('GRAFANA_URL', 'http://localhost:3000')}",
@@ -72,7 +123,4 @@ async def config_js():
 }};"""
     return Response(content=js, media_type="application/javascript")
 
-# Serve static files (index.html) — must be LAST
 app.mount("/", StaticFiles(directory="/app/static", html=True), name="static")
-
-from fastapi.responses import Response

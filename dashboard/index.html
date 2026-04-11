@@ -397,13 +397,15 @@ async function trigger(type){
   try{
     if(btn)btn.classList.add('running');
     if(st)st.textContent='... sending';
+    // All chaos calls go through dashboard backend (which calls target-app internally)
+    const base='/api/chaos/'+encodeURIComponent(selectedId)+'/action';
     let res;
-    if(type==='cpu')res=await fetchJ(inst.url+'/chaos/cpu','POST',{cores:1,duration_seconds:60});
-    else if(type==='cpu-sustained')res=await fetchJ(inst.url+'/chaos/cpu','POST',{cores:2,duration_seconds:300});
-    else if(type==='memory')res=await fetchJ(inst.url+'/chaos/memory','POST',{mb_per_second:50,max_mb:500});
-    else if(type==='error-loop')res=await fetchJ(inst.url+'/chaos/error-loop','POST',{});
-    else if(type==='crash')res=await fetchJ(inst.url+'/chaos/crash','POST',{delay_seconds:5});
-    else if(type==='stop')res=await fetchJ(inst.url+'/chaos/all','DELETE');
+    if(type==='cpu')res=await fetchJ(base+'/cpu','POST',{cores:1,duration_seconds:60});
+    else if(type==='cpu-sustained')res=await fetchJ(base+'/cpu','POST',{cores:2,duration_seconds:300});
+    else if(type==='memory')res=await fetchJ(base+'/memory','POST',{mb_per_second:50,max_mb:500});
+    else if(type==='error-loop')res=await fetchJ(base+'/error-loop','POST',{});
+    else if(type==='crash')res=await fetchJ(base+'/crash','POST',{delay_seconds:5});
+    else if(type==='stop')res=await fetchJ(base+'/all','DELETE');
     showResp(selectedId,type,JSON.stringify(res,null,2),false);
     if(st)st.textContent='OK: '+(res.status||'done');
     setTimeout(()=>{if(btn)btn.classList.remove('running');},3000);
@@ -430,14 +432,8 @@ function showResp(id,scen,data,isErr){
 }
 
 async function pollInstances(){
-  for(const [id,inst] of Object.entries(instances)){
-    try{
-      const s=await fetchJ(inst.url+'/chaos/status');
-      inst.chaos={cpu:s.cpu_active,memory:s.memory_active,memMb:s.memory_current_mb};
-      inst.alive=true;
-    }catch{inst.alive=false;}
-  }
-  renderInst();
+  // Server polls target-app internally — just refresh instance list
+  await pollRegistered();
 }
 
 async function pollRegistered(){
