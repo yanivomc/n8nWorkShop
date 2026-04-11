@@ -4,802 +4,504 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ClawOps — Incident Command Dashboard</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg: #060a0f;
-  --bg2: #0b1118;
-  --bg3: #111820;
-  --border: #1a2a3a;
-  --accent: #00d4ff;
-  --accent2: #00ff9d;
-  --warn: #ffaa00;
-  --danger: #ff3366;
-  --text: #c8d8e8;
-  --dim: #4a6a8a;
-  --mono: 'Share Tech Mono', monospace;
-  --sans: 'Rajdhani', sans-serif;
+  --bg:#060a0f;--bg2:#0b1118;--bg3:#111820;--border:#1a2a3a;
+  --accent:#00d4ff;--accent2:#00ff9d;--warn:#ffaa00;--danger:#ff3366;--purple:#aa44ff;
+  --text:#c8d8e8;--dim:#4a6a8a;
+  --mono:'Share Tech Mono',monospace;--sans:'Rajdhani',sans-serif;
 }
-
-* { box-sizing: border-box; margin: 0; padding: 0; }
-
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--sans);
-  font-size: 16px;
-  min-height: 100vh;
-  overflow-x: hidden;
-}
-
-/* Scanline overlay */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    rgba(0,0,0,0.03) 2px,
-    rgba(0,0,0,0.03) 4px
-  );
-  pointer-events: none;
-  z-index: 1000;
-}
-
-/* Grid background */
-body::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
-  background-size: 40px 40px;
-  pointer-events: none;
-}
-
-/* Header */
-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px 36px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg2);
-  position: sticky;
-  top: 0;
-  z-index: 100;
-}
-
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.logo-icon {
-  width: 36px;
-  height: 36px;
-  border: 2px solid var(--accent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-  background: rgba(0,212,255,0.1);
-  font-family: var(--mono);
-  font-size: 17px;
-  color: var(--accent);
-}
-
-.logo-text {
-  font-size: 26px;
-  font-weight: 700;
-  letter-spacing: 3px;
-  color: var(--accent);
-  text-transform: uppercase;
-}
-
-.logo-sub {
-  font-family: var(--mono);
-  font-size: 16px;
-  color: var(--dim);
-  letter-spacing: 2px;
-  margin-top: 2px;
-}
-
-.header-links {
-  display: flex;
-  gap: 12px;
-}
-
-.hlink {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 20px;
-  border: 1px solid var(--border);
-  background: var(--bg3);
-  color: var(--dim);
-  text-decoration: none;
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  transition: all 0.2s;
-  font-family: var(--mono);
-}
-
-.hlink:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: rgba(0,212,255,0.05);
-}
-
-.hlink .dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--dim);
-  animation: pulse 2s infinite;
-}
-
-.hlink:hover .dot { background: var(--accent2); }
-
-/* Status bar */
-.statusbar {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  padding: 12px 36px;
-  background: rgba(0,0,0,0.4);
-  border-bottom: 1px solid var(--border);
-  font-family: var(--mono);
-  font-size: 17px;
-  color: var(--dim);
-}
-
-.status-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.status-led {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--dim);
-}
-
-.status-led.ok { background: var(--accent2); box-shadow: 0 0 8px var(--accent2); animation: pulse 3s infinite; }
-.status-led.warn { background: var(--warn); box-shadow: 0 0 8px var(--warn); animation: pulse 1.5s infinite; }
-.status-led.err { background: var(--danger); box-shadow: 0 0 8px var(--danger); animation: pulse 0.8s infinite; }
-
-/* Main layout */
-.main {
-  display: grid;
-  grid-template-columns: 380px 1fr;
-  grid-template-rows: auto 1fr;
-  gap: 0;
-  padding: 24px 32px;
-  gap: 20px;
-  max-width: 1600px;
-  margin: 0 auto;
-}
-
-/* Panel base */
-.panel {
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  position: relative;
-  overflow: hidden;
-}
-
-.panel::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, var(--accent), transparent);
-  opacity: 0.5;
-}
-
-.panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px 20px;
-  border-bottom: 1px solid var(--border);
-  background: rgba(0,0,0,0.3);
-}
-
-.panel-title {
-  font-family: var(--mono);
-  font-size: 17px;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: var(--accent);
-}
-
-.panel-badge {
-  font-family: var(--mono);
-  font-size: 16px;
-  padding: 2px 8px;
-  border: 1px solid var(--border);
-  color: var(--dim);
-}
-
-/* Instances panel */
-.instances-panel {
-  grid-column: 1;
-  grid-row: 1 / 3;
-}
-
-.instance-card {
-  padding: 18px 20px;
-  border-bottom: 1px solid var(--border);
-  cursor: pointer;
-  transition: all 0.15s;
-  position: relative;
-}
-
-.instance-card:hover { background: rgba(0,212,255,0.04); }
-.instance-card.active { background: rgba(0,212,255,0.08); border-left: 2px solid var(--accent); }
-
-.inst-name {
-  font-weight: 600;
-  font-size: 20px;
-  letter-spacing: 1px;
-  color: var(--text);
-  margin-bottom: 4px;
-}
-
-.inst-meta {
-  font-family: var(--mono);
-  font-size: 16px;
-  color: var(--dim);
-  margin-bottom: 8px;
-}
-
-.inst-status {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--mono);
-  font-size: 16px;
-}
-
-.chaos-pills {
-  display: flex;
-  gap: 4px;
-  margin-top: 8px;
-}
-
-.pill {
-  padding: 2px 8px;
-  font-family: var(--mono);
-  font-size: 9px;
-  border: 1px solid;
-  letter-spacing: 1px;
-}
-
-.pill.cpu { border-color: var(--warn); color: var(--warn); background: rgba(255,170,0,0.08); }
-.pill.mem { border-color: #aa44ff; color: #aa44ff; background: rgba(170,68,255,0.08); }
-.pill.crash { border-color: var(--danger); color: var(--danger); background: rgba(255,51,102,0.08); }
-.pill.idle { border-color: var(--dim); color: var(--dim); }
-
-.no-instances {
-  padding: 40px 20px;
-  text-align: center;
-  font-family: var(--mono);
-  font-size: 17px;
-  color: var(--dim);
-  line-height: 2;
-}
-
-/* Scenarios panel */
-.scenarios-panel {
-  grid-column: 2;
-  grid-row: 1;
-}
-
-.scenarios-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 16px;
-  padding: 20px;
-}
-
-.scenario-btn {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 20px;
-  border: 1px solid var(--border);
-  background: var(--bg3);
-  cursor: pointer;
-  transition: all 0.2s;
-  position: relative;
-  overflow: hidden;
-  text-align: left;
-}
-
-.scenario-btn::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: currentColor;
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-
-.scenario-btn:hover { border-color: var(--current-color, var(--accent)); transform: translateY(-1px); }
-.scenario-btn:hover::after { opacity: 0.04; }
-.scenario-btn:active { transform: translateY(0); }
-.scenario-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
-
-.scenario-btn.cpu-theme { --current-color: var(--warn); }
-.scenario-btn.mem-theme { --current-color: #aa44ff; }
-.scenario-btn.crash-theme { --current-color: var(--danger); }
-.scenario-btn.stop-theme { --current-color: var(--accent2); }
-
-.scenario-icon {
-  font-size: 36px;
-  line-height: 1;
-}
-
-.scenario-name {
-  font-weight: 700;
-  font-size: 20px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-}
-
-.scenario-btn.cpu-theme .scenario-name { color: var(--warn); }
-.scenario-btn.mem-theme .scenario-name { color: #aa44ff; }
-.scenario-btn.crash-theme .scenario-name { color: var(--danger); }
-.scenario-btn.stop-theme .scenario-name { color: var(--accent2); }
-
-.scenario-desc {
-  font-family: var(--mono);
-  font-size: 16px;
-  color: var(--dim);
-  line-height: 1.5;
-}
-
-/* Event log panel */
-.log-panel {
-  grid-column: 2;
-  grid-row: 2;
-}
-
-.log-body {
-  padding: 20px 20px;
-  font-family: var(--mono);
-  font-size: 17px;
-  line-height: 1.8;
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.log-entry {
-  display: flex;
-  gap: 16px;
-  padding: 3px 0;
-  border-bottom: 1px solid rgba(26,42,58,0.5);
-  animation: fadeIn 0.3s ease;
-}
-
-.log-ts { color: var(--dim); min-width: 85px; }
-.log-level { min-width: 50px; font-weight: bold; }
-.log-level.info { color: var(--accent); }
-.log-level.ok { color: var(--accent2); }
-.log-level.warn { color: var(--warn); }
-.log-level.err { color: var(--danger); }
-.log-msg { color: var(--text); }
-
-/* Animations */
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateX(-4px); }
-  to { opacity: 1; transform: translateX(0); }
-}
-
-/* Toast */
-.toast-container {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  z-index: 9999;
-}
-
-.toast {
-  padding: 10px 16px;
-  border: 1px solid;
-  font-family: var(--mono);
-  font-size: 17px;
-  letter-spacing: 1px;
-  animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s forwards;
-  max-width: 320px;
-}
-
-.toast.ok { border-color: var(--accent2); color: var(--accent2); background: rgba(0,255,157,0.08); }
-.toast.err { border-color: var(--danger); color: var(--danger); background: rgba(255,51,102,0.08); }
-.toast.warn { border-color: var(--warn); color: var(--warn); background: rgba(255,170,0,0.08); }
-
-@keyframes slideIn {
-  from { opacity: 0; transform: translateX(20px); }
-  to { opacity: 1; transform: translateX(0); }
-}
-
-@keyframes fadeOut {
-  to { opacity: 0; transform: translateX(20px); }
-}
-
-/* Spinner for loading */
-.spinner {
-  width: 12px; height: 12px;
-  border: 2px solid var(--border);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  display: inline-block;
-}
-
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* Scrollbar */
-::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-track { background: var(--bg); }
-::-webkit-scrollbar-thumb { background: var(--border); }
-::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:16px;min-height:100vh;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.03) 2px,rgba(0,0,0,.03) 4px);pointer-events:none;z-index:1000;}
+body::after{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,212,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,.03) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;}
+header{display:flex;align-items:center;justify-content:space-between;padding:16px 32px;border-bottom:1px solid var(--border);background:var(--bg2);position:sticky;top:0;z-index:100;}
+.logo{display:flex;align-items:center;gap:14px;}
+.logo-icon{width:40px;height:40px;border:2px solid var(--accent);clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);background:rgba(0,212,255,.1);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:16px;color:var(--accent);}
+.logo-text{font-size:26px;font-weight:700;letter-spacing:3px;color:var(--accent);text-transform:uppercase;}
+.logo-sub{font-family:var(--mono);font-size:12px;color:var(--dim);letter-spacing:2px;margin-top:2px;}
+.header-right{display:flex;gap:10px;align-items:center;}
+.hlink{display:flex;align-items:center;gap:7px;padding:8px 16px;border:1px solid var(--border);background:var(--bg3);color:var(--dim);text-decoration:none;font-size:13px;font-weight:600;letter-spacing:1px;text-transform:uppercase;transition:all .2s;font-family:var(--mono);}
+.hlink:hover{border-color:var(--accent);color:var(--accent);background:rgba(0,212,255,.05);}
+.hlink .dot{width:7px;height:7px;border-radius:50%;background:var(--dim);animation:pulse 2s infinite;}
+.hlink:hover .dot{background:var(--accent2);}
+.cfg-btn{padding:8px 16px;border:1px solid var(--border);background:var(--bg3);color:var(--dim);font-family:var(--mono);font-size:13px;cursor:pointer;letter-spacing:1px;transition:all .2s;}
+.cfg-btn:hover{border-color:var(--warn);color:var(--warn);}
+.statusbar{display:flex;align-items:center;gap:28px;padding:10px 32px;background:rgba(0,0,0,.4);border-bottom:1px solid var(--border);font-family:var(--mono);font-size:13px;color:var(--dim);}
+.status-item{display:flex;align-items:center;gap:9px;}
+.led{width:9px;height:9px;border-radius:50%;background:var(--dim);}
+.led.ok{background:var(--accent2);box-shadow:0 0 8px var(--accent2);animation:pulse 3s infinite;}
+.led.warn{background:var(--warn);box-shadow:0 0 8px var(--warn);animation:pulse 1.5s infinite;}
+.led.err{background:var(--danger);box-shadow:0 0 8px var(--danger);animation:pulse .8s infinite;}
+.main{display:grid;grid-template-columns:400px 1fr;gap:20px;padding:24px 32px;max-width:1800px;margin:0 auto;}
+.left-col{display:flex;flex-direction:column;gap:20px;}
+.right-col{display:flex;flex-direction:column;gap:20px;}
+.panel{background:var(--bg2);border:1px solid var(--border);position:relative;overflow:hidden;}
+.panel::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:.4;}
+.panel-header{display:flex;align-items:center;justify-content:space-between;padding:13px 18px;border-bottom:1px solid var(--border);background:rgba(0,0,0,.3);}
+.panel-title{font-family:var(--mono);font-size:13px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);}
+.panel-badge{font-family:var(--mono);font-size:11px;padding:2px 10px;border:1px solid var(--border);color:var(--dim);}
+.instance-card{padding:16px 18px;border-bottom:1px solid var(--border);cursor:pointer;transition:all .15s;}
+.instance-card:hover{background:rgba(0,212,255,.04);}
+.instance-card.active{background:rgba(0,212,255,.08);border-left:3px solid var(--accent);}
+.inst-name{font-weight:700;font-size:18px;letter-spacing:1px;margin-bottom:4px;}
+.inst-meta{font-family:var(--mono);font-size:12px;color:var(--dim);margin-bottom:5px;}
+.inst-url{font-family:var(--mono);font-size:12px;color:var(--accent);opacity:.7;margin-bottom:8px;}
+.chaos-pills{display:flex;gap:5px;flex-wrap:wrap;}
+.pill{padding:3px 10px;font-family:var(--mono);font-size:11px;border:1px solid;letter-spacing:1px;}
+.pill.cpu{border-color:var(--warn);color:var(--warn);background:rgba(255,170,0,.08);}
+.pill.mem{border-color:var(--purple);color:var(--purple);background:rgba(170,68,255,.08);}
+.pill.idle{border-color:var(--dim);color:var(--dim);}
+.pill.offline{border-color:var(--danger);color:var(--danger);}
+.add-inst-area{padding:14px 18px;}
+.add-btn{width:100%;background:none;border:1px dashed var(--border);color:var(--dim);font-family:var(--mono);font-size:13px;padding:10px;cursor:pointer;letter-spacing:1px;transition:all .2s;}
+.add-btn:hover{border-color:var(--accent);color:var(--accent);}
+.scenarios-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;padding:18px;}
+.scenario-btn{display:flex;flex-direction:column;gap:10px;padding:22px;border:1px solid var(--border);background:var(--bg3);cursor:pointer;transition:all .2s;text-align:left;position:relative;overflow:hidden;}
+.scenario-btn:hover{transform:translateY(-2px);}
+.scenario-btn:active{transform:translateY(0);}
+.scenario-btn:disabled{opacity:.4;cursor:not-allowed;transform:none;}
+.scenario-btn.running{animation:borderPulse 1s infinite;}
+@keyframes borderPulse{0%,100%{border-color:var(--border);}50%{border-color:var(--accent2);}}
+.cpu-t:hover{border-color:var(--warn)!important;}
+.mem-t:hover{border-color:var(--purple)!important;}
+.crash-t:hover{border-color:var(--danger)!important;}
+.stop-t:hover{border-color:var(--accent2)!important;}
+.s-icon{font-size:36px;line-height:1;}
+.s-name{font-weight:700;font-size:18px;letter-spacing:1px;text-transform:uppercase;}
+.cpu-t .s-name{color:var(--warn);}
+.mem-t .s-name{color:var(--purple);}
+.crash-t .s-name{color:var(--danger);}
+.stop-t .s-name{color:var(--accent2);}
+.s-desc{font-family:var(--mono);font-size:12px;color:var(--dim);line-height:1.6;}
+.s-status{font-family:var(--mono);font-size:12px;color:var(--accent2);margin-top:4px;min-height:18px;}
+.response-body{padding:16px 18px;font-family:var(--mono);font-size:13px;min-height:90px;color:var(--dim);}
+.response-ts{font-size:11px;color:var(--dim);margin-bottom:6px;}
+.response-data{color:var(--accent2);word-break:break-all;white-space:pre-wrap;}
+.response-data.err{color:var(--danger);}
+.log-body{padding:14px 18px;font-family:var(--mono);font-size:13px;line-height:1.8;max-height:280px;overflow-y:auto;}
+.log-entry{display:flex;gap:14px;padding:3px 0;border-bottom:1px solid rgba(26,42,58,.4);animation:fadeIn .3s;}
+.log-ts{color:var(--dim);min-width:90px;}
+.log-lv{min-width:50px;font-weight:bold;}
+.log-lv.info{color:var(--accent);}
+.log-lv.ok{color:var(--accent2);}
+.log-lv.warn{color:var(--warn);}
+.log-lv.err{color:var(--danger);}
+.alerts-body{padding:14px 18px;min-height:60px;}
+.alert-row{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:12px;}
+.alert-sev{padding:2px 8px;border:1px solid;font-size:11px;letter-spacing:1px;}
+.alert-sev.critical{border-color:var(--danger);color:var(--danger);}
+.alert-sev.warning{border-color:var(--warn);color:var(--warn);}
+.alert-name{color:var(--text);flex:1;}
+.alert-ns{color:var(--dim);}
+.no-data{color:var(--dim);font-family:var(--mono);font-size:13px;padding:8px 0;}
+.no-instances{padding:40px 20px;text-align:center;font-family:var(--mono);font-size:13px;color:var(--dim);line-height:2.2;}
+/* Modal */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;z-index:9000;}
+.modal-bg.open{display:flex;}
+.modal{background:var(--bg2);border:1px solid var(--border);width:580px;max-width:95vw;position:relative;}
+.modal::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--warn),transparent);}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);}
+.modal-title{font-family:var(--mono);font-size:14px;letter-spacing:2px;color:var(--warn);text-transform:uppercase;}
+.modal-close{background:none;border:none;color:var(--dim);font-size:24px;cursor:pointer;line-height:1;}
+.modal-close:hover{color:var(--danger);}
+.modal-body{padding:24px 20px;display:flex;flex-direction:column;gap:18px;}
+.cfg-group{display:flex;flex-direction:column;gap:6px;}
+.cfg-label{font-family:var(--mono);font-size:12px;color:var(--dim);letter-spacing:1px;}
+.cfg-hint{font-family:var(--mono);font-size:11px;color:rgba(74,106,138,.55);margin-top:2px;}
+.cfg-input{background:var(--bg3);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:13px;padding:10px 14px;width:100%;transition:border-color .2s;}
+.cfg-input:focus{outline:none;border-color:var(--accent);}
+.modal-footer{padding:16px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;}
+.btn{padding:10px 24px;font-family:var(--mono);font-size:13px;cursor:pointer;letter-spacing:1px;border:none;}
+.btn-save{background:var(--accent);color:var(--bg);font-weight:bold;}
+.btn-cancel{background:none;border:1px solid var(--border);color:var(--dim);}
+.btn-cancel:hover{border-color:var(--danger);color:var(--danger);}
+.toast-container{position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:8px;z-index:9999;}
+.toast{padding:12px 18px;border:1px solid;font-family:var(--mono);font-size:12px;letter-spacing:1px;animation:slideIn .3s ease,fadeOut .3s ease 2.7s forwards;max-width:360px;}
+.toast.ok{border-color:var(--accent2);color:var(--accent2);background:rgba(0,255,157,.08);}
+.toast.err{border-color:var(--danger);color:var(--danger);background:rgba(255,51,102,.08);}
+.toast.warn{border-color:var(--warn);color:var(--warn);background:rgba(255,170,0,.08);}
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-track{background:var(--bg);}
+::-webkit-scrollbar-thumb{background:var(--border);}
+::-webkit-scrollbar-thumb:hover{background:var(--accent);}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+@keyframes fadeIn{from{opacity:0;transform:translateX(-4px);}to{opacity:1;}}
+@keyframes slideIn{from{opacity:0;transform:translateX(20px);}to{opacity:1;}}
+@keyframes fadeOut{to{opacity:0;transform:translateX(20px);}}
 </style>
 </head>
 <body>
-
 <header>
   <div class="logo">
-    <div class="logo-icon">⬡</div>
+    <div class="logo-icon">&#x2B21;</div>
     <div>
       <div class="logo-text">ClawOps</div>
       <div class="logo-sub">Incident Command Dashboard</div>
     </div>
   </div>
-  <div class="header-links">
+  <div class="header-right">
     <a class="hlink" id="link-prom" href="#" target="_blank"><span class="dot"></span>PROMETHEUS</a>
     <a class="hlink" id="link-grafana" href="#" target="_blank"><span class="dot"></span>GRAFANA</a>
-    <a class="hlink" id="link-alertmanager" href="#" target="_blank"><span class="dot"></span>ALERTMANAGER</a>
+    <a class="hlink" id="link-am" href="#" target="_blank"><span class="dot"></span>ALERTMANAGER</a>
     <a class="hlink" id="link-n8n" href="#" target="_blank"><span class="dot"></span>N8N</a>
+    <button class="cfg-btn" onclick="openConfig()">&#x2699; CONFIGURE</button>
   </div>
 </header>
 
 <div class="statusbar">
-  <div class="status-item">
-    <div class="status-led" id="led-prom"></div>
-    <span id="status-prom">PROMETHEUS —</span>
-  </div>
-  <div class="status-item">
-    <div class="status-led" id="led-instances"></div>
-    <span id="status-instances">INSTANCES: 0</span>
-  </div>
-  <div class="status-item">
-    <span id="status-time">—</span>
-  </div>
+  <div class="status-item"><div class="led" id="led-prom"></div><span id="st-prom">PROMETHEUS --</span></div>
+  <div class="status-item"><div class="led" id="led-inst"></div><span id="st-inst">INSTANCES: 0</span></div>
+  <div class="status-item"><span id="st-alerts" style="color:var(--dim)">ALERTS: --</span></div>
+  <div class="status-item" style="margin-left:auto"><span id="clock" style="color:var(--dim)">--</span></div>
 </div>
 
 <div class="main">
-
-  <!-- Instances -->
-  <div class="panel instances-panel">
-    <div class="panel-header">
-      <span class="panel-title">Registered Instances</span>
-      <span class="panel-badge" id="instance-count">0</span>
+  <div class="left-col">
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Registered Instances</span>
+        <span class="panel-badge" id="inst-count">0</span>
+      </div>
+      <div id="instances-list">
+        <div class="no-instances">No instances registered.<br>Deploy target-app to K8s<br>with <code style="color:var(--accent)">DASHBOARD_URL</code> set.</div>
+      </div>
+      <div class="add-inst-area">
+        <button class="add-btn" onclick="addInstance()">+ ADD INSTANCE MANUALLY</button>
+      </div>
     </div>
-    <div id="instances-list">
-      <div class="no-instances">
-        No instances registered.<br>
-        Deploy target-app to K8s<br>
-        with DASHBOARD_URL set.
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Active Alerts</span>
+        <span class="panel-badge" id="alerts-count">0</span>
+      </div>
+      <div class="alerts-body" id="alerts-body">
+        <div class="no-data">Configure Prometheus to see alerts</div>
       </div>
     </div>
   </div>
 
-  <!-- Scenarios -->
-  <div class="panel scenarios-panel">
-    <div class="panel-header">
-      <span class="panel-title">Chaos Scenarios</span>
-      <span class="panel-badge" id="selected-inst-label">SELECT INSTANCE</span>
+  <div class="right-col">
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Chaos Scenarios</span>
+        <span id="sel-label" style="font-family:var(--mono);font-size:13px;color:var(--dim);letter-spacing:1px">SELECT INSTANCE FIRST</span>
+      </div>
+      <div class="scenarios-grid">
+        <button class="scenario-btn cpu-t" id="btn-cpu" onclick="trigger('cpu')">
+          <div class="s-icon">&#x26A1;</div>
+          <div class="s-name">CPU Spike</div>
+          <div class="s-desc">Burns 1 core at 100%<br>for 60 seconds</div>
+          <div class="s-status" id="st-cpu"></div>
+        </button>
+        <button class="scenario-btn cpu-t" id="btn-cpus" onclick="trigger('cpu-sustained')">
+          <div class="s-icon">&#x1F525;</div>
+          <div class="s-name">CPU Sustained</div>
+          <div class="s-desc">Burns 2 cores at 100%<br>for 5 minutes</div>
+          <div class="s-status" id="st-cpus"></div>
+        </button>
+        <button class="scenario-btn mem-t" id="btn-mem" onclick="trigger('memory')">
+          <div class="s-icon">&#x1F4BE;</div>
+          <div class="s-name">Memory Leak</div>
+          <div class="s-desc">Allocates 50MB/sec<br>up to 500MB</div>
+          <div class="s-status" id="st-mem"></div>
+        </button>
+        <button class="scenario-btn crash-t" id="btn-err" onclick="trigger('error-loop')">
+          <div class="s-icon">&#x1F480;</div>
+          <div class="s-name">Error Loop</div>
+          <div class="s-desc">Fails health probes,<br>K8s restarts pod</div>
+          <div class="s-status" id="st-err"></div>
+        </button>
+        <button class="scenario-btn crash-t" id="btn-crash" onclick="trigger('crash')">
+          <div class="s-icon">&#x1F4A5;</div>
+          <div class="s-name">Crash Pod</div>
+          <div class="s-desc">SIGKILL in 5s,<br>CrashLoopBackOff</div>
+          <div class="s-status" id="st-crash"></div>
+        </button>
+        <button class="scenario-btn stop-t" id="btn-stop" onclick="trigger('stop')">
+          <div class="s-icon">&#x2705;</div>
+          <div class="s-name">Stop All</div>
+          <div class="s-desc">Recover -- stop all<br>active chaos</div>
+          <div class="s-status" id="st-stop"></div>
+        </button>
+      </div>
     </div>
-    <div class="scenarios-grid">
-      <button class="scenario-btn cpu-theme" onclick="triggerChaos('cpu')" id="btn-cpu">
-        <div class="scenario-icon">⚡</div>
-        <div class="scenario-name">CPU Spike</div>
-        <div class="scenario-desc">Burns 1 core at 100%<br>for 60 seconds</div>
-      </button>
-      <button class="scenario-btn cpu-theme" onclick="triggerChaos('cpu-sustained')" id="btn-cpu-sustained">
-        <div class="scenario-icon">🔥</div>
-        <div class="scenario-name">CPU Sustained</div>
-        <div class="scenario-desc">Burns 2 cores at 100%<br>for 5 minutes</div>
-      </button>
-      <button class="scenario-btn mem-theme" onclick="triggerChaos('memory')" id="btn-memory">
-        <div class="scenario-icon">💾</div>
-        <div class="scenario-name">Memory Leak</div>
-        <div class="scenario-desc">Allocates 50MB/sec<br>up to 500MB</div>
-      </button>
-      <button class="scenario-btn crash-theme" onclick="triggerChaos('error-loop')" id="btn-error-loop">
-        <div class="scenario-icon">💀</div>
-        <div class="scenario-name">Error Loop</div>
-        <div class="scenario-desc">Fails health probes,<br>K8s restarts pod</div>
-      </button>
-      <button class="scenario-btn crash-theme" onclick="triggerChaos('crash')" id="btn-crash">
-        <div class="scenario-icon">💥</div>
-        <div class="scenario-name">Crash Pod</div>
-        <div class="scenario-desc">SIGKILL in 5s,<br>CrashLoopBackOff</div>
-      </button>
-      <button class="scenario-btn stop-theme" onclick="triggerChaos('stop')" id="btn-stop">
-        <div class="scenario-icon">✅</div>
-        <div class="scenario-name">Stop All</div>
-        <div class="scenario-desc">Recover — stop all<br>chaos scenarios</div>
-      </button>
+
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Last API Response</span>
+        <span id="resp-target" style="font-family:var(--mono);font-size:12px;color:var(--dim)">--</span>
+      </div>
+      <div class="response-body" id="resp-body">
+        <span style="color:var(--dim)">Trigger a scenario to see the response here...</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Event Log</span>
+        <button onclick="document.getElementById('log').innerHTML=''" style="background:none;border:1px solid var(--border);color:var(--dim);font-family:var(--mono);font-size:11px;padding:3px 10px;cursor:pointer;letter-spacing:1px;">CLEAR</button>
+      </div>
+      <div class="log-body" id="log"></div>
     </div>
   </div>
+</div>
 
-  <!-- Event log -->
-  <div class="panel log-panel">
-    <div class="panel-header">
-      <span class="panel-title">Event Log</span>
-      <button onclick="clearLog()" style="background:none;border:1px solid var(--border);color:var(--dim);font-family:var(--mono);font-size:10px;padding:2px 8px;cursor:pointer;letter-spacing:1px;">CLEAR</button>
+<div class="modal-bg" id="modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">&#x2699; Configure Endpoints</span>
+      <button class="modal-close" onclick="closeConfig()">&times;</button>
     </div>
-    <div class="log-body" id="log"></div>
+    <div class="modal-body">
+      <div class="cfg-group">
+        <div class="cfg-label">PROMETHEUS URL</div>
+        <input class="cfg-input" id="cfg-prom" placeholder="http://prometheus-server:9090">
+        <div class="cfg-hint">K8s SVC: http://kube-prometheus-stack-prometheus.monitoring:9090</div>
+      </div>
+      <div class="cfg-group">
+        <div class="cfg-label">GRAFANA URL</div>
+        <input class="cfg-input" id="cfg-grafana" placeholder="http://grafana:80">
+        <div class="cfg-hint">K8s SVC: http://kube-prometheus-stack-grafana.monitoring</div>
+      </div>
+      <div class="cfg-group">
+        <div class="cfg-label">ALERTMANAGER URL</div>
+        <input class="cfg-input" id="cfg-am" placeholder="http://alertmanager:9093">
+        <div class="cfg-hint">K8s SVC: http://kube-prometheus-stack-alertmanager.monitoring:9093</div>
+      </div>
+      <div class="cfg-group">
+        <div class="cfg-label">N8N URL</div>
+        <input class="cfg-input" id="cfg-n8n" placeholder="http://n8n:5678">
+        <div class="cfg-hint">External (EC2): http://&lt;EC2_IP&gt;:5678</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-cancel" onclick="closeConfig()">CANCEL</button>
+      <button class="btn btn-save" onclick="saveConfig()">SAVE &amp; APPLY</button>
+    </div>
   </div>
-
 </div>
 
 <div class="toast-container" id="toasts"></div>
 
 <script>
-// ── Config from URL params or defaults ────────────────────────────────────────
-const params = new URLSearchParams(location.search);
-const CFG = {
-  prom:         params.get('prom')         || 'http://localhost:9090',
-  grafana:      params.get('grafana')      || 'http://localhost:3000',
-  alertmanager: params.get('alertmanager') || 'http://localhost:9093',
-  n8n:          params.get('n8n')          || 'http://localhost:5678',
-};
-
-// Set header links
-document.getElementById('link-prom').href         = CFG.prom;
-document.getElementById('link-grafana').href      = CFG.grafana;
-document.getElementById('link-alertmanager').href = CFG.alertmanager;
-document.getElementById('link-n8n').href          = CFG.n8n;
-
-// ── State ─────────────────────────────────────────────────────────────────────
-let instances = {};    // { id: { app, namespace, pod, url, status, chaos } }
-let selectedId = null;
-
-// ── Register instance (called by target-app on startup) ──────────────────────
-// The dashboard exposes a simple in-memory registry via broadcast channel
-// Students can also manually add an instance
-function registerInstance(data) {
-  try {
-    const id = `${data.namespace}/${data.pod || data.app}`;
-    instances[id] = {
-      ...data,
-      id,
-      url: data.url || `http://${data.host}:${data.port || 8080}`,
-      chaos: { cpu: false, memory: false },
-      lastSeen: Date.now(),
+const DEFS={prom:'http://localhost:9090',grafana:'http://localhost:3000',am:'http://localhost:9093',n8n:'http://localhost:5678'};
+function loadCfg(){
+  try{
+    const s=JSON.parse(localStorage.getItem('clawops-cfg')||'{}');
+    const p=new URLSearchParams(location.search);
+    return{
+      prom:p.get('prom')||s.prom||DEFS.prom,
+      grafana:p.get('grafana')||s.grafana||DEFS.grafana,
+      am:p.get('am')||s.am||DEFS.am,
+      n8n:p.get('n8n')||s.n8n||DEFS.n8n,
     };
-    renderInstances();
-    log('ok', `Instance registered: ${id}`);
-    if (!selectedId) selectInstance(id);
-  } catch(e) {
-    log('err', `Register failed: ${e.message}`);
-  }
+  }catch{return{...DEFS};}
+}
+function applyCfg(c){
+  document.getElementById('link-prom').href=c.prom;
+  document.getElementById('link-grafana').href=c.grafana;
+  document.getElementById('link-am').href=c.am;
+  document.getElementById('link-n8n').href=c.n8n;
+}
+function openConfig(){
+  const c=loadCfg();
+  document.getElementById('cfg-prom').value=c.prom;
+  document.getElementById('cfg-grafana').value=c.grafana;
+  document.getElementById('cfg-am').value=c.am;
+  document.getElementById('cfg-n8n').value=c.n8n;
+  document.getElementById('modal').classList.add('open');
+}
+function closeConfig(){document.getElementById('modal').classList.remove('open');}
+function saveConfig(){
+  try{
+    const c={
+      prom:document.getElementById('cfg-prom').value.trim(),
+      grafana:document.getElementById('cfg-grafana').value.trim(),
+      am:document.getElementById('cfg-am').value.trim(),
+      n8n:document.getElementById('cfg-n8n').value.trim(),
+    };
+    localStorage.setItem('clawops-cfg',JSON.stringify(c));
+    applyCfg(c);closeConfig();
+    toast('Config saved','ok');log('ok','Configuration updated');
+    checkProm();
+  }catch(e){toast('Save failed: '+e.message,'err');}
 }
 
-// ── Manual add instance ───────────────────────────────────────────────────────
-function addInstance() {
-  const url = prompt('Target app URL (e.g. http://3.251.68.65:9090):');
-  if (!url) return;
-  try {
-    fetchJson(`${url}/info`).then(info => {
-      registerInstance({ ...info, url });
-      toast(`Connected to ${info.app} @ ${url}`, 'ok');
-    }).catch(e => toast(`Cannot reach ${url}: ${e.message}`, 'err'));
-  } catch(e) {
-    log('err', e.message);
-  }
+let instances={},selectedId=null;
+
+function registerInstance(d){
+  try{
+    const id=`${d.namespace||'default'}/${d.pod||d.app||'unknown'}`;
+    instances[id]={...d,id,url:d.url||`http://${d.host}:${d.port||8080}`,chaos:{},lastSeen:Date.now()};
+    renderInst();log('ok','Instance registered: '+id);
+    if(!selectedId)selectInstance(id);
+  }catch(e){log('err','Register failed: '+e.message);}
 }
 
-// ── Select instance ───────────────────────────────────────────────────────────
-function selectInstance(id) {
-  selectedId = id;
-  document.querySelectorAll('.instance-card').forEach(c => c.classList.remove('active'));
-  const card = document.getElementById(`inst-${CSS.escape(id)}`);
-  if (card) card.classList.add('active');
-  const inst = instances[id];
-  document.getElementById('selected-inst-label').textContent = inst ? inst.pod || inst.app : 'SELECT INSTANCE';
+function addInstance(){
+  const url=prompt('Target-app URL (e.g. http://3.251.68.65:9090):');
+  if(!url)return;
+  fetchJ(url+'/info').then(info=>{
+    registerInstance({...info,url});toast('Connected: '+info.app,'ok');
+  }).catch(e=>toast('Cannot reach '+url+': '+e.message,'err'));
 }
 
-// ── Trigger chaos ─────────────────────────────────────────────────────────────
-async function triggerChaos(type) {
-  if (!selectedId) { toast('Select an instance first', 'warn'); return; }
-  const inst = instances[selectedId];
-  if (!inst) return;
-  const url = inst.url;
-  try {
-    let res;
-    switch(type) {
-      case 'cpu':
-        res = await fetchJson(`${url}/chaos/cpu`, 'POST', { cores: 1, duration_seconds: 60 });
-        inst.chaos.cpu = true;
-        break;
-      case 'cpu-sustained':
-        res = await fetchJson(`${url}/chaos/cpu`, 'POST', { cores: 2, duration_seconds: 300 });
-        inst.chaos.cpu = true;
-        break;
-      case 'memory':
-        res = await fetchJson(`${url}/chaos/memory`, 'POST', { mb_per_second: 50, max_mb: 500 });
-        inst.chaos.memory = true;
-        break;
-      case 'error-loop':
-        res = await fetchJson(`${url}/chaos/error-loop`, 'POST', {});
-        break;
-      case 'crash':
-        res = await fetchJson(`${url}/chaos/crash`, 'POST', { delay_seconds: 5 });
-        break;
-      case 'stop':
-        res = await fetchJson(`${url}/chaos/all`, 'DELETE');
-        inst.chaos = { cpu: false, memory: false };
-        break;
-    }
-    log('ok', `[${selectedId}] ${type} → ${res.status}`);
-    toast(`${type.toUpperCase()} triggered on ${inst.pod || inst.app}`, 'ok');
-    renderInstances();
-  } catch(e) {
-    log('err', `[${selectedId}] ${type} FAILED: ${e.message}`);
-    toast(`Failed: ${e.message}`, 'err');
-  }
+function selectInstance(id){
+  selectedId=id;renderInst();
+  const inst=instances[id];
+  const lbl=document.getElementById('sel-label');
+  if(inst){lbl.textContent=inst.pod||inst.app||id;lbl.style.color='var(--accent2)';}
 }
 
-// ── Poll instance status ───────────────────────────────────────────────────────
-async function pollInstances() {
-  for (const [id, inst] of Object.entries(instances)) {
-    try {
-      const status = await fetchJson(`${inst.url}/chaos/status`);
-      inst.chaos.cpu = status.cpu_active;
-      inst.chaos.memory = status.memory_active;
-      inst.chaos.memMb = status.memory_current_mb;
-      inst.alive = true;
-      inst.lastSeen = Date.now();
-    } catch {
-      inst.alive = false;
-    }
-  }
-  renderInstances();
-}
-
-// ── Render instances ──────────────────────────────────────────────────────────
-function renderInstances() {
-  const list = document.getElementById('instances-list');
-  const ids = Object.keys(instances);
-  document.getElementById('instance-count').textContent = ids.length;
-
-  if (ids.length === 0) {
-    list.innerHTML = `<div class="no-instances">No instances registered.<br>Deploy target-app to K8s<br>with DASHBOARD_URL set.<br><br><button onclick="addInstance()" style="margin-top:8px;background:none;border:1px solid var(--accent);color:var(--accent);font-family:var(--mono);font-size:11px;padding:6px 14px;cursor:pointer;letter-spacing:1px;">+ ADD MANUALLY</button></div>`;
+function renderInst(){
+  const list=document.getElementById('instances-list');
+  const ids=Object.keys(instances);
+  document.getElementById('inst-count').textContent=ids.length;
+  if(!ids.length){
+    list.innerHTML='<div class="no-instances">No instances registered.<br>Deploy target-app to K8s<br>with <code style="color:var(--accent)">DASHBOARD_URL</code> set.</div>';
     return;
   }
-
-  list.innerHTML = ids.map(id => {
-    const inst = instances[id];
-    const alive = inst.alive !== false;
-    const pills = [];
-    if (inst.chaos?.cpu) pills.push(`<span class="pill cpu">CPU</span>`);
-    if (inst.chaos?.memory) pills.push(`<span class="pill mem">MEM ${inst.chaos.memMb||0}MB</span>`);
-    if (!alive) pills.push(`<span class="pill crash">OFFLINE</span>`);
-    if (pills.length === 0) pills.push(`<span class="pill idle">IDLE</span>`);
-
-    return `<div class="instance-card ${selectedId===id?'active':''}" id="inst-${id.replace(/\//g,'-')}" onclick="selectInstance('${id}')">
-      <div class="inst-name">${inst.app || 'target-app'}</div>
-      <div class="inst-meta">${inst.namespace} / ${inst.pod || '—'}</div>
-      <div class="inst-status">
-        <div class="status-led ${alive?'ok':'err'}"></div>
-        <span style="font-size:10px;color:var(--dim)">${inst.url}</span>
-      </div>
+  list.innerHTML=ids.map(id=>{
+    const inst=instances[id];
+    const alive=inst.alive!==false;
+    const pills=[];
+    if(inst.chaos&&inst.chaos.cpu)pills.push('<span class="pill cpu">CPU ACTIVE</span>');
+    if(inst.chaos&&inst.chaos.memory)pills.push('<span class="pill mem">MEM '+(inst.chaos.memMb||0)+'MB</span>');
+    if(!alive)pills.push('<span class="pill offline">OFFLINE</span>');
+    if(!pills.length)pills.push('<span class="pill idle">IDLE</span>');
+    return`<div class="instance-card ${selectedId===id?'active':''}" onclick="selectInstance('${id}')">
+      <div class="inst-name">${inst.app||'target-app'}</div>
+      <div class="inst-meta">${inst.namespace||'default'} / ${inst.pod||'unknown'}</div>
+      <div class="inst-url">${inst.url}</div>
       <div class="chaos-pills">${pills.join('')}</div>
     </div>`;
-  }).join('') + `<div style="padding:12px 16px;"><button onclick="addInstance()" style="width:100%;background:none;border:1px dashed var(--border);color:var(--dim);font-family:var(--mono);font-size:10px;padding:8px;cursor:pointer;letter-spacing:1px;transition:all 0.2s;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">+ ADD INSTANCE</button></div>`;
+  }).join('');
+  const alive=Object.values(instances).filter(i=>i.alive!==false).length;
+  document.getElementById('led-inst').className='led '+(alive>0?'ok':ids.length>0?'err':'');
+  document.getElementById('st-inst').textContent='INSTANCES: '+alive+'/'+ids.length+' ALIVE';
+}
 
-  // Re-sync selected state
-  if (selectedId && instances[selectedId]) {
-    const card = document.getElementById(`inst-${selectedId.replace(/\//g,'-')}`);
-    if (card) card.classList.add('active');
+const SMAP={cpu:'btn-cpu','cpu-sustained':'btn-cpus',memory:'btn-mem','error-loop':'btn-err',crash:'btn-crash',stop:'btn-stop'};
+const SSMAP={cpu:'st-cpu','cpu-sustained':'st-cpus',memory:'st-mem','error-loop':'st-err',crash:'st-crash',stop:'st-stop'};
+
+async function trigger(type){
+  if(!selectedId){toast('Select an instance first','warn');return;}
+  const inst=instances[selectedId];if(!inst)return;
+  const btn=document.getElementById(SMAP[type]);
+  const st=document.getElementById(SSMAP[type]);
+  try{
+    if(btn)btn.classList.add('running');
+    if(st)st.textContent='... sending';
+    let res;
+    if(type==='cpu')res=await fetchJ(inst.url+'/chaos/cpu','POST',{cores:1,duration_seconds:60});
+    else if(type==='cpu-sustained')res=await fetchJ(inst.url+'/chaos/cpu','POST',{cores:2,duration_seconds:300});
+    else if(type==='memory')res=await fetchJ(inst.url+'/chaos/memory','POST',{mb_per_second:50,max_mb:500});
+    else if(type==='error-loop')res=await fetchJ(inst.url+'/chaos/error-loop','POST',{});
+    else if(type==='crash')res=await fetchJ(inst.url+'/chaos/crash','POST',{delay_seconds:5});
+    else if(type==='stop')res=await fetchJ(inst.url+'/chaos/all','DELETE');
+    showResp(selectedId,type,JSON.stringify(res,null,2),false);
+    if(st)st.textContent='OK: '+(res.status||'done');
+    setTimeout(()=>{if(btn)btn.classList.remove('running');},3000);
+    log('ok','['+selectedId+'] '+type+' -> '+(res.status||'ok'));
+    toast(type.toUpperCase()+' triggered','ok');
+    if(type==='stop'&&inst.chaos)inst.chaos={};
+    if(type==='cpu'||type==='cpu-sustained')inst.chaos.cpu=true;
+    if(type==='memory')inst.chaos.memory=true;
+    renderInst();
+  }catch(e){
+    showResp(selectedId,type,e.message,true);
+    if(st)st.textContent='ERR: '+e.message.slice(0,30);
+    if(btn)btn.classList.remove('running');
+    log('err','['+selectedId+'] '+type+' FAILED: '+e.message);
+    toast('Failed: '+e.message,'err');
   }
-
-  // Update status bar
-  const total = ids.length;
-  const alive = Object.values(instances).filter(i => i.alive !== false).length;
-  document.getElementById('led-instances').className = `status-led ${total>0&&alive===total?'ok':total>0?'warn':''}`;
-  document.getElementById('status-instances').textContent = `INSTANCES: ${alive}/${total} ALIVE`;
 }
 
-// ── Check Prometheus ──────────────────────────────────────────────────────────
-async function checkProm() {
-  try {
-    const r = await fetch(`${CFG.prom}/api/v1/query?query=up`, { signal: AbortSignal.timeout(3000) });
-    const ok = r.ok;
-    document.getElementById('led-prom').className = `status-led ${ok?'ok':'err'}`;
-    document.getElementById('status-prom').textContent = `PROMETHEUS ${ok?'CONNECTED':'UNREACHABLE'}`;
-  } catch {
-    document.getElementById('led-prom').className = 'status-led err';
-    document.getElementById('status-prom').textContent = 'PROMETHEUS UNREACHABLE';
+function showResp(id,scen,data,isErr){
+  document.getElementById('resp-target').textContent=id+' -> '+scen;
+  document.getElementById('resp-body').innerHTML=
+    '<div class="response-ts">'+new Date().toTimeString().slice(0,8)+' UTC</div>'+
+    '<pre class="response-data'+(isErr?' err':'')+'">'+(data||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</pre>';
+}
+
+async function pollInstances(){
+  for(const [id,inst] of Object.entries(instances)){
+    try{
+      const s=await fetchJ(inst.url+'/chaos/status');
+      inst.chaos={cpu:s.cpu_active,memory:s.memory_active,memMb:s.memory_current_mb};
+      inst.alive=true;
+    }catch{inst.alive=false;}
+  }
+  renderInst();
+}
+
+async function checkProm(){
+  const cfg=loadCfg();
+  try{
+    const r=await fetch(cfg.prom+'/api/v1/alerts',{signal:AbortSignal.timeout(4000)});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const data=await r.json();
+    const alerts=(data.data&&data.data.alerts||[]).filter(a=>a.state==='firing');
+    document.getElementById('led-prom').className='led ok';
+    document.getElementById('st-prom').textContent='PROMETHEUS CONNECTED';
+    renderAlerts(alerts);
+  }catch{
+    document.getElementById('led-prom').className='led err';
+    document.getElementById('st-prom').textContent='PROMETHEUS UNREACHABLE';
+    document.getElementById('alerts-body').innerHTML='<div class="no-data">Cannot reach Prometheus -- click CONFIGURE</div>';
+    document.getElementById('alerts-count').textContent='--';
+    document.getElementById('st-alerts').textContent='ALERTS: --';
+    document.getElementById('st-alerts').style.color='var(--dim)';
   }
 }
 
-// ── Clock ─────────────────────────────────────────────────────────────────────
-function updateClock() {
-  document.getElementById('status-time').textContent = new Date().toISOString().replace('T',' ').slice(0,19) + ' UTC';
+function renderAlerts(alerts){
+  document.getElementById('alerts-count').textContent=alerts.length;
+  document.getElementById('st-alerts').textContent='ALERTS: '+alerts.length+' FIRING';
+  document.getElementById('st-alerts').style.color=alerts.length>0?'var(--danger)':'var(--accent2)';
+  if(!alerts.length){document.getElementById('alerts-body').innerHTML='<div class="no-data">&#x2705; No active alerts</div>';return;}
+  document.getElementById('alerts-body').innerHTML=alerts.slice(0,8).map(a=>{
+    const sev=a.labels&&a.labels.severity||'warning';
+    const name=a.labels&&a.labels.alertname||'unknown';
+    const ns=a.labels&&a.labels.namespace||'';
+    return`<div class="alert-row"><span class="alert-sev ${sev}">${sev.toUpperCase()}</span><span class="alert-name">${name}</span><span class="alert-ns">${ns}</span></div>`;
+  }).join('');
 }
 
-// ── Utilities ─────────────────────────────────────────────────────────────────
-async function fetchJson(url, method='GET', body=null) {
-  const opts = { method, headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(5000) };
-  if (body) opts.body = JSON.stringify(body);
-  const r = await fetch(url, opts);
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+async function fetchJ(url,method,body){
+  method=method||'GET';
+  const opts={method,headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(6000)};
+  if(body)opts.body=JSON.stringify(body);
+  const r=await fetch(url,opts);
+  if(!r.ok)throw new Error('HTTP '+r.status);
   return r.json();
 }
 
-function log(level, msg) {
-  const logEl = document.getElementById('log');
-  const ts = new Date().toTimeString().slice(0,8);
-  const entry = document.createElement('div');
-  entry.className = 'log-entry';
-  entry.innerHTML = `<span class="log-ts">${ts}</span><span class="log-level ${level}">${level.toUpperCase()}</span><span class="log-msg">${msg}</span>`;
-  logEl.prepend(entry);
-  if (logEl.children.length > 100) logEl.lastChild.remove();
+function log(level,msg){
+  const el=document.getElementById('log');
+  const ts=new Date().toTimeString().slice(0,8);
+  const d=document.createElement('div');d.className='log-entry';
+  d.innerHTML='<span class="log-ts">'+ts+'</span><span class="log-lv '+level+'">'+level.toUpperCase()+'</span><span>'+String(msg).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</span>';
+  el.prepend(d);if(el.children.length>100)el.lastChild.remove();
 }
 
-function clearLog() {
-  document.getElementById('log').innerHTML = '';
+function toast(msg,type){
+  type=type||'ok';
+  const c=document.getElementById('toasts');
+  const t=document.createElement('div');t.className='toast '+type;t.textContent=msg;
+  c.appendChild(t);setTimeout(()=>t.remove(),3200);
 }
 
-function toast(msg, type='ok') {
-  const c = document.getElementById('toasts');
-  const t = document.createElement('div');
-  t.className = `toast ${type}`;
-  t.textContent = msg;
-  c.appendChild(t);
-  setTimeout(() => t.remove(), 3200);
-}
-
-// ── Init ──────────────────────────────────────────────────────────────────────
-log('info', 'Dashboard initialized');
-log('info', `Prometheus: ${CFG.prom}`);
-updateClock();
-setInterval(updateClock, 1000);
-setInterval(checkProm, 10000);
-setInterval(pollInstances, 5000);
+const cfg=loadCfg();applyCfg(cfg);
+log('info','Dashboard initialized');
+log('info','Prometheus: '+cfg.prom);
+setInterval(()=>{document.getElementById('clock').textContent=new Date().toISOString().replace('T',' ').slice(0,19)+' UTC';},1000);
+setInterval(checkProm,15000);setInterval(pollInstances,5000);
 checkProm();
-
-// Listen for instance registrations via BroadcastChannel
-try {
-  const bc = new BroadcastChannel('clawops-dashboard');
-  bc.onmessage = (e) => {
-    if (e.data?.type === 'register') registerInstance(e.data.payload);
-  };
-} catch(e) { /* not supported in all envs */ }
+try{const bc=new BroadcastChannel('clawops');bc.onmessage=e=>{if(e.data&&e.data.type==='register')registerInstance(e.data.payload);};}catch{}
+document.getElementById('modal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeConfig();});
 </script>
 </body>
 </html>
