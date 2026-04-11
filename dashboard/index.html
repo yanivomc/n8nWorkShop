@@ -276,6 +276,11 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
         <input class="cfg-input" id="cfg-n8n" placeholder="http://n8n:5678">
         <div class="cfg-hint">External (EC2): http://&lt;EC2_IP&gt;:5678</div>
       </div>
+      <div class="cfg-group">
+        <div class="cfg-label">MCP SERVER URL</div>
+        <input class="cfg-input" id="cfg-mcp" placeholder="http://localhost:8000">
+        <div class="cfg-hint">K8s NodePort: http://&lt;EC2_IP&gt;:8000 — used for pod auto-discovery</div>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-cancel" onclick="closeConfig()">CANCEL</button>
@@ -287,7 +292,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 <div class="toast-container" id="toasts"></div>
 
 <script>
-const DEFS={prom:'http://localhost:9090',grafana:'http://localhost:3000',am:'http://localhost:9093',n8n:'http://localhost:5678'};
+const DEFS={prom:'http://localhost:9090',grafana:'http://localhost:3000',am:'http://localhost:9093',n8n:'http://localhost:5678',mcp:'http://localhost:8000'};
 function loadCfg(){
   try{
     const s=JSON.parse(localStorage.getItem('clawops-cfg')||'{}');
@@ -306,6 +311,7 @@ function applyCfg(c){
   document.getElementById('link-grafana').href=c.grafana;
   document.getElementById('link-am').href=c.am;
   document.getElementById('link-n8n').href=c.n8n;
+  window._mcpUrl=c.mcp;
 }
 function openConfig(){
   const c=loadCfg();
@@ -313,6 +319,7 @@ function openConfig(){
   document.getElementById('cfg-grafana').value=c.grafana;
   document.getElementById('cfg-am').value=c.am;
   document.getElementById('cfg-n8n').value=c.n8n;
+  document.getElementById('cfg-mcp').value=c.mcp||'';
   document.getElementById('modal').classList.add('open');
 }
 function closeConfig(){document.getElementById('modal').classList.remove('open');}
@@ -323,6 +330,7 @@ function saveConfig(){
       grafana:document.getElementById('cfg-grafana').value.trim(),
       am:document.getElementById('cfg-am').value.trim(),
       n8n:document.getElementById('cfg-n8n').value.trim(),
+      mcp:document.getElementById('cfg-mcp').value.trim(),
     };
     localStorage.setItem('clawops-cfg',JSON.stringify(c));
     applyCfg(c);closeConfig();
@@ -439,6 +447,27 @@ async function pollInstances(){
   renderInst();
 }
 
+async function discoverPods(){
+  const mcp=window._mcpUrl||loadCfg().mcp;
+  if(!mcp)return;
+  try{
+    const r=await fetchJ(mcp+'/discovery');
+    if(!r.pods||!r.pods.length)return;
+    r.pods.forEach(pod=>{
+      const id=pod.namespace+'/'+pod.pod;
+      if(!instances[id]){
+        instances[id]={id,app:'target-app',pod:pod.pod,namespace:pod.namespace,url:pod.url,chaos:{},alive:true};
+        log('ok','Auto-discovered: '+id+' @ '+pod.url);
+        if(!selectedId)selectInstance(id);
+      }
+    });
+    // Remove pods no longer running
+    const liveIds=new Set(r.pods.map(p=>p.namespace+'/'+p.pod));
+    Object.keys(instances).forEach(id=>{if(!liveIds.has(id)){delete instances[id];}});
+    renderInst();
+  }catch(e){/* MCP not reachable - silent */}
+}
+
 async function checkProm(){
   const cfg=loadCfg();
   try{
@@ -500,8 +529,8 @@ const cfg=loadCfg();applyCfg(cfg);
 log('info','Dashboard initialized');
 log('info','Prometheus: '+cfg.prom);
 setInterval(()=>{document.getElementById('clock').textContent=new Date().toISOString().replace('T',' ').slice(0,19)+' UTC';},1000);
-setInterval(checkProm,15000);setInterval(pollInstances,5000);
-checkProm();
+setInterval(checkProm,15000);setInterval(pollInstances,5000);setInterval(discoverPods,10000);
+checkProm();discoverPods();
 try{const bc=new BroadcastChannel('clawops');bc.onmessage=e=>{if(e.data&&e.data.type==='register')registerInstance(e.data.payload);};}catch{}
 document.getElementById('modal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeConfig();});
 </script>

@@ -121,6 +121,42 @@ async def kubectl_write(req: WriteRequest):
 
 
 # ── Health + tool listing ────────────────────────────────────────────
+@app.get("/discovery")
+async def discover_pods():
+    """
+    Auto-discover target-app pods in K8s.
+    Returns list of pods with app=target-app label across all namespaces.
+    Dashboard polls this to auto-register instances.
+    """
+    try:
+        result = run_kubectl(
+            "get pods -A -l app=target-app -o jsonpath='{range .items[*]}{.metadata.name},{.metadata.namespace},{.status.podIP},{.status.phase}{\"\\n\"}{end}'",
+            timeout=10
+        )
+        pods = []
+        if not result.get("error") and result.get("output"):
+            for line in result["output"].strip().split("\n"):
+                if not line.strip():
+                    continue
+                try:
+                    name, namespace, ip, phase = line.split(",")
+                    if phase == "Running" and ip:
+                        pods.append({
+                            "pod": name,
+                            "namespace": namespace,
+                            "ip": ip,
+                            "url": f"http://{ip}:8080",
+                            "phase": phase
+                        })
+                except Exception:
+                    continue
+        logger.info(f"Discovery: found {len(pods)} target-app pods")
+        return {"pods": pods, "count": len(pods)}
+    except Exception as e:
+        logger.error(f"Discovery error: {e}")
+        return {"pods": [], "count": 0, "error": str(e)}
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "tools": ["kubectl-read", "promql", "kubectl-write"]}
