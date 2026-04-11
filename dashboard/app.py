@@ -21,21 +21,24 @@ class RegisterPayload(BaseModel):
     namespace: str = "default"
     pod: str = "unknown"
     port: int = 8080
+    public_url: str = ""  # external URL the browser can reach
 
 @app.post("/api/register")
 async def register(payload: RegisterPayload):
     try:
         inst_id = f"{payload.namespace}/{payload.pod}"
+        # Use public_url if provided, otherwise fall back to internal service DNS
+        url = payload.public_url or f"http://{payload.app}.{payload.namespace}.svc.cluster.local:{payload.port}"
         _instances[inst_id] = {
             "id": inst_id,
             "app": payload.app,
             "version": payload.version,
             "namespace": payload.namespace,
             "pod": payload.pod,
-            "url": f"http://{payload.app}.{payload.namespace}.svc.cluster.local:{payload.port}",
+            "url": url,
             "registered_at": time.time(),
         }
-        logger.info(f"REGISTERED | {inst_id} | {_instances[inst_id]['url']}")
+        logger.info(f"REGISTERED | {inst_id} | {url}")
         return {"status": "registered", "id": inst_id}
     except Exception as e:
         logger.error(f"Register error: {e}")

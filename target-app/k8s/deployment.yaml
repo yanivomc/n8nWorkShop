@@ -42,6 +42,8 @@ spec:
               value: "http://clawops-dashboard-internal.workshop.svc.cluster.local"
             - name: SKIP_REGISTRATION
               value: "false"
+            - name: PUBLIC_URL
+              value: ""   # set to http://<EC2_IP>:30080 by setup.sh option 6
           resources:
             requests:
               cpu: "100m"

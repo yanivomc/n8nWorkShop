@@ -25,6 +25,7 @@ async def register_with_dashboard():
         "namespace": NAMESPACE,
         "pod": POD_NAME,
         "port": PORT,
+        "public_url": os.getenv("PUBLIC_URL", ""),  # e.g. http://EC2_IP:30080
     }
 
     max_retries = 10

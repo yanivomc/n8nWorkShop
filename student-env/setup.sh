@@ -756,7 +756,9 @@ deploy_to_k8s() {
   ok "Dashboard deployed"
 
   # Deploy target-app
-  kubectl apply -f ../target-app/k8s/deployment.yaml
+  # Inject PUBLIC_URL so browser can reach target-app
+  sed "s|PUBLIC_URL.*|PUBLIC_URL\n              value: \"http://${EC2_PUBLIC_IP}:30080\"|g" \
+    ../target-app/k8s/deployment.yaml | kubectl apply -f -
   kubectl apply -f ../target-app/k8s/servicemonitor.yaml
   ok "Target-app deployed"
 
