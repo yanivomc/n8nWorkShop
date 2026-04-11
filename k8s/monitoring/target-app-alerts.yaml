@@ -2,7 +2,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
   name: target-app-alerts
-  namespace: workshop
+  namespace: monitoring
   labels:
     release: kube-prometheus-stack   # must match Prometheus operator selector
 spec:
