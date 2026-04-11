@@ -731,14 +731,6 @@ deploy_to_k8s() {
   kubectl get namespace workshop &>/dev/null || kubectl create namespace workshop
   ok "Namespace workshop ready"
 
-  # Build + push dashboard image
-  echo "  Building dashboard image..."
-  cd "$(dirname "$0")/../dashboard"
-  docker build -t yanivomc/clawops-dashboard:latest . --quiet
-  docker push yanivomc/clawops-dashboard:latest
-  ok "Dashboard image pushed"
-  cd "$(dirname "$0")"
-
   # Inject real URLs into dashboard ConfigMap
   ALERTMANAGER_URL="${ALERTMANAGER_URL:-http://localhost:9093}"
   GRAFANA_URL="${GRAFANA_URL:-http://localhost:3000}"
