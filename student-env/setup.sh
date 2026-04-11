@@ -752,6 +752,7 @@ deploy_to_k8s() {
     s|INJECT_GRAFANA_URL|${GRAFANA_URL}|g;
     s|INJECT_ALERTMANAGER_URL|${ALERTMANAGER_URL}|g;
     s|INJECT_N8N_URL|${N8N_URL}|g;
+    s|INJECT_MCP_URL|http://${EC2_PUBLIC_IP}:8000|g;
   " ../dashboard/k8s/dashboard.yaml | kubectl apply -f -
   ok "Dashboard deployed"
 

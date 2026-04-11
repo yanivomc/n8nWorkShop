@@ -9,6 +9,7 @@ window.CLAWOPS_CONFIG = {
   grafana:      "${GRAFANA_URL:-http://localhost:3000}",
   am:           "${ALERTMANAGER_URL:-http://localhost:9093}",
   n8n:          "${N8N_URL:-http://localhost:5678}",
+  mcp:          "${MCP_URL:-http://localhost:8000}",
 };
 EOF
 
