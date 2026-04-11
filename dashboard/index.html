@@ -131,6 +131,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 @keyframes slideIn{from{opacity:0;transform:translateX(20px);}to{opacity:1;}}
 @keyframes fadeOut{to{opacity:0;transform:translateX(20px);}}
 </style>
+<script src="/config.js" onerror="console.log('No config.js — using defaults')"></script>
 </head>
 <body>
 <header>
@@ -291,11 +292,12 @@ function loadCfg(){
   try{
     const s=JSON.parse(localStorage.getItem('clawops-cfg')||'{}');
     const p=new URLSearchParams(location.search);
+    const injected=window.CLAWOPS_CONFIG||{};
     return{
-      prom:p.get('prom')||s.prom||DEFS.prom,
-      grafana:p.get('grafana')||s.grafana||DEFS.grafana,
-      am:p.get('am')||s.am||DEFS.am,
-      n8n:p.get('n8n')||s.n8n||DEFS.n8n,
+      prom:p.get('prom')||s.prom||injected.prom||DEFS.prom,
+      grafana:p.get('grafana')||s.grafana||injected.grafana||DEFS.grafana,
+      am:p.get('am')||s.am||injected.am||DEFS.am,
+      n8n:p.get('n8n')||s.n8n||injected.n8n||DEFS.n8n,
     };
   }catch{return{...DEFS};}
 }

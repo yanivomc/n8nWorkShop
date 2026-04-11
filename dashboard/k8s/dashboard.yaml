@@ -1,0 +1,66 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dashboard-config
+  namespace: workshop
+data:
+  PROMETHEUS_URL: "INJECT_PROMETHEUS_URL"
+  GRAFANA_URL: "INJECT_GRAFANA_URL"
+  ALERTMANAGER_URL: "INJECT_ALERTMANAGER_URL"
+  N8N_URL: "INJECT_N8N_URL"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clawops-dashboard
+  namespace: workshop
+  labels:
+    app: clawops-dashboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: clawops-dashboard
+  template:
+    metadata:
+      labels:
+        app: clawops-dashboard
+    spec:
+      containers:
+        - name: dashboard
+          image: yanivomc/clawops-dashboard:latest
+          ports:
+            - containerPort: 80
+          envFrom:
+            - configMapRef:
+                name: dashboard-config
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: clawops-dashboard
+  namespace: workshop
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+spec:
+  type: LoadBalancer
+  selector:
+    app: clawops-dashboard
+  ports:
+    - port: 80
+      targetPort: 80
+      name: http

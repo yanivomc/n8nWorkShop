@@ -674,6 +674,100 @@ for t in tunnels:
   echo -e "  ${CYAN}→ ngrok dashboard: http://localhost:4040${NC}"
 }
 
+
+# ── Deploy to Kubernetes ───────────────────────────────────────────────────
+deploy_to_k8s() {
+  hdr "Deploy Dashboard + Target App to Kubernetes"
+  load_env
+
+  local all_ok=true
+
+  echo "  Validating endpoints before deployment..."
+  echo ""
+
+  # Check Prometheus
+  if curl -sf --max-time 5 "${PROMETHEUS_URL}/-/healthy" &>/dev/null; then
+    ok "Prometheus:    ${PROMETHEUS_URL}"
+  else
+    warn "Prometheus:    ${PROMETHEUS_URL} -- UNREACHABLE"
+    all_ok=false
+  fi
+
+  # Check Grafana
+  if curl -sf --max-time 5 "${GRAFANA_URL}/api/health" &>/dev/null; then
+    ok "Grafana:       ${GRAFANA_URL}"
+  else
+    warn "Grafana:       ${GRAFANA_URL} -- UNREACHABLE"
+    all_ok=false
+  fi
+
+  # Check n8n
+  N8N_URL="http://${EC2_PUBLIC_IP}:5678"
+  if curl -sf --max-time 5 "${N8N_URL}/healthz" &>/dev/null; then
+    ok "n8n:           ${N8N_URL}"
+  else
+    warn "n8n:           ${N8N_URL} -- UNREACHABLE"
+    all_ok=false
+  fi
+
+  # Check kubectl
+  if kubectl cluster-info &>/dev/null; then
+    ok "kubectl:       cluster accessible"
+  else
+    err "kubectl:       cannot reach cluster -- aborting"
+    return
+  fi
+
+  echo ""
+
+  if [[ "$all_ok" == "false" ]]; then
+    warn "Some endpoints are unreachable."
+    echo -n "  Deploy anyway? You will need to configure URLs manually in the dashboard. [y/N]: "
+    read ans
+    [[ "${ans,,}" != "y" ]] && { echo "  Aborted."; return; }
+  fi
+
+  # Ensure namespace
+  kubectl get namespace workshop &>/dev/null || kubectl create namespace workshop
+  ok "Namespace workshop ready"
+
+  # Build + push dashboard image
+  echo "  Building dashboard image..."
+  cd "$(dirname "$0")/../dashboard"
+  docker build -t yanivomc/clawops-dashboard:latest . --quiet
+  docker push yanivomc/clawops-dashboard:latest
+  ok "Dashboard image pushed"
+  cd "$(dirname "$0")"
+
+  # Inject real URLs into dashboard ConfigMap
+  ALERTMANAGER_URL="${ALERTMANAGER_URL:-http://localhost:9093}"
+  GRAFANA_URL="${GRAFANA_URL:-http://localhost:3000}"
+
+  sed "
+    s|INJECT_PROMETHEUS_URL|${PROMETHEUS_URL}|g;
+    s|INJECT_GRAFANA_URL|${GRAFANA_URL}|g;
+    s|INJECT_ALERTMANAGER_URL|${ALERTMANAGER_URL}|g;
+    s|INJECT_N8N_URL|${N8N_URL}|g;
+  " ../dashboard/k8s/dashboard.yaml | kubectl apply -f -
+  ok "Dashboard deployed"
+
+  # Deploy target-app
+  kubectl apply -f ../target-app/k8s/deployment.yaml
+  kubectl apply -f ../target-app/k8s/servicemonitor.yaml
+  ok "Target-app deployed"
+
+  echo ""
+  echo "  Waiting for rollouts..."
+  kubectl rollout status deployment/clawops-dashboard -n workshop --timeout=90s
+  kubectl rollout status deployment/target-app -n workshop --timeout=90s
+
+  echo ""
+  ok "Deployment complete!"
+  echo ""
+  echo -e "  ${CYAN}Dashboard LB:${NC}"
+  kubectl get svc clawops-dashboard -n workshop -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null && echo "" || echo "  (LB provisioning, check: kubectl get svc -n workshop)"
+}
+
 # ── First-run check ───────────────────────────────────────────────────
 first_run() {
   [ ! -f "$ENV_FILE" ] && cp "$(dirname "$0")/.env.example" "$ENV_FILE"
@@ -712,6 +806,7 @@ menu() {
     echo "  8) Test Telegram bot"
     echo "  9) Generate credentials file"
     echo " 10) Start ngrok tunnel (required for Telegram Trigger)"
+    echo " 11) Deploy Dashboard + Target App to Kubernetes"
     echo "  q) Quit"
     echo ""
     echo -n "  Choice: "
@@ -727,6 +822,7 @@ menu() {
       8) test_telegram ;;
       9) generate_credentials ;;
       10) start_ngrok ;;
+      11) deploy_to_k8s ;;
       q|Q) echo ""; exit 0 ;;
       *) warn "Invalid choice" ;;
     esac
