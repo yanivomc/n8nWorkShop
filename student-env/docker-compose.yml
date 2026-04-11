@@ -32,7 +32,7 @@ services:
     volumes:
       - n8n_data:/home/node/.n8n
     extra_hosts:
-      - "${CLUSTER_HOST}:${MASTER_IP}"
+      - "${CLUSTER_HOST:-localhost}:${MASTER_IP:-127.0.0.1}"
     depends_on:
       - mcp-server
     networks:
@@ -52,7 +52,7 @@ services:
     volumes:
       - ${KUBECONFIG_PATH:-~/.kube/config}:/root/.kube/config:ro
     extra_hosts:
-      - "${CLUSTER_HOST}:${MASTER_IP}"
+      - "${CLUSTER_HOST:-localhost}:${MASTER_IP:-127.0.0.1}"
     networks:
       - workshop
 
