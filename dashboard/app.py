@@ -12,7 +12,8 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO,
 logger = logging.getLogger("dashboard")
 
 _instances: dict = {}
-DEAD_THRESHOLD = 3  # remove after this many consecutive failures
+_client: httpx.AsyncClient = None
+DEAD_THRESHOLD = 3
 
 async def poll_chaos_status():
     while True:
@@ -21,24 +22,26 @@ async def poll_chaos_status():
             if not inst:
                 continue
             try:
-                async with httpx.AsyncClient(timeout=3) as client:
-                    r = await client.get(f"{inst['internal_url']}/chaos/status")
+                r = await _client.get(f"{inst['internal_url']}/chaos/status", timeout=3)
                 inst["chaos"] = r.json()
                 inst["alive"] = True
                 inst["fail_count"] = 0
-            except Exception:
+            except Exception as e:
                 inst["fail_count"] = inst.get("fail_count", 0) + 1
                 inst["alive"] = False
                 if inst["fail_count"] >= DEAD_THRESHOLD:
-                    logger.warning(f"REMOVING dead instance | {inst_id} | fails={inst['fail_count']}")
+                    logger.warning(f"REMOVING dead instance | {inst_id}")
                     _instances.pop(inst_id, None)
         await asyncio.sleep(5)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _client
+    _client = httpx.AsyncClient(timeout=10.0)
     task = asyncio.create_task(poll_chaos_status())
     yield
     task.cancel()
+    await _client.aclose()
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -56,16 +59,10 @@ async def register(payload: RegisterPayload):
         inst_id = f"{payload.namespace}/{payload.pod}"
         internal_url = f"http://{payload.app}.{payload.namespace}.svc.cluster.local:{payload.port}"
         _instances[inst_id] = {
-            "id": inst_id,
-            "app": payload.app,
-            "version": payload.version,
-            "namespace": payload.namespace,
-            "pod": payload.pod,
-            "internal_url": internal_url,
-            "chaos": {},
-            "alive": True,
-            "fail_count": 0,
-            "registered_at": time.time(),
+            "id": inst_id, "app": payload.app, "version": payload.version,
+            "namespace": payload.namespace, "pod": payload.pod,
+            "internal_url": internal_url, "chaos": {}, "alive": True,
+            "fail_count": 0, "registered_at": time.time(),
         }
         logger.info(f"REGISTERED | {inst_id} | {internal_url}")
         return {"status": "registered", "id": inst_id}
@@ -83,12 +80,13 @@ async def get_instances():
     } for i in _instances.values()]
     return {"instances": result, "count": len(result)}
 
-@app.post("/api/chaos/{inst_id:path}/action/{scenario}")
+@app.api_route("/api/chaos/{inst_id:path}/action/{scenario}", methods=["POST", "DELETE"])
 async def trigger_chaos(inst_id: str, scenario: str, request: Request):
     from urllib.parse import unquote
     inst_id = unquote(inst_id)
     inst = _instances.get(inst_id)
     if not inst:
+        logger.error(f"CHAOS | instance not found: {inst_id} | known: {list(_instances.keys())}")
         return JSONResponse({"error": "instance not found"}, status_code=404)
     try:
         body = {}
@@ -97,23 +95,16 @@ async def trigger_chaos(inst_id: str, scenario: str, request: Request):
         except Exception:
             pass
         target = f"{inst['internal_url']}/chaos/{scenario}"
-        logger.info(f"CHAOS PROXY | {inst_id} | {request.method} {target} | body={body}")
-        async with httpx.AsyncClient(timeout=10) as client:
-            if request.method == "DELETE":
-                r = await client.delete(target)
-            else:
-                r = await client.post(target, json=body)
-        logger.info(f"CHAOS RESULT | {inst_id} | {scenario} | {r.status_code} | {r.text[:100]}")
+        logger.info(f"CHAOS PROXY | {request.method} {target} | body={body}")
+        if request.method == "DELETE":
+            r = await _client.delete(target)
+        else:
+            r = await _client.post(target, json=body)
+        logger.info(f"CHAOS RESULT | {r.status_code}")
         return r.json()
     except Exception as e:
         logger.error(f"Chaos proxy error: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
-
-@app.delete("/api/chaos/{inst_id:path}/action/{scenario}")
-async def trigger_chaos_delete(inst_id: str, scenario: str, request: Request):
-    from urllib.parse import unquote
-    inst_id = unquote(inst_id)
-    return await trigger_chaos(inst_id, scenario, request)
 
 @app.delete("/api/instances/{inst_id:path}")
 async def remove_instance(inst_id: str):
