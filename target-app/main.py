@@ -1,6 +1,7 @@
 import httpx
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from config import logger, APP_NAME, APP_VERSION, NAMESPACE, POD_NAME, DASHBOARD_URL, PORT
 from routes.health import router as health_router
 from routes.chaos import router as chaos_router
@@ -42,9 +43,21 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Allow dashboard (any origin) to call the API from the browser
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(health_router)
 app.include_router(chaos_router)
 app.include_router(metrics_router)
+
+@app.get("/")
+def root():
+    return {"app": APP_NAME, "version": APP_VERSION, "status": "ok"}
 
 logger.info("Routes registered: /health /ready /info /metrics /chaos/*")
 
