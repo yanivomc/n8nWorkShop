@@ -85,6 +85,8 @@ async def get_instances():
 
 @app.post("/api/chaos/{inst_id:path}/action/{scenario}")
 async def trigger_chaos(inst_id: str, scenario: str, request: Request):
+    from urllib.parse import unquote
+    inst_id = unquote(inst_id)
     inst = _instances.get(inst_id)
     if not inst:
         return JSONResponse({"error": "instance not found"}, status_code=404)
@@ -107,6 +109,8 @@ async def trigger_chaos(inst_id: str, scenario: str, request: Request):
 
 @app.delete("/api/chaos/{inst_id:path}/action/{scenario}")
 async def trigger_chaos_delete(inst_id: str, scenario: str, request: Request):
+    from urllib.parse import unquote
+    inst_id = unquote(inst_id)
     return await trigger_chaos(inst_id, scenario, request)
 
 @app.delete("/api/instances/{inst_id:path}")
