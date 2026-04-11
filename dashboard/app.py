@@ -96,12 +96,14 @@ async def trigger_chaos(inst_id: str, scenario: str, request: Request):
             body = await request.json()
         except Exception:
             pass
+        target = f"{inst['internal_url']}/chaos/{scenario}"
+        logger.info(f"CHAOS PROXY | {inst_id} | {request.method} {target} | body={body}")
         async with httpx.AsyncClient(timeout=10) as client:
             if request.method == "DELETE":
-                r = await client.delete(f"{inst['internal_url']}/chaos/{scenario}")
+                r = await client.delete(target)
             else:
-                r = await client.post(f"{inst['internal_url']}/chaos/{scenario}", json=body)
-        logger.info(f"CHAOS | {inst_id} | {scenario} | {r.status_code}")
+                r = await client.post(target, json=body)
+        logger.info(f"CHAOS RESULT | {inst_id} | {scenario} | {r.status_code} | {r.text[:100]}")
         return r.json()
     except Exception as e:
         logger.error(f"Chaos proxy error: {e}")
