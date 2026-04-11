@@ -1,0 +1,62 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: target-app-alerts
+  namespace: workshop
+  labels:
+    release: kube-prometheus-stack   # must match Prometheus operator selector
+spec:
+  groups:
+    - name: target-app.chaos
+      interval: 15s
+      rules:
+
+        - alert: TargetAppCPUStress
+          expr: target_chaos_cpu_active{namespace="workshop"} == 1
+          for: 10s
+          labels:
+            severity: warning
+            workshop: "true"
+          annotations:
+            summary: "CPU stress active on {{ $labels.pod }}"
+            description: "target-app pod {{ $labels.pod }} is running CPU stress scenario"
+
+        - alert: TargetAppMemoryLeak
+          expr: target_chaos_memory_active{namespace="workshop"} == 1
+          for: 10s
+          labels:
+            severity: warning
+            workshop: "true"
+          annotations:
+            summary: "Memory leak active on {{ $labels.pod }}"
+            description: "target-app pod {{ $labels.pod }} is leaking memory ({{ $value }}MB allocated)"
+
+        - alert: TargetAppMemoryCritical
+          expr: target_chaos_memory_bytes{namespace="workshop"} > 400 * 1024 * 1024
+          for: 10s
+          labels:
+            severity: critical
+            workshop: "true"
+          annotations:
+            summary: "Memory leak critical on {{ $labels.pod }}"
+            description: "target-app pod {{ $labels.pod }} has allocated over 400MB"
+
+        - alert: TargetAppCrashLooping
+          expr: increase(kube_pod_container_status_restarts_total{namespace="workshop", pod=~"target-app.*"}[5m]) > 1
+          for: 0s
+          labels:
+            severity: critical
+            workshop: "true"
+          annotations:
+            summary: "target-app is crash looping"
+            description: "Pod {{ $labels.pod }} has restarted more than once in 5 minutes"
+
+        - alert: TargetAppDown
+          expr: up{namespace="workshop", job=~".*target-app.*"} == 0
+          for: 15s
+          labels:
+            severity: critical
+            workshop: "true"
+          annotations:
+            summary: "target-app is down"
+            description: "target-app scrape target is unreachable"
