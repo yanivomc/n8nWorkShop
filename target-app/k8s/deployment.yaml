@@ -24,6 +24,7 @@ spec:
       containers:
         - name: target-app
           image: yanivomc/target-app:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
           env:
