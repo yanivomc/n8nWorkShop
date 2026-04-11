@@ -19,10 +19,12 @@ load_env() { [ -f "$ENV_FILE" ] && source "$ENV_FILE" 2>/dev/null || true; }
 
 save_env_var() {
   local key=$1 val=$2
+  # Always single-quote values to prevent shell interpretation
+  local quoted="'${val//'/\'\'\'\'}'"
   if grep -q "^${key}=" "$ENV_FILE" 2>/dev/null; then
-    sed -i "s|^${key}=.*|${key}=${val}|" "$ENV_FILE"
+    sed -i "s|^${key}=.*|${key}=${quoted}|" "$ENV_FILE"
   else
-    echo "${key}=${val}" >> "$ENV_FILE"
+    echo "${key}=${quoted}" >> "$ENV_FILE"
   fi
 }
 
