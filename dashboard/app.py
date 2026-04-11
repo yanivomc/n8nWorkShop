@@ -32,7 +32,7 @@ async def register(payload: RegisterPayload):
             "version": payload.version,
             "namespace": payload.namespace,
             "pod": payload.pod,
-            "url": f"http://{payload.pod}.{payload.namespace}.svc.cluster.local:{payload.port}",
+            "url": f"http://{payload.app}.{payload.namespace}.svc.cluster.local:{payload.port}",
             "registered_at": time.time(),
         }
         logger.info(f"REGISTERED | {inst_id} | {_instances[inst_id]['url']}")
