@@ -29,7 +29,6 @@ services:
       - N8N_COMMUNITY_PACKAGES_ENABLED=true
     volumes:
       - n8n_data:/home/node/.n8n
-    extra_hosts:
     depends_on:
       - mcp-server
     networks:
@@ -48,7 +47,6 @@ services:
       - KUBECONFIG=/root/.kube/config
     volumes:
       - ${KUBECONFIG_PATH:-~/.kube/config}:/root/.kube/config:ro
-    extra_hosts:
     networks:
       - workshop
 
