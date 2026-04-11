@@ -377,7 +377,7 @@ function renderInst(){
     return`<div class="instance-card ${selectedId===id?'active':''}" onclick="selectInstance('${id}')">
       <div class="inst-name">${inst.app||'target-app'}</div>
       <div class="inst-meta">${inst.namespace||'default'} / ${inst.pod||'unknown'}</div>
-      <div class="inst-url">${inst.url}</div>
+      <div class="inst-url">${inst.namespace}.svc.cluster.local:8080</div>
       <div class="chaos-pills">${pills.join('')}</div>
     </div>`;
   }).join('');
@@ -446,7 +446,7 @@ async function pollRegistered(){
       liveIds.add(id);
       if(!instances[id]){
         instances[id]={...inst,chaos:{},alive:true};
-        log('ok','Auto-registered: '+id+' @ '+inst.url);
+        log('ok','Auto-registered: '+id);
         if(!selectedId)selectInstance(id);
       }
     });
