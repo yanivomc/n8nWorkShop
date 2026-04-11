@@ -783,6 +783,42 @@ deploy_to_k8s() {
   echo -e "  ${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 }
 
+
+# ── Clean up Kubernetes workshop namespace ─────────────────────────────────
+clean_k8s() {
+  hdr "Clean Kubernetes Workshop Resources"
+  load_env
+
+  if ! kubectl_works; then
+    err "kubectl cannot reach cluster — skipping"
+    return
+  fi
+
+  echo ""
+  warn "This will delete all resources in the workshop namespace:"
+  echo "  - clawops-dashboard deployment + service + configmap"
+  echo "  - target-app deployment + service + servicemonitor"
+  echo "  - workshop namespace"
+  echo ""
+  echo -n "  Are you sure? [y/N]: "
+  read ans
+  [[ "${ans,,}" != "y" ]] && { echo "  Aborted."; return; }
+
+  echo ""
+  echo "  Removing deployments..."
+  kubectl delete deployment clawops-dashboard target-app -n workshop 2>/dev/null && ok "Deployments deleted" || true
+  kubectl delete service clawops-dashboard target-app -n workshop 2>/dev/null && ok "Services deleted" || true
+  kubectl delete configmap dashboard-config -n workshop 2>/dev/null && ok "ConfigMap deleted" || true
+  kubectl delete servicemonitor target-app -n workshop 2>/dev/null && ok "ServiceMonitor deleted" || true
+
+  echo ""
+  echo -n "  Also delete the workshop namespace? [y/N]: "
+  read ans2
+  [[ "${ans2,,}" == "y" ]] && kubectl delete namespace workshop && ok "Namespace deleted" || ok "Namespace kept"
+  echo ""
+  ok "Cleanup complete. Run option 6 to redeploy."
+}
+
 # ── First-run check ───────────────────────────────────────────────────
 first_run() {
   local is_new=false
@@ -825,6 +861,7 @@ menu() {
     echo "  9) Test Telegram bot"
     echo " 10) Show status"
     echo " 11) Generate credentials file"
+    echo " 12) Clean Kubernetes workshop resources"
     echo "  q) Quit"
     echo ""
     echo -n "  Choice: "
@@ -841,6 +878,7 @@ menu() {
       9) test_telegram ;;
       10) show_status ;;
       11) generate_credentials ;;
+      12) clean_k8s ;;
       q|Q) echo ""; exit 0 ;;
       *) warn "Invalid choice" ;;
     esac
