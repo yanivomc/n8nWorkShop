@@ -29,6 +29,7 @@ async def poll_chaos_status():
             except Exception as e:
                 inst["fail_count"] = inst.get("fail_count", 0) + 1
                 inst["alive"] = False
+                logger.warning(f"POLL FAIL | {inst_id} | attempt {inst['fail_count']}/{DEAD_THRESHOLD} | {e}")
                 if inst["fail_count"] >= DEAD_THRESHOLD:
                     logger.warning(f"REMOVING dead instance | {inst_id}")
                     _instances.pop(inst_id, None)
