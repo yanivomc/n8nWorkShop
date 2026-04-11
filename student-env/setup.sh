@@ -768,8 +768,18 @@ deploy_to_k8s() {
   echo ""
   ok "Deployment complete!"
   echo ""
-  echo -e "  ${CYAN}Dashboard LB:${NC}"
-  kubectl get svc clawops-dashboard -n workshop -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null && echo "" || echo "  (LB provisioning, check: kubectl get svc -n workshop)"
+  echo -e "  ${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  echo -e "  ${CYAN}  Endpoints:${NC}"
+  DASH_HOST=$(kubectl get svc clawops-dashboard -n workshop -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
+  TARGET_HOST=$(kubectl get svc target-app -n workshop -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
+  if [[ -n "$DASH_HOST" ]]; then
+    ok "  Dashboard:   http://${DASH_HOST}?prom=${PROMETHEUS_URL}&grafana=${GRAFANA_URL}&am=${ALERTMANAGER_URL}&n8n=http://${EC2_PUBLIC_IP}:5678"
+  else
+    warn "  Dashboard LB still provisioning — run: kubectl get svc -n workshop"
+  fi
+  [[ -n "$TARGET_HOST" ]] && ok "  Target App:  http://${TARGET_HOST}:8080"
+  echo -e "  ${CYAN}  To add target-app to dashboard: click '+ ADD INSTANCE MANUALLY'${NC}"
+  echo -e "  ${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 }
 
 # ── First-run check ───────────────────────────────────────────────────
