@@ -23,7 +23,7 @@ spec:
     spec:
       containers:
         - name: target-app
-          image: TARGET_APP_IMAGE   # replaced by deploy.sh
+          image: yanivomc/target-app:latest
           ports:
             - containerPort: 8080
           env:
