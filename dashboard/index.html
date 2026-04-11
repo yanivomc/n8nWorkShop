@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClawOps — Incident Command Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #060a0f;
+  --bg2: #0b1118;
+  --bg3: #111820;
+  --border: #1a2a3a;
+  --accent: #00d4ff;
+  --accent2: #00ff9d;
+  --warn: #ffaa00;
+  --danger: #ff3366;
+  --text: #c8d8e8;
+  --dim: #4a6a8a;
+  --mono: 'Share Tech Mono', monospace;
+  --sans: 'Rajdhani', sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Scanline overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.03) 2px,
+    rgba(0,0,0,0.03) 4px
+  );
+  pointer-events: none;
+  z-index: 1000;
+}
+
+/* Grid background */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+}
+
+/* Header */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 32px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg2);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo-icon {
+  width: 36px;
+  height: 36px;
+  border: 2px solid var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  background: rgba(0,212,255,0.1);
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--accent);
+}
+
+.logo-text {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+
+.logo-sub {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: 2px;
+  margin-top: 2px;
+}
+
+.header-links {
+  display: flex;
+  gap: 8px;
+}
+
+.hlink {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+  color: var(--dim);
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  transition: all 0.2s;
+  font-family: var(--mono);
+}
+
+.hlink:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(0,212,255,0.05);
+}
+
+.hlink .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dim);
+  animation: pulse 2s infinite;
+}
+
+.hlink:hover .dot { background: var(--accent2); }
+
+/* Status bar */
+.statusbar {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 8px 32px;
+  background: rgba(0,0,0,0.4);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-led {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dim);
+}
+
+.status-led.ok { background: var(--accent2); box-shadow: 0 0 8px var(--accent2); animation: pulse 3s infinite; }
+.status-led.warn { background: var(--warn); box-shadow: 0 0 8px var(--warn); animation: pulse 1.5s infinite; }
+.status-led.err { background: var(--danger); box-shadow: 0 0 8px var(--danger); animation: pulse 0.8s infinite; }
+
+/* Main layout */
+.main {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  grid-template-rows: auto 1fr;
+  gap: 0;
+  padding: 24px 32px;
+  gap: 20px;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+/* Panel base */
+.panel {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+
+.panel::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.5;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(0,0,0,0.3);
+}
+
+.panel-title {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.panel-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  color: var(--dim);
+}
+
+/* Instances panel */
+.instances-panel {
+  grid-column: 1;
+  grid-row: 1 / 3;
+}
+
+.instance-card {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.15s;
+  position: relative;
+}
+
+.instance-card:hover { background: rgba(0,212,255,0.04); }
+.instance-card.active { background: rgba(0,212,255,0.08); border-left: 2px solid var(--accent); }
+
+.inst-name {
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 1px;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.inst-meta {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  margin-bottom: 8px;
+}
+
+.inst-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.chaos-pills {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.pill {
+  padding: 2px 8px;
+  font-family: var(--mono);
+  font-size: 9px;
+  border: 1px solid;
+  letter-spacing: 1px;
+}
+
+.pill.cpu { border-color: var(--warn); color: var(--warn); background: rgba(255,170,0,0.08); }
+.pill.mem { border-color: #aa44ff; color: #aa44ff; background: rgba(170,68,255,0.08); }
+.pill.crash { border-color: var(--danger); color: var(--danger); background: rgba(255,51,102,0.08); }
+.pill.idle { border-color: var(--dim); color: var(--dim); }
+
+.no-instances {
+  padding: 40px 20px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+  line-height: 2;
+}
+
+/* Scenarios panel */
+.scenarios-panel {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.scenarios-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+
+.scenario-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+  text-align: left;
+}
+
+.scenario-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.scenario-btn:hover { border-color: var(--current-color, var(--accent)); transform: translateY(-1px); }
+.scenario-btn:hover::after { opacity: 0.04; }
+.scenario-btn:active { transform: translateY(0); }
+.scenario-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+.scenario-btn.cpu-theme { --current-color: var(--warn); }
+.scenario-btn.mem-theme { --current-color: #aa44ff; }
+.scenario-btn.crash-theme { --current-color: var(--danger); }
+.scenario-btn.stop-theme { --current-color: var(--accent2); }
+
+.scenario-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.scenario-name {
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.scenario-btn.cpu-theme .scenario-name { color: var(--warn); }
+.scenario-btn.mem-theme .scenario-name { color: #aa44ff; }
+.scenario-btn.crash-theme .scenario-name { color: var(--danger); }
+.scenario-btn.stop-theme .scenario-name { color: var(--accent2); }
+
+.scenario-desc {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  line-height: 1.5;
+}
+
+/* Event log panel */
+.log-panel {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.log-body {
+  padding: 12px 16px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.8;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.log-entry {
+  display: flex;
+  gap: 12px;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(26,42,58,0.5);
+  animation: fadeIn 0.3s ease;
+}
+
+.log-ts { color: var(--dim); min-width: 85px; }
+.log-level { min-width: 50px; font-weight: bold; }
+.log-level.info { color: var(--accent); }
+.log-level.ok { color: var(--accent2); }
+.log-level.warn { color: var(--warn); }
+.log-level.err { color: var(--danger); }
+.log-msg { color: var(--text); }
+
+/* Animations */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateX(-4px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* Toast */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 9999;
+}
+
+.toast {
+  padding: 10px 16px;
+  border: 1px solid;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1px;
+  animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s forwards;
+  max-width: 320px;
+}
+
+.toast.ok { border-color: var(--accent2); color: var(--accent2); background: rgba(0,255,157,0.08); }
+.toast.err { border-color: var(--danger); color: var(--danger); background: rgba(255,51,102,0.08); }
+.toast.warn { border-color: var(--warn); color: var(--warn); background: rgba(255,170,0,0.08); }
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes fadeOut {
+  to { opacity: 0; transform: translateX(20px); }
+}
+
+/* Spinner for loading */
+.spinner {
+  width: 12px; height: 12px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">⬡</div>
+    <div>
+      <div class="logo-text">ClawOps</div>
+      <div class="logo-sub">Incident Command Dashboard</div>
+    </div>
+  </div>
+  <div class="header-links">
+    <a class="hlink" id="link-prom" href="#" target="_blank"><span class="dot"></span>PROMETHEUS</a>
+    <a class="hlink" id="link-grafana" href="#" target="_blank"><span class="dot"></span>GRAFANA</a>
+    <a class="hlink" id="link-alertmanager" href="#" target="_blank"><span class="dot"></span>ALERTMANAGER</a>
+    <a class="hlink" id="link-n8n" href="#" target="_blank"><span class="dot"></span>N8N</a>
+  </div>
+</header>
+
+<div class="statusbar">
+  <div class="status-item">
+    <div class="status-led" id="led-prom"></div>
+    <span id="status-prom">PROMETHEUS —</span>
+  </div>
+  <div class="status-item">
+    <div class="status-led" id="led-instances"></div>
+    <span id="status-instances">INSTANCES: 0</span>
+  </div>
+  <div class="status-item">
+    <span id="status-time">—</span>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- Instances -->
+  <div class="panel instances-panel">
+    <div class="panel-header">
+      <span class="panel-title">Registered Instances</span>
+      <span class="panel-badge" id="instance-count">0</span>
+    </div>
+    <div id="instances-list">
+      <div class="no-instances">
+        No instances registered.<br>
+        Deploy target-app to K8s<br>
+        with DASHBOARD_URL set.
+      </div>
+    </div>
+  </div>
+
+  <!-- Scenarios -->
+  <div class="panel scenarios-panel">
+    <div class="panel-header">
+      <span class="panel-title">Chaos Scenarios</span>
+      <span class="panel-badge" id="selected-inst-label">SELECT INSTANCE</span>
+    </div>
+    <div class="scenarios-grid">
+      <button class="scenario-btn cpu-theme" onclick="triggerChaos('cpu')" id="btn-cpu">
+        <div class="scenario-icon">⚡</div>
+        <div class="scenario-name">CPU Spike</div>
+        <div class="scenario-desc">Burns 1 core at 100%<br>for 60 seconds</div>
+      </button>
+      <button class="scenario-btn cpu-theme" onclick="triggerChaos('cpu-sustained')" id="btn-cpu-sustained">
+        <div class="scenario-icon">🔥</div>
+        <div class="scenario-name">CPU Sustained</div>
+        <div class="scenario-desc">Burns 2 cores at 100%<br>for 5 minutes</div>
+      </button>
+      <button class="scenario-btn mem-theme" onclick="triggerChaos('memory')" id="btn-memory">
+        <div class="scenario-icon">💾</div>
+        <div class="scenario-name">Memory Leak</div>
+        <div class="scenario-desc">Allocates 50MB/sec<br>up to 500MB</div>
+      </button>
+      <button class="scenario-btn crash-theme" onclick="triggerChaos('error-loop')" id="btn-error-loop">
+        <div class="scenario-icon">💀</div>
+        <div class="scenario-name">Error Loop</div>
+        <div class="scenario-desc">Fails health probes,<br>K8s restarts pod</div>
+      </button>
+      <button class="scenario-btn crash-theme" onclick="triggerChaos('crash')" id="btn-crash">
+        <div class="scenario-icon">💥</div>
+        <div class="scenario-name">Crash Pod</div>
+        <div class="scenario-desc">SIGKILL in 5s,<br>CrashLoopBackOff</div>
+      </button>
+      <button class="scenario-btn stop-theme" onclick="triggerChaos('stop')" id="btn-stop">
+        <div class="scenario-icon">✅</div>
+        <div class="scenario-name">Stop All</div>
+        <div class="scenario-desc">Recover — stop all<br>chaos scenarios</div>
+      </button>
+    </div>
+  </div>
+
+  <!-- Event log -->
+  <div class="panel log-panel">
+    <div class="panel-header">
+      <span class="panel-title">Event Log</span>
+      <button onclick="clearLog()" style="background:none;border:1px solid var(--border);color:var(--dim);font-family:var(--mono);font-size:10px;padding:2px 8px;cursor:pointer;letter-spacing:1px;">CLEAR</button>
+    </div>
+    <div class="log-body" id="log"></div>
+  </div>
+
+</div>
+
+<div class="toast-container" id="toasts"></div>
+
+<script>
+// ── Config from URL params or defaults ────────────────────────────────────────
+const params = new URLSearchParams(location.search);
+const CFG = {
+  prom:         params.get('prom')         || 'http://localhost:9090',
+  grafana:      params.get('grafana')      || 'http://localhost:3000',
+  alertmanager: params.get('alertmanager') || 'http://localhost:9093',
+  n8n:          params.get('n8n')          || 'http://localhost:5678',
+};
+
+// Set header links
+document.getElementById('link-prom').href         = CFG.prom;
+document.getElementById('link-grafana').href      = CFG.grafana;
+document.getElementById('link-alertmanager').href = CFG.alertmanager;
+document.getElementById('link-n8n').href          = CFG.n8n;
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let instances = {};    // { id: { app, namespace, pod, url, status, chaos } }
+let selectedId = null;
+
+// ── Register instance (called by target-app on startup) ──────────────────────
+// The dashboard exposes a simple in-memory registry via broadcast channel
+// Students can also manually add an instance
+function registerInstance(data) {
+  try {
+    const id = `${data.namespace}/${data.pod || data.app}`;
+    instances[id] = {
+      ...data,
+      id,
+      url: data.url || `http://${data.host}:${data.port || 8080}`,
+      chaos: { cpu: false, memory: false },
+      lastSeen: Date.now(),
+    };
+    renderInstances();
+    log('ok', `Instance registered: ${id}`);
+    if (!selectedId) selectInstance(id);
+  } catch(e) {
+    log('err', `Register failed: ${e.message}`);
+  }
+}
+
+// ── Manual add instance ───────────────────────────────────────────────────────
+function addInstance() {
+  const url = prompt('Target app URL (e.g. http://3.251.68.65:9090):');
+  if (!url) return;
+  try {
+    fetchJson(`${url}/info`).then(info => {
+      registerInstance({ ...info, url });
+      toast(`Connected to ${info.app} @ ${url}`, 'ok');
+    }).catch(e => toast(`Cannot reach ${url}: ${e.message}`, 'err'));
+  } catch(e) {
+    log('err', e.message);
+  }
+}
+
+// ── Select instance ───────────────────────────────────────────────────────────
+function selectInstance(id) {
+  selectedId = id;
+  document.querySelectorAll('.instance-card').forEach(c => c.classList.remove('active'));
+  const card = document.getElementById(`inst-${CSS.escape(id)}`);
+  if (card) card.classList.add('active');
+  const inst = instances[id];
+  document.getElementById('selected-inst-label').textContent = inst ? inst.pod || inst.app : 'SELECT INSTANCE';
+}
+
+// ── Trigger chaos ─────────────────────────────────────────────────────────────
+async function triggerChaos(type) {
+  if (!selectedId) { toast('Select an instance first', 'warn'); return; }
+  const inst = instances[selectedId];
+  if (!inst) return;
+  const url = inst.url;
+  try {
+    let res;
+    switch(type) {
+      case 'cpu':
+        res = await fetchJson(`${url}/chaos/cpu`, 'POST', { cores: 1, duration_seconds: 60 });
+        inst.chaos.cpu = true;
+        break;
+      case 'cpu-sustained':
+        res = await fetchJson(`${url}/chaos/cpu`, 'POST', { cores: 2, duration_seconds: 300 });
+        inst.chaos.cpu = true;
+        break;
+      case 'memory':
+        res = await fetchJson(`${url}/chaos/memory`, 'POST', { mb_per_second: 50, max_mb: 500 });
+        inst.chaos.memory = true;
+        break;
+      case 'error-loop':
+        res = await fetchJson(`${url}/chaos/error-loop`, 'POST', {});
+        break;
+      case 'crash':
+        res = await fetchJson(`${url}/chaos/crash`, 'POST', { delay_seconds: 5 });
+        break;
+      case 'stop':
+        res = await fetchJson(`${url}/chaos/all`, 'DELETE');
+        inst.chaos = { cpu: false, memory: false };
+        break;
+    }
+    log('ok', `[${selectedId}] ${type} → ${res.status}`);
+    toast(`${type.toUpperCase()} triggered on ${inst.pod || inst.app}`, 'ok');
+    renderInstances();
+  } catch(e) {
+    log('err', `[${selectedId}] ${type} FAILED: ${e.message}`);
+    toast(`Failed: ${e.message}`, 'err');
+  }
+}
+
+// ── Poll instance status ───────────────────────────────────────────────────────
+async function pollInstances() {
+  for (const [id, inst] of Object.entries(instances)) {
+    try {
+      const status = await fetchJson(`${inst.url}/chaos/status`);
+      inst.chaos.cpu = status.cpu_active;
+      inst.chaos.memory = status.memory_active;
+      inst.chaos.memMb = status.memory_current_mb;
+      inst.alive = true;
+      inst.lastSeen = Date.now();
+    } catch {
+      inst.alive = false;
+    }
+  }
+  renderInstances();
+}
+
+// ── Render instances ──────────────────────────────────────────────────────────
+function renderInstances() {
+  const list = document.getElementById('instances-list');
+  const ids = Object.keys(instances);
+  document.getElementById('instance-count').textContent = ids.length;
+
+  if (ids.length === 0) {
+    list.innerHTML = `<div class="no-instances">No instances registered.<br>Deploy target-app to K8s<br>with DASHBOARD_URL set.<br><br><button onclick="addInstance()" style="margin-top:8px;background:none;border:1px solid var(--accent);color:var(--accent);font-family:var(--mono);font-size:11px;padding:6px 14px;cursor:pointer;letter-spacing:1px;">+ ADD MANUALLY</button></div>`;
+    return;
+  }
+
+  list.innerHTML = ids.map(id => {
+    const inst = instances[id];
+    const alive = inst.alive !== false;
+    const pills = [];
+    if (inst.chaos?.cpu) pills.push(`<span class="pill cpu">CPU</span>`);
+    if (inst.chaos?.memory) pills.push(`<span class="pill mem">MEM ${inst.chaos.memMb||0}MB</span>`);
+    if (!alive) pills.push(`<span class="pill crash">OFFLINE</span>`);
+    if (pills.length === 0) pills.push(`<span class="pill idle">IDLE</span>`);
+
+    return `<div class="instance-card ${selectedId===id?'active':''}" id="inst-${id.replace(/\//g,'-')}" onclick="selectInstance('${id}')">
+      <div class="inst-name">${inst.app || 'target-app'}</div>
+      <div class="inst-meta">${inst.namespace} / ${inst.pod || '—'}</div>
+      <div class="inst-status">
+        <div class="status-led ${alive?'ok':'err'}"></div>
+        <span style="font-size:10px;color:var(--dim)">${inst.url}</span>
+      </div>
+      <div class="chaos-pills">${pills.join('')}</div>
+    </div>`;
+  }).join('') + `<div style="padding:12px 16px;"><button onclick="addInstance()" style="width:100%;background:none;border:1px dashed var(--border);color:var(--dim);font-family:var(--mono);font-size:10px;padding:8px;cursor:pointer;letter-spacing:1px;transition:all 0.2s;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">+ ADD INSTANCE</button></div>`;
+
+  // Re-sync selected state
+  if (selectedId && instances[selectedId]) {
+    const card = document.getElementById(`inst-${selectedId.replace(/\//g,'-')}`);
+    if (card) card.classList.add('active');
+  }
+
+  // Update status bar
+  const total = ids.length;
+  const alive = Object.values(instances).filter(i => i.alive !== false).length;
+  document.getElementById('led-instances').className = `status-led ${total>0&&alive===total?'ok':total>0?'warn':''}`;
+  document.getElementById('status-instances').textContent = `INSTANCES: ${alive}/${total} ALIVE`;
+}
+
+// ── Check Prometheus ──────────────────────────────────────────────────────────
+async function checkProm() {
+  try {
+    const r = await fetch(`${CFG.prom}/api/v1/query?query=up`, { signal: AbortSignal.timeout(3000) });
+    const ok = r.ok;
+    document.getElementById('led-prom').className = `status-led ${ok?'ok':'err'}`;
+    document.getElementById('status-prom').textContent = `PROMETHEUS ${ok?'CONNECTED':'UNREACHABLE'}`;
+  } catch {
+    document.getElementById('led-prom').className = 'status-led err';
+    document.getElementById('status-prom').textContent = 'PROMETHEUS UNREACHABLE';
+  }
+}
+
+// ── Clock ─────────────────────────────────────────────────────────────────────
+function updateClock() {
+  document.getElementById('status-time').textContent = new Date().toISOString().replace('T',' ').slice(0,19) + ' UTC';
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+async function fetchJson(url, method='GET', body=null) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(5000) };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(url, opts);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+function log(level, msg) {
+  const logEl = document.getElementById('log');
+  const ts = new Date().toTimeString().slice(0,8);
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = `<span class="log-ts">${ts}</span><span class="log-level ${level}">${level.toUpperCase()}</span><span class="log-msg">${msg}</span>`;
+  logEl.prepend(entry);
+  if (logEl.children.length > 100) logEl.lastChild.remove();
+}
+
+function clearLog() {
+  document.getElementById('log').innerHTML = '';
+}
+
+function toast(msg, type='ok') {
+  const c = document.getElementById('toasts');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 3200);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+log('info', 'Dashboard initialized');
+log('info', `Prometheus: ${CFG.prom}`);
+updateClock();
+setInterval(updateClock, 1000);
+setInterval(checkProm, 10000);
+setInterval(pollInstances, 5000);
+checkProm();
+
+// Listen for instance registrations via BroadcastChannel
+try {
+  const bc = new BroadcastChannel('clawops-dashboard');
+  bc.onmessage = (e) => {
+    if (e.data?.type === 'register') registerInstance(e.data.payload);
+  };
+} catch(e) { /* not supported in all envs */ }
+</script>
+</body>
+</html>
