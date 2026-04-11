@@ -1,5 +1,3 @@
-version: '3.8'
-
 # CLUSTER_HOST and MASTER_IP are set automatically by setup.sh into .env
 # They solve the kops private DNS problem by injecting /etc/hosts into containers
 
@@ -32,7 +30,6 @@ services:
     volumes:
       - n8n_data:/home/node/.n8n
     extra_hosts:
-      - "${CLUSTER_HOST:-localhost}:${MASTER_IP:-127.0.0.1}"
     depends_on:
       - mcp-server
     networks:
@@ -52,7 +49,6 @@ services:
     volumes:
       - ${KUBECONFIG_PATH:-~/.kube/config}:/root/.kube/config:ro
     extra_hosts:
-      - "${CLUSTER_HOST:-localhost}:${MASTER_IP:-127.0.0.1}"
     networks:
       - workshop
 
