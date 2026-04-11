@@ -232,18 +232,28 @@ start_stack() {
   cd "$(dirname "$0")"
   load_env
 
-  # Guard: Prometheus must be installed first so MCP gets the correct URL
-  if [[ -z "$PROMETHEUS_URL" ]]; then
-    err "PROMETHEUS_URL not set — run option 4 (Install Prometheus + Grafana) first."
-    err "The MCP server needs this URL to query metrics. Stack NOT started."
-    return
+  # ── Pre-flight checks ────────────────────────────────────────────────
+  local ok=true
+  echo "  Checking requirements..."
+
+  [[ -z "$EC2_PUBLIC_IP" ]]    && { err "EC2_PUBLIC_IP not set  → run option 3 (Configure API keys)"; ok=false; }
+  [[ -z "$GEMINI_API_KEY" ]]   && { warn "GEMINI_API_KEY not set → run option 3 (AI Agent will not work)"; }
+  [[ -z "$PROMETHEUS_URL" ]]   && { err "PROMETHEUS_URL not set  → run option 4 (Install Prometheus + Grafana) first"; ok=false; }
+  [[ -z "$TOTP_SECRET" ]]      && { warn "TOTP_SECRET not set    → run option 3 (approval gate needs 2FA)"; }
+  [[ -z "$WRITE_APPROVAL_TOKEN" ]] && { warn "WRITE_APPROVAL_TOKEN not set → run option 3"; }
+
+  # Check kubeconfig
+  if [[ ! -f "${KUBECONFIG_PATH:-$HOME/.kube/config}" ]]; then
+    err "kubeconfig not found at ${KUBECONFIG_PATH:-$HOME/.kube/config} → run option 2 (Re-configure cluster)"
+    ok=false
   fi
 
-  # Guard: EC2 IP must be known for webhooks
-  if [[ -z "$EC2_PUBLIC_IP" ]]; then
-    err "EC2_PUBLIC_IP not set — run option 3 (Configure API keys) first."
+  if [[ "$ok" == "false" ]]; then
+    echo ""
+    err "Pre-flight failed — fix the errors above before starting the stack."
     return
   fi
+  echo ""
 
   docker compose up -d --build
   echo ""
