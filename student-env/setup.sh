@@ -762,10 +762,11 @@ deploy_to_k8s() {
 
 # ── First-run check ───────────────────────────────────────────────────
 first_run() {
-  [ ! -f "$ENV_FILE" ] && cp "$(dirname "$0")/.env.example" "$ENV_FILE"
+  local is_new=false
+  [ ! -f "$ENV_FILE" ] && cp "$(dirname "$0")/.env.example" "$ENV_FILE" && is_new=true
   load_env
 
-  if ! kubectl_works || [[ -z "$GEMINI_API_KEY" ]]; then
+  if [[ "$is_new" == "true" ]]; then
     echo -e "${BOLD}${CYAN}"
     echo "  ╔══════════════════════════════════════════╗"
     echo "  ║   n8n DevOps Workshop — First Run Setup  ║"
