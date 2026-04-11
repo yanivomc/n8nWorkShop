@@ -1,12 +1,13 @@
-FROM nginx:alpine
+FROM python:3.11-slim
 
-# Copy dashboard HTML
-COPY index.html /usr/share/nginx/html/index.html
+WORKDIR /app
 
-# Startup script — injects env vars as config.js before nginx starts
-COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app.py .
+COPY index.html /app/static/index.html
 
 EXPOSE 80
 
-CMD ["/docker-entrypoint.sh"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "80", "--log-level", "info"]
