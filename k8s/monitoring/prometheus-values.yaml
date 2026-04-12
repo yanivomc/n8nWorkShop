@@ -19,7 +19,8 @@ prometheus:
     podMonitorSelectorNilUsesHelmValues: false
     serviceMonitorSelectorNilUsesHelmValues: false
     ruleSelectorNilUsesHelmValues: false
-    ruleNamespaceSelector: {}  # watch ALL namespaces for PrometheusRules
+    # Watch ALL namespaces for PrometheusRules (not just monitoring namespace)
+    ruleNamespaceSelector: {}
 
   service:
     type: LoadBalancer
