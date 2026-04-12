@@ -342,7 +342,7 @@
             {
               "id": "cond3",
               "leftValue": "={{ $json.route }}",
-              "rightValue": "approve",
+              "rightValue": "approval",
               "operator": {
                 "type": "string",
                 "operation": "equals"
