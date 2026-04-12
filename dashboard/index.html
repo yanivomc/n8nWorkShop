@@ -509,12 +509,54 @@ async function fetchJ(url,method,body){
   return r.json();
 }
 
+// Persist logs + instance state in sessionStorage
+const LOG_KEY='clawops_logs';
+const INST_KEY='clawops_instances';
+const MAX_LOGS=100;
+
+function saveLogs(){
+  try{
+    const el=document.getElementById('log');
+    const entries=[];
+    for(const c of el.children) entries.push(c.innerHTML);
+    sessionStorage.setItem(LOG_KEY,JSON.stringify(entries.slice(0,MAX_LOGS)));
+  }catch(e){}
+}
+
+function restoreLogs(){
+  try{
+    const saved=sessionStorage.getItem(LOG_KEY);
+    if(!saved) return;
+    const entries=JSON.parse(saved);
+    const el=document.getElementById('log');
+    entries.forEach(html=>{
+      const d=document.createElement('div');d.className='log-entry';
+      d.innerHTML=html;el.appendChild(d);
+    });
+  }catch(e){}
+}
+
+function saveInstances(){
+  try{ sessionStorage.setItem(INST_KEY,JSON.stringify(instances)); }catch(e){}
+}
+
+function restoreInstances(){
+  try{
+    const saved=sessionStorage.getItem(INST_KEY);
+    if(!saved) return;
+    const saved_inst=JSON.parse(saved);
+    Object.assign(instances,saved_inst);
+    renderInst();
+  }catch(e){}
+}
+
 function log(level,msg){
   const el=document.getElementById('log');
   const ts=new Date().toTimeString().slice(0,8);
   const d=document.createElement('div');d.className='log-entry';
   d.innerHTML='<span class="log-ts">'+ts+'</span><span class="log-lv '+level+'">'+level.toUpperCase()+'</span><span>'+String(msg).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</span>';
-  el.prepend(d);if(el.children.length>100)el.lastChild.remove();
+  el.prepend(d);if(el.children.length>MAX_LOGS)el.lastChild.remove();
+  saveLogs();
 }
 
 function toast(msg,type){
@@ -525,6 +567,8 @@ function toast(msg,type){
 }
 
 const cfg=loadCfg();applyCfg(cfg);
+restoreLogs();
+restoreInstances();
 log('info','Dashboard initialized');
 log('info','Prometheus: '+cfg.prom);
 setInterval(()=>{document.getElementById('clock').textContent=new Date().toISOString().replace('T',' ').slice(0,19)+' UTC';},1000);
