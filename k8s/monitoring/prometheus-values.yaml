@@ -113,7 +113,9 @@ alertmanager:
       - name: n8n-webhook
         webhook_configs:
           # Injected by setup.sh option 6 from EC2_PUBLIC_IP in .env
-          - url: "http://EC2_PUBLIC_IP_PLACEHOLDER:5678/webhook/prometheus-alert"
+          # S5 is the production alert handler (confidence-gated, enriched)
+          # S3 is deactivated — kept for teaching only
+          - url: "http://EC2_PUBLIC_IP_PLACEHOLDER:5678/webhook/prometheus-alert-s5"
             send_resolved: true
 
 # ── Workshop Alert Rules ───────────────────────────────────────────────
