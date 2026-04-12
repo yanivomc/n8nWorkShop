@@ -174,7 +174,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const text = $input.first().json.text.trim();\nconst chatId = $input.first().json.chatId;\nconst from = $input.first().json.from;\nconst userId = $input.first().json.json?.message?.from?.id || 'unknown';\nconst username = $input.first().json.json?.message?.from?.username || from;\n\nif (text.startsWith('/deny')) {\n  // Audit log\n  console.log(JSON.stringify({ event: 'DENIED', user: from, userId, chatId, timestamp: new Date().toISOString() }));\n  return [{ json: { route: 'deny', chatId, message: '\u274c Action denied by ' + from + '. No changes made.' } }];\n}\n\nconst parts = text.split(' ');\nconst totpCode = parts[1] || '';\nconst store = $getWorkflowStaticData('global');\nconst pending = store.pending?.[chatId];\n\nif (!pending) {\n  return [{ json: { route: 'deny', chatId, message: '\u26a0\ufe0f No pending action. Ask your question first.' } }];\n}\n\ndelete store.pending[chatId];\n\n// Audit log \u2014 TOTP validation happens in MCP\nconsole.log(JSON.stringify({ event: 'APPROVE_ATTEMPT', user: from, userId, username, chatId, command: pending.command, timestamp: new Date().toISOString() }));\n\nreturn [{ json: { route: 'approve', chatId, command: pending.command, approvedBy: from, userId, username, token: totpCode } }];"
+        "jsCode": "const text = $input.first().json.text.trim();\nconst chatId = $input.first().json.chatId;\nconst from = $input.first().json.from;\n\nif (text.startsWith('/deny')) {\n  console.log(JSON.stringify({ event: 'DENIED', user: from, chatId, timestamp: new Date().toISOString() }));\n  return [{ json: { route: 'deny', chatId, message: '\u274c Action denied by ' + from + '. No changes made.' } }];\n}\n\n// Parse: /approve <totp> <key>\nconst parts = text.split(' ');\nconst totpCode = parts[1] || '';\nconst incidentKey = parts[2] || '';\n\nif (!incidentKey) {\n  return [{ json: { route: 'deny', chatId, message: '\u26a0\ufe0f Missing incident key. Usage: /approve <totp> <key>' } }];\n}\n\nconsole.log(JSON.stringify({ event: 'APPROVE_ATTEMPT', user: from, chatId, incidentKey, timestamp: new Date().toISOString() }));\n\nreturn [{ json: { route: 'approval', chatId, incidentKey, approvedBy: from, token: totpCode } }];"
       },
       "id": "9303dd3d-422d-425b-81e2-cfef7ac558a9",
       "name": "Validate Approval",
@@ -191,7 +191,7 @@
         "url": "http://mcp-server:8000/tools/kubectl-write",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ command: $json.command, approved_by: $json.approvedBy, approval_token: $json.token }) }}",
+        "jsonBody": "={{ JSON.stringify({\n  command: $('Fetch Incident Command').first().json.command,\n  token: $('Validate Approval').first().json.token,\n  approved_by: $('Validate Approval').first().json.approvedBy\n}) }}",
         "options": {}
       },
       "id": "66fa8609-f669-4d17-9bbf-6bc458b7b49b",
@@ -377,6 +377,21 @@
         -2800,
         -800
       ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://mcp-server:8000/incidents/{{ $json.incidentKey }}",
+        "options": {}
+      },
+      "id": "lookup-incident-http",
+      "name": "Fetch Incident Command",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1152,
+        528
+      ]
     }
   ],
   "connections": {
@@ -530,7 +545,7 @@
       "main": [
         [
           {
-            "node": "Execute Write",
+            "node": "Fetch Incident Command",
             "type": "main",
             "index": 0
           }
@@ -550,6 +565,17 @@
           {
             "node": "K8s Assistant",
             "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Incident Command": {
+      "main": [
+        [
+          {
+            "node": "Execute Write",
+            "type": "main",
             "index": 0
           }
         ]
