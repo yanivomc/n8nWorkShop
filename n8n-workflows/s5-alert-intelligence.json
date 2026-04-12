@@ -101,7 +101,9 @@
         "model": "gemini-2.0-flash",
         "options": {
           "systemMessage": "You are a senior SRE investigating a Kubernetes incident. You have been given an enriched alert with correlated signal data.\n\nYour job:\n1. Confirm or challenge the AI assessment based on the signal data\n2. Identify the most likely root cause\n3. If a remediation action is appropriate, end with exactly:\n   SRE_ACTION: kubectl <command>\n   (omit SRE_ACTION if no write action needed)\n\nBe concise. Max 3 sentences of analysis. Focus on what matters for the on-call engineer.\nDo NOT explain what Kubernetes is. Assume expert audience."
-        }
+        },
+        "promptType": "define",
+        "text": "={{ \n\"Alert: \" + $('PromQL Enrichment + Confidence').first().json.alertname + \n\" | Namespace: \" + $('PromQL Enrichment + Confidence').first().json.namespace +\n\" | Pod: \" + $('PromQL Enrichment + Confidence').first().json.pod +\n\" | Severity: \" + $('PromQL Enrichment + Confidence').first().json.severity +\n\" | Duration: \" + $('PromQL Enrichment + Confidence').first().json.durationStr +\n\" | Summary: \" + $('PromQL Enrichment + Confidence').first().json.summary +\n\" | Description: \" + $('PromQL Enrichment + Confidence').first().json.description +\n\" | Confidence: \" + $('PromQL Enrichment + Confidence').first().json.confidenceLabel + \" (\" + $('PromQL Enrichment + Confidence').first().json.confidencePct + \"%) \" +\n\" | Signals: \" + JSON.stringify($('PromQL Enrichment + Confidence').first().json.signals.map(s => s.label + \"=\" + s.value))\n}}"
       },
       "id": "ai-agent",
       "name": "AI Agent (Gemini)",
@@ -266,6 +268,24 @@
               "id": "prom-url",
               "name": "promUrl",
               "value": "={{ $vars.PROMETHEUS_URL || 'http://localhost:9090' }}",
+              "type": "string"
+            },
+            {
+              "id": "alert-pass",
+              "name": "alert",
+              "value": "={{ $json.alert }}",
+              "type": "object"
+            },
+            {
+              "id": "body-pass",
+              "name": "body",
+              "value": "={{ $json.body }}",
+              "type": "object"
+            },
+            {
+              "id": "ts-pass",
+              "name": "timestamp",
+              "value": "={{ $json.timestamp }}",
               "type": "string"
             }
           ]
