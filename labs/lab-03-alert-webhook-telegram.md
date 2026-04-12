@@ -94,7 +94,7 @@ The workflow reads `TELEGRAM_CHAT_ID` from n8n variables.
 2. Click **Inactive** toggle → switch to **Active**
 3. The webhook is now live at:
    ```
-   http://54.246.254.41:5678/webhook/prometheus-alert
+   http://<EC2_PUBLIC_IP>:5678/webhook/prometheus-alert
    ```
 
 > ⚠️ Webhook nodes only work when the workflow is **Active** (not just saved). If the workflow is inactive, Alertmanager POSTs will return 404.

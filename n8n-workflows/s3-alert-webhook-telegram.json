@@ -120,7 +120,7 @@
     },
     {
       "parameters": {
-        "chatId": "=5926921251",
+        "chatId": "TELEGRAM_CHAT_ID_CHANGEME",
         "text": "={{ $json.telegramMessage }}",
         "additionalFields": {
           "disable_web_page_preview": true,
@@ -367,7 +367,7 @@
         "updatedAt": "2026-04-09T09:55:44.875Z",
         "createdAt": "2026-04-09T09:55:12.447Z",
         "id": "Z5ZsysJ0rW35XOYF",
-        "name": "YANIV COHEN <yanivomc@gmail.com>",
+        "name": "Workshop Instructor <changeme@example.com>",
         "type": "personal",
         "icon": null,
         "description": null,

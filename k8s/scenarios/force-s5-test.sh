@@ -6,12 +6,18 @@
 #   ./force-s5-test.sh TargetAppMemoryLeak test-002
 #   ./force-s5-test.sh TargetAppMemoryCritical test-003
 
-NGROK_URL="${NGROK_URL:-https://quadruplex-goofily-colton.ngrok-free.dev}"
+# Load from .env if not set in environment
+[ -f "$(dirname "$0")/../../student-env/.env" ] && source "$(dirname "$0")/../../student-env/.env"
+NGROK_URL="${WEBHOOK_URL:-${NGROK_URL:-}}"
 ALERTNAME="${1:-TargetAppCPUStress}"
 RUN_ID="${2:-test-$(date +%s)}"
 NAMESPACE="workshop"
 POD=$(kubectl get pod -n workshop -l app=target-app -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "target-app-unknown")
 
+if [ -z "$NGROK_URL" ]; then
+  echo "ERROR: WEBHOOK_URL not set. Run setup.sh option 3 first."
+  exit 1
+fi
 echo "→ Sending test alert: $ALERTNAME (run_id=$RUN_ID)"
 echo "→ Pod: $POD"
 

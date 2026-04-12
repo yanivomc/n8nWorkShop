@@ -369,7 +369,7 @@ function registerInstance(d){
 }
 
 function addInstance(){
-  const url=prompt('Target-app URL (e.g. http://3.251.68.65:9090):');
+  const url=prompt('Target-app URL (e.g. http://<EC2_IP>:9090):');
   if(!url)return;
   fetchJ(url+'/info').then(info=>{
     registerInstance({...info,url});toast('Connected: '+info.app,'ok');
