@@ -87,17 +87,13 @@
         "method": "POST",
         "url": "http://mcp-server:8000/tools/promql",
         "sendBody": true,
-        "specifyBody": "json",
         "parametersBody": {
           "values": [
             {
-              "name": "query",
-              "type": "string",
-              "description": "A valid PromQL expression, e.g. 'up' or 'rate(container_cpu_usage_seconds_total[5m])'"
+              "name": "query"
             }
           ]
-        },
-        "jsonBody": "={{ JSON.stringify({query: $fromAI('query', 'A valid PromQL expression, e.g. up or container_memory_usage_bytes{pod=\"target-app\"}', 'string')}) }}"
+        }
       },
       "id": "a1b2c3d4-0005-0005-0005-000000000005",
       "name": "promql",
