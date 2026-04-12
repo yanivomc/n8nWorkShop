@@ -115,6 +115,15 @@ async def remove_instance(inst_id: str):
         return {"status": "removed"}
     return JSONResponse({"status": "not_found"}, status_code=404)
 
+@app.get("/api/incidents")
+async def proxy_incidents(limit: int = 20):
+    """Proxy incidents list from MCP server."""
+    try:
+        r = await _client.get(f"http://mcp-server:8000/incidents?limit={limit}")
+        return r.json()
+    except Exception as e:
+        return {"incidents": [], "count": 0, "error": str(e)}
+
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "instances": len(_instances)}

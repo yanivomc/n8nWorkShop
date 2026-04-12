@@ -516,7 +516,7 @@ const MAX_LOGS=100;
 
 async function loadIncidents(){
   try{
-    const r=await fetchJ('http://mcp-server:8000/incidents?limit=20');
+    const r=await fetchJ('/api/incidents?limit=20');
     const el=document.getElementById('incidents-list');
     if(!r.incidents||!r.incidents.length){el.innerHTML='<div style="color:var(--muted);padding:4px">No incidents yet</div>';return;}
     el.innerHTML=r.incidents.map(i=>`
