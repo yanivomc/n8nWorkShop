@@ -43,7 +43,7 @@
         "promptType": "define",
         "text": "={{ $json.from }} asks: {{ $json.text }}\n\nAnswer using kubectl_read and/or promql. Be concise \u2014 this is a Telegram chat reply.\nFormat your response clearly with emojis. Keep it under 300 words.",
         "options": {
-          "systemMessage": "You are a Kubernetes SRE assistant helping engineers via Telegram chat.\n\nYou have tools:\n1. kubectl_read \u2014 read-only kubectl. Parameter: \"command\"\n2. promql \u2014 PromQL queries. Parameter: \"query\"\n3. kubectl_write \u2014 write operations, REQUIRES valid TOTP token\n\nWhen the user sends /approve <totp> <key> (e.g. /approve 123456 k42a):\n1. Extract the 4-char incident key (e.g. k42a)\n2. Call kubectl_read with: kubectl get pods -n workshop (to confirm cluster state)\n3. Then call kubectl_write with the exact command from the incident\n\nThe incident key maps to a stored command in the system. Use the key exactly as provided.\n\nFor other messages: investigate using kubectl_read and promql, be concise, use emojis \u2705 \u274c \u26a0\ufe0f \ud83d\udcca\n\nAfter investigating, if action needed end with:\nSRE_ACTION: <kubectl subcommand and flags>"
+          "systemMessage": "You are a Kubernetes SRE assistant helping engineers via Telegram chat.\n\nYou have tools:\n1. kubectl_read \u2014 read-only kubectl. Parameter: \"command\"\n2. promql \u2014 PromQL queries. Parameter: \"query\"  \n3. kubectl_write \u2014 write operations, REQUIRES valid TOTP token\n4. lookup_incident \u2014 look up stored kubectl command by 4-char incident key. Parameter: \"key\"\n\n## When user sends /approve <totp> <key> (e.g. /approve 123456 k42a):\n1. Extract the 4-char key (e.g. k42a)\n2. Call lookup_incident with that key \u2192 get the stored command\n3. Call kubectl_write with: TOTP=<totp> and the retrieved command\n4. Reply with confirmation\n\n## For all other messages:\nInvestigate freely using kubectl_read and promql.\nBe concise, use emojis \u2705 \u274c \u26a0\ufe0f \ud83d\udcca\nIf action needed, end with: SRE_ACTION: kubectl <command>"
         }
       },
       "id": "892c14c5-9024-431c-bfe2-f031d19ff1a4",
@@ -361,6 +361,22 @@
         -1050,
         528
       ]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Look up an incident by its 4-char key to retrieve the stored kubectl command. Use this when the user sends /approve with a key like 'k42a'. Parameter: key (the 4-char incident key)",
+        "method": "GET",
+        "url": "=http://mcp-server:8000/incidents/{{ $fromAI('key', 'the 4-char incident key from the approve command', 'string') }}",
+        "options": {}
+      },
+      "id": "lookup-incident-tool",
+      "name": "lookup_incident",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        -2800,
+        -800
+      ]
     }
   ],
   "connections": {
@@ -523,6 +539,17 @@
           {
             "node": "Send Denial",
             "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "lookup_incident": {
+      "ai_tool": [
+        [
+          {
+            "node": "K8s Assistant",
+            "type": "ai_tool",
             "index": 0
           }
         ]
