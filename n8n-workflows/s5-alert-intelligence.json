@@ -261,7 +261,7 @@
             {
               "id": "1",
               "name": "promUrl",
-              "value": "={{ $vars.PROMETHEUS_URL || 'http://localhost:9090' }}",
+              "value": "={{ ($json.body?.alerts?.[0]?.generatorURL || 'http://monitoring-kube-prometheus-prometheus.monitoring:9090').split('/graph')[0] }}",
               "type": "string"
             },
             {
