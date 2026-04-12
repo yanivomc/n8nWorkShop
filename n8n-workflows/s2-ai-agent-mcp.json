@@ -60,8 +60,7 @@
         "method": "POST",
         "url": "http://mcp-server:8000/tools/kubectl-read",
         "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\"command\": \"{command}\"}",
+        "specifyBody": "keypairs",
         "parametersBody": {
           "values": [
             {
@@ -87,8 +86,7 @@
         "method": "POST",
         "url": "http://mcp-server:8000/tools/promql",
         "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\"query\": \"{query}\"}",
+        "specifyBody": "keypairs",
         "parametersBody": {
           "values": [
             {

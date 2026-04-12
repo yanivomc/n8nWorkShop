@@ -127,8 +127,7 @@
         "method": "POST",
         "url": "http://mcp-server:8000/tools/kubectl-read",
         "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\"command\": \"{command}\"}"
+        "specifyBody": "keypairs"
       },
       "id": "01cd813c-6c38-4bcd-ac20-c2c3b770db32",
       "name": "kubectl_read",
