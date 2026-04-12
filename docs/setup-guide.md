@@ -241,3 +241,71 @@ Runs 17 checks covering:
 | TOTP "invalid token" | Check TOTP_SECRET in container: `docker exec mcp-server env \| grep TOTP` |
 | force-alert.sh HTTP 404 | EC2_PUBLIC_IP not in .env — run option 3 |
 | Alertmanager still sending system alerts | Helm upgrade didn't apply — re-run option 4 |
+
+---
+
+## Step 9 — Import S5 Workflow (Production Alert Handler)
+
+S5 replaces S3 as the production alert handler. S3 stays in n8n but **deactivated** — it's used only during the teaching session to explain how alert pipelines work. Once students understand S3, S5 takes over.
+
+```bash
+cd ~/n8nWorkShop && git pull
+export N8N_API_KEY="<your key>"
+
+python3 -c "
+import json
+with open('n8n-workflows/s5-alert-intelligence.json') as f: d=json.load(f)
+with open('/tmp/s5.json','w') as f: json.dump(d,f)
+" && curl -s -X POST http://localhost:5678/api/v1/workflows \
+  -H "X-N8N-API-KEY: $N8N_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d @/tmp/s5.json | python3 -c "import sys,json; d=json.load(sys.stdin); print('S5:', d.get('id','ERR'))"
+```
+
+After importing:
+1. Open S5 in n8n UI → set credentials on AI Agent + Telegram nodes
+2. Toggle **Active** on S5
+3. Deactivate S3 (toggle off) — keep it in n8n for reference
+
+### Apply updated Alertmanager config
+
+S5 uses a different webhook path (`/webhook/prometheus-alert-s5`). Re-run setup.sh option 3 to update Prometheus/Alertmanager:
+
+```bash
+./setup.sh  # option 3 (Install Prometheus + Grafana)
+```
+
+Or manually upgrade Helm:
+```bash
+source student-env/.env
+sed "s|EC2_PUBLIC_IP_PLACEHOLDER|${EC2_PUBLIC_IP}|g" k8s/monitoring/prometheus-values.yaml > /tmp/prom-values.yaml
+helm upgrade monitoring prometheus-community/kube-prometheus-stack \
+  -n monitoring -f /tmp/prom-values.yaml
+```
+
+---
+
+## Session Flow (Production State)
+
+Once all workflows are imported and configured:
+
+| Workflow | State | Purpose |
+|----------|-------|---------|
+| S2 | ✅ Active | Manual K8s assistant (teaching) |
+| S3 | ⛔ Deactivated | Alert basics (teaching only, keep for demo) |
+| S4 | ✅ Active | Telegram bidirectional + TOTP approval |
+| S5 | ✅ Active | Production alert intelligence + enrichment |
+
+**The full loop:**
+```
+Dashboard trigger chaos
+  → Prometheus alert fires
+  → Alertmanager → S5 webhook
+  → S5 enriches + scores confidence
+  → Sends elegant Telegram message
+  → Engineer reads: signal bars, AI assessment, recommended action
+  → Engineer replies: /approve <totp>
+  → S4 picks up (same chat = shared context)
+  → MCP executes write command
+  → Confirmation sent
+```
