@@ -252,6 +252,13 @@ def update_incident(key: str, req: IncidentUpdate):
     logger.info(f"INCIDENT UPDATED | key={key} | status={req.status}")
     return {"key": key, "status": req.status}
 
+@app.delete("/incidents")
+def delete_all_incidents():
+    with get_db() as conn:
+        conn.execute("DELETE FROM incidents")
+    logger.info("All incidents deleted")
+    return {"deleted": True}
+
 @app.get("/incidents")
 def list_incidents(limit: int = 50):
     with get_db() as conn:

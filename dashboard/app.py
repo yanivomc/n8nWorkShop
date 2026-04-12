@@ -127,16 +127,10 @@ async def proxy_incidents(limit: int = 20):
 
 @app.delete("/api/incidents")
 async def delete_all_incidents():
-    """Delete all incidents from MCP server."""
+    """Proxy DELETE all incidents to MCP server."""
     try:
-        import sqlite3, os
-        db_path = "/data/incidents.db"
-        if os.path.exists(db_path):
-            conn = sqlite3.connect(db_path)
-            conn.execute("DELETE FROM incidents")
-            conn.commit()
-            conn.close()
-        return {"deleted": True}
+        r = await _client.delete(f"{MCP_URL}/incidents")
+        return r.json()
     except Exception as e:
         return {"deleted": False, "error": str(e)}
 
