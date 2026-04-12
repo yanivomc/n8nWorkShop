@@ -514,6 +514,21 @@ const LOG_KEY='clawops_logs';
 const INST_KEY='clawops_instances';
 const MAX_LOGS=100;
 
+async function loadIncidents(){
+  try{
+    const r=await fetchJ('http://mcp-server:8000/incidents?limit=20');
+    const el=document.getElementById('incidents-list');
+    if(!r.incidents||!r.incidents.length){el.innerHTML='<div style="color:var(--muted);padding:4px">No incidents yet</div>';return;}
+    el.innerHTML=r.incidents.map(i=>`
+      <div class="inc-row">
+        <span class="inc-key">#${i.key}</span>
+        <span title="${i.command}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fg)">${i.alertname} — ${i.pod.split('-').slice(-1)[0]||i.namespace}</span>
+        <span class="inc-status-${i.status}">${i.status}</span>
+        <span style="color:var(--muted)">${i.created_at.slice(11,16)}z</span>
+      </div>`).join('');
+  }catch(e){document.getElementById('incidents-list').innerHTML='<div style="color:var(--muted);padding:4px">MCP unavailable</div>';}
+}
+
 function saveLogs(){
   try{
     const el=document.getElementById('log');
@@ -573,7 +588,7 @@ log('info','Dashboard initialized');
 log('info','Prometheus: '+cfg.prom);
 setInterval(()=>{document.getElementById('clock').textContent=new Date().toISOString().replace('T',' ').slice(0,19)+' UTC';},1000);
 setInterval(checkProm,15000);setInterval(pollInstances,5000);setInterval(pollRegistered,5000);
-checkProm();pollRegistered();
+checkProm();pollRegistered();loadIncidents();setInterval(loadIncidents,30000);
 try{const bc=new BroadcastChannel('clawops');bc.onmessage=e=>{if(e.data&&e.data.type==='register')registerInstance(e.data.payload);};}catch{}
 document.getElementById('modal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeConfig();});
 </script>

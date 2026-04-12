@@ -184,3 +184,78 @@ async def list_tools():
             "example":     "rollout restart deployment/payments -n prod"
         }
     ]}
+
+
+# ── Incident Store (SQLite) ───────────────────────────────────────────────────
+import sqlite3, random, string, time
+from datetime import datetime
+
+DB_PATH = os.getenv("INCIDENTS_DB", "/data/incidents.db")
+
+def get_db():
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute("""CREATE TABLE IF NOT EXISTS incidents (
+        key         TEXT PRIMARY KEY,
+        alertname   TEXT,
+        namespace   TEXT,
+        pod         TEXT,
+        command     TEXT,
+        status      TEXT DEFAULT 'pending',
+        created_at  TEXT,
+        resolved_at TEXT
+    )""")
+    conn.commit()
+    return conn
+
+def gen_key():
+    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=4))
+
+class IncidentCreate(BaseModel):
+    alertname: str
+    namespace: str = "workshop"
+    pod: str = ""
+    command: str
+
+class IncidentUpdate(BaseModel):
+    status: str  # approved / resolved / dismissed
+
+@app.post("/incidents")
+def create_incident(req: IncidentCreate):
+    key = gen_key()
+    now = datetime.utcnow().isoformat()
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO incidents (key,alertname,namespace,pod,command,status,created_at) VALUES (?,?,?,?,?,?,?)",
+            (key, req.alertname, req.namespace, req.pod, req.command, 'pending', now)
+        )
+    logger.info(f"INCIDENT CREATED | key={key} | {req.alertname} | {req.command}")
+    return {"key": key, "status": "pending", "created_at": now}
+
+@app.get("/incidents/{key}")
+def get_incident(key: str):
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM incidents WHERE key=?", (key,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    return dict(row)
+
+@app.patch("/incidents/{key}")
+def update_incident(key: str, req: IncidentUpdate):
+    now = datetime.utcnow().isoformat()
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE incidents SET status=?, resolved_at=? WHERE key=?",
+            (req.status, now, key)
+        )
+    logger.info(f"INCIDENT UPDATED | key={key} | status={req.status}")
+    return {"key": key, "status": req.status}
+
+@app.get("/incidents")
+def list_incidents(limit: int = 50):
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM incidents ORDER BY created_at DESC LIMIT ?", (limit,)
+        ).fetchall()
+    return {"incidents": [dict(r) for r in rows], "count": len(rows)}

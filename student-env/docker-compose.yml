@@ -45,13 +45,16 @@ services:
       - WRITE_APPROVAL_TOKEN=${WRITE_APPROVAL_TOKEN}
       - TOTP_SECRET=${TOTP_SECRET}
       - KUBECONFIG=/root/.kube/config
+      - INCIDENTS_DB=/data/incidents.db
     volumes:
       - ${KUBECONFIG_PATH:-~/.kube/config}:/root/.kube/config:ro
+      - mcp_data:/data
     networks:
       - workshop
 
 volumes:
   n8n_data:
+  mcp_data:
 
 networks:
   workshop:
