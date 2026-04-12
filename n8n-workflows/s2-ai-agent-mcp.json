@@ -60,7 +60,7 @@
         "method": "POST",
         "url": "http://mcp-server:8000/tools/kubectl-read",
         "sendBody": true,
-        "specifyBody": "keypairs",
+        "specifyBody": "json",
         "parametersBody": {
           "values": [
             {
@@ -69,7 +69,8 @@
               "description": "The kubectl subcommand and flags to execute, e.g. 'get pods -A' or 'describe pod my-pod -n default'"
             }
           ]
-        }
+        },
+        "jsonBody": "={{ JSON.stringify({command: $fromAI('command', 'kubectl subcommand without kubectl prefix, e.g. get pods -n workshop', 'string')}) }}"
       },
       "id": "a1b2c3d4-0004-0004-0004-000000000004",
       "name": "kubectl_read",
@@ -86,7 +87,7 @@
         "method": "POST",
         "url": "http://mcp-server:8000/tools/promql",
         "sendBody": true,
-        "specifyBody": "keypairs",
+        "specifyBody": "json",
         "parametersBody": {
           "values": [
             {
@@ -95,7 +96,8 @@
               "description": "A valid PromQL expression, e.g. 'up' or 'rate(container_cpu_usage_seconds_total[5m])'"
             }
           ]
-        }
+        },
+        "jsonBody": "={{ JSON.stringify({query: $fromAI('query', 'A valid PromQL expression, e.g. up or container_memory_usage_bytes{pod=\"target-app\"}', 'string')}) }}"
       },
       "id": "a1b2c3d4-0005-0005-0005-000000000005",
       "name": "promql",
