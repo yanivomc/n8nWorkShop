@@ -548,7 +548,7 @@ async function loadIncidents(){
     const el=document.getElementById('incidents-list');
     if(!r.incidents||!r.incidents.length){el.innerHTML='<div style="color:var(--muted);padding:4px">No incidents yet</div>';return;}
     el.innerHTML=r.incidents.map(i=>`
-      <div class="inc-row" onclick="showIncident(${JSON.stringify(JSON.stringify(i))})" style="cursor:pointer">
+      <div class="inc-row" onclick="showIncident(this)" data-incident='${JSON.stringify(i).replace(/'/g, "&#39;")}' style="cursor:pointer">
         <span class="inc-key">#${i.key}</span>
         <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fg)">${i.alertname}</span>
         <span class="inc-status-${i.status}">${i.status}</span>
@@ -557,8 +557,8 @@ async function loadIncidents(){
   }catch(e){document.getElementById('incidents-list').innerHTML='<div style="color:var(--muted);padding:4px">MCP unavailable</div>';}
 }
 
-function showIncident(jsonStr){
-  const i = JSON.parse(jsonStr);
+function showIncident(el){
+  const i = JSON.parse(el.dataset.incident);
   const el = document.getElementById('incident-detail');
   el.style.display = 'block';
   const statusColor = {pending:'#f59e0b',approved:'#10b981',resolved:'#6b7280',dismissed:'#6b7280'}[i.status] || '#fff';

@@ -422,6 +422,30 @@
         -1372,
         528
       ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=http://mcp-server:8000/incidents/{{ $('Validate Approval').first().json.incidentKey || 'unknown' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"status\": \"resolved\"}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "patch-incident-resolved",
+      "name": "Mark Incident Resolved",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -908,
+        528
+      ]
     }
   ],
   "connections": {
@@ -517,7 +541,7 @@
       "main": [
         [
           {
-            "node": "Send Execution Result",
+            "node": "Mark Incident Resolved",
             "type": "main",
             "index": 0
           }
@@ -623,6 +647,17 @@
         [
           {
             "node": "Execute Write",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Incident Resolved": {
+      "main": [
+        [
+          {
+            "node": "Send Execution Result",
             "type": "main",
             "index": 0
           }
