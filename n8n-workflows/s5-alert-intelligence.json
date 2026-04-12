@@ -303,7 +303,7 @@
         "url": "http://mcp-server:8000/incidents",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  alertname: $('PromQL Enrichment + Confidence').first().json.alertname,\n  namespace: $('PromQL Enrichment + Confidence').first().json.namespace,\n  pod: $('PromQL Enrichment + Confidence').first().json.pod,\n  command: (($('AI Agent (Gemini)').first().json.output || '').match(/SRE_ACTION:\\s*(kubectl[^\\n]+)/) || [])[1] || 'none'\n}) }}",
+        "jsonBody": "={{ JSON.stringify({\n  alertname: $('PromQL Enrichment + Confidence').first().json.alertname,\n  namespace: $('PromQL Enrichment + Confidence').first().json.namespace,\n  pod: $('PromQL Enrichment + Confidence').first().json.pod,\n  command: (($('AI Agent (Gemini)').first().json.output || '').match(/SRE_ACTION:\\s*(kubectl[^\\n]+)/) || [])[1]?.trim().replace(/^kubectl\\s+/i, '') || 'none'\n}) }}",
         "options": {}
       },
       "id": "store-incident-node",
