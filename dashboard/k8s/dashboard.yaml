@@ -10,6 +10,7 @@ data:
   ALERTMANAGER_URL: "INJECT_ALERTMANAGER_URL"
   N8N_URL: "INJECT_N8N_URL"
   MCP_URL: "INJECT_MCP_URL"
+  MCP_URL: "INJECT_MCP_URL"
 ---
 apiVersion: apps/v1
 kind: Deployment
