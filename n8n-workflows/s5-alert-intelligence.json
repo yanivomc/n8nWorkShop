@@ -86,7 +86,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Low confidence — just log, don't escalate\nconst { alertname, namespace, confidenceLabel, confidencePct } = $input.first().json;\nconsole.log(`S5 LOW CONFIDENCE | ${alertname} | ${namespace} | ${confidencePct}% — not escalating`);\nreturn [];"
+        "jsCode": "// Low confidence \u2014 just log, don't escalate\nconst { alertname, namespace, confidenceLabel, confidencePct } = $input.first().json;\nconsole.log(`S5 LOW CONFIDENCE | ${alertname} | ${namespace} | ${confidencePct}% \u2014 not escalating`);\nreturn [];"
       },
       "id": "50464b3c-8993-4e4d-b4ed-2a0b799225fb",
       "name": "Log Only (Low Confidence)",
@@ -102,7 +102,7 @@
         "promptType": "define",
         "text": "={{ ['Investigate this Kubernetes incident:', 'Alert: ' + $('PromQL Enrichment + Confidence').first().json.alertname, 'Namespace: ' + $('PromQL Enrichment + Confidence').first().json.namespace, 'Pod: ' + $('PromQL Enrichment + Confidence').first().json.pod, 'Severity: ' + $('PromQL Enrichment + Confidence').first().json.severity, 'Duration: ' + $('PromQL Enrichment + Confidence').first().json.durationStr, 'Summary: ' + $('PromQL Enrichment + Confidence').first().json.summary, 'Description: ' + $('PromQL Enrichment + Confidence').first().json.description, 'Confidence: ' + $('PromQL Enrichment + Confidence').first().json.confidenceLabel + ' (' + $('PromQL Enrichment + Confidence').first().json.confidencePct + '%)', 'Signals: ' + JSON.stringify($('PromQL Enrichment + Confidence').first().json.signals.map(s => s.label + '=' + s.value)), 'Use kubectl_read and promql tools to verify. Then assess root cause.'].join('\\n') }}",
         "options": {
-          "systemMessage": "You are a senior SRE. Investigate the incident using your tools:\n\nTOOL USAGE RULES:\n- kubectl_read: use field \"command\" → e.g. {\"command\": \"kubectl get pods -n workshop\"}\n- promql: use field \"query\" → e.g. {\"query\": \"target_chaos_cpu_active{namespace=\\\"workshop\\\"}\"}\n\nINVESTIGATION STEPS:\n1. kubectl_read: {\"command\": \"kubectl get pods -n workshop\"}\n2. promql: {\"query\": \"target_chaos_cpu_active{namespace=\\\"workshop\\\"}\"}\n3. promql: {\"query\": \"target_chaos_memory_active{namespace=\\\"workshop\\\"}\"}\n\nRESPONSE FORMAT:\nRoot cause: <2 sentences max>\nSRE_ACTION: kubectl <command>   ← only if action needed, otherwise omit\n\nExpert audience. No basics."
+          "systemMessage": "You are a senior SRE. Investigate the incident using your tools:\n\nTOOL USAGE RULES:\n- kubectl_read: use field \"command\" \u2192 e.g. {\"command\": \"kubectl get pods -n workshop\"}\n- promql: use field \"query\" \u2192 e.g. {\"query\": \"target_chaos_cpu_active{namespace=\\\"workshop\\\"}\"}\n\nINVESTIGATION STEPS:\n1. kubectl_read: {\"command\": \"kubectl get pods -n workshop\"}\n2. promql: {\"query\": \"target_chaos_cpu_active{namespace=\\\"workshop\\\"}\"}\n3. promql: {\"query\": \"target_chaos_memory_active{namespace=\\\"workshop\\\"}\"}\n\nRESPONSE FORMAT:\nRoot cause: <2 sentences max>\nSRE_ACTION: kubectl <command>   \u2190 only if action needed, otherwise omit\n\nExpert audience. No basics."
         }
       },
       "id": "f3cb96e8-afd1-4ca2-9243-d3928ece2460",
@@ -116,12 +116,17 @@
     },
     {
       "parameters": {
-        "toolDescription": "Run any read-only kubectl command against the cluster. Adapt the command to whatever resource type is being investigated — pods, deployments, nodes, services, endpoints, HPAs, PVCs, etc.",
+        "toolDescription": "Run any read-only kubectl command against the cluster. Adapt the command to whatever resource type is being investigated \u2014 pods, deployments, nodes, services, endpoints, HPAs, PVCs, etc.",
         "method": "POST",
         "url": "http://mcp-server:8000/tools/kubectl-read",
         "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\"command\": \"{command}\"}"
+        "parametersBody": {
+          "values": [
+            {
+              "name": "command"
+            }
+          ]
+        }
       },
       "id": "d900cb28-20f9-4e1a-9ec4-035db5109ddc",
       "name": "kubectl_read",
@@ -138,8 +143,13 @@
         "method": "POST",
         "url": "http://mcp-server:8000/tools/promql",
         "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\"query\": \"{query}\"}"
+        "parametersBody": {
+          "values": [
+            {
+              "name": "query"
+            }
+          ]
+        }
       },
       "id": "49cbdcf8-9eca-429e-82ec-a417c32edb68",
       "name": "promql",
@@ -152,7 +162,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const enriched = $('PromQL Enrichment + Confidence').first().json;\nconst agentOutput = $input.first().json.output || '';\n\nconst { alertname, namespace, pod, severity, summary, description, signals, activeCount, totalCount, confidencePct, confidenceLabel, durationStr, status } = enriched;\n\n// Signal bars (visual)\nconst bar = (val, max) => {\n  const pct = max > 0 ? Math.min(val / max, 1) : (val > 0 ? 1 : 0);\n  const filled = Math.round(pct * 8);\n  return '█'.repeat(filled) + '░'.repeat(8 - filled);\n};\n\nconst signalLines = signals.map(s => {\n  const display = s.name === 'memory_bytes'\n    ? `${Math.round(s.value / 1024 / 1024)}MB`\n    : s.value.toFixed(1);\n  const b = s.name === 'memory_bytes' ? bar(s.value, 500 * 1024 * 1024) : bar(s.value, 1);\n  const icon = s.active ? '🔴' : '🟢';\n  return `  ${icon} <b>${s.label.padEnd(16)}</b> ${b}  ${display}`;\n}).join('\\n');\n\n// Extract SRE_ACTION if present\nconst actionMatch = agentOutput.match(/SRE_ACTION:\\s*(.+)/);\nconst sreAction = actionMatch ? actionMatch[1].trim() : null;\nconst analysis = agentOutput.replace(/SRE_ACTION:.+/, '').trim();\n\n// Confidence badge\nconst confBadge = { HIGH: '🔴 HIGH', MEDIUM: '🟡 MEDIUM', LOW: '🟢 LOW' }[confidenceLabel] || confidenceLabel;\nconst sevEmoji = severity === 'critical' ? '🚨' : '⚠️';\nconst statusLine = status === 'firing' ? '🔥 FIRING' : '✅ RESOLVED';\n\nlet msg = `${sevEmoji} <b>INCIDENT DETECTED</b>\\n`;\nmsg += `━━━━━━━━━━━━━━━━━━━━\\n`;\nmsg += `📍 <b>${pod || 'target-app'}</b> / <code>${namespace}</code>\\n`;\nmsg += `🏷 <b>${alertname}</b> — ${statusLine}\\n`;\nmsg += `⏱ Duration: <b>${durationStr}</b>\\n\\n`;\n\nmsg += `📊 <b>Signal Correlation</b>\\n`;\nmsg += `<code>${signalLines}</code>\\n`;\nmsg += `Confidence: <b>${confBadge}</b> (${activeCount}/${totalCount} signals active)\\n\\n`;\n\nmsg += `🧠 <b>AI Assessment</b>\\n`;\nmsg += `<i>${analysis}</i>\\n\\n`;\n\nif (sreAction) {\n  msg += `✅ <b>Recommended Action</b>\\n`;\n  msg += `<code>${sreAction}</code>\\n\\n`;\n  msg += `💬 Reply <code>/approve &lt;totp&gt;</code> to execute via S4\\n`;\n} else {\n  msg += `ℹ️ No write action required — monitoring only\\n`;\n}\n\nmsg += `━━━━━━━━━━━━━━━━━━━━\\n`;\nmsg += `🕐 ${new Date().toISOString().replace('T', ' ').slice(0, 19)} UTC`;\n\nreturn [{ json: { message: msg, sreAction, confidenceLabel, alertname, namespace } }];"
+        "jsCode": "const enriched = $('PromQL Enrichment + Confidence').first().json;\nconst agentOutput = $input.first().json.output || '';\n\nconst { alertname, namespace, pod, severity, summary, description, signals, activeCount, totalCount, confidencePct, confidenceLabel, durationStr, status } = enriched;\n\n// Signal bars (visual)\nconst bar = (val, max) => {\n  const pct = max > 0 ? Math.min(val / max, 1) : (val > 0 ? 1 : 0);\n  const filled = Math.round(pct * 8);\n  return '\u2588'.repeat(filled) + '\u2591'.repeat(8 - filled);\n};\n\nconst signalLines = signals.map(s => {\n  const display = s.name === 'memory_bytes'\n    ? `${Math.round(s.value / 1024 / 1024)}MB`\n    : s.value.toFixed(1);\n  const b = s.name === 'memory_bytes' ? bar(s.value, 500 * 1024 * 1024) : bar(s.value, 1);\n  const icon = s.active ? '\ud83d\udd34' : '\ud83d\udfe2';\n  return `  ${icon} <b>${s.label.padEnd(16)}</b> ${b}  ${display}`;\n}).join('\\n');\n\n// Extract SRE_ACTION if present\nconst actionMatch = agentOutput.match(/SRE_ACTION:\\s*(.+)/);\nconst sreAction = actionMatch ? actionMatch[1].trim() : null;\nconst analysis = agentOutput.replace(/SRE_ACTION:.+/, '').trim();\n\n// Confidence badge\nconst confBadge = { HIGH: '\ud83d\udd34 HIGH', MEDIUM: '\ud83d\udfe1 MEDIUM', LOW: '\ud83d\udfe2 LOW' }[confidenceLabel] || confidenceLabel;\nconst sevEmoji = severity === 'critical' ? '\ud83d\udea8' : '\u26a0\ufe0f';\nconst statusLine = status === 'firing' ? '\ud83d\udd25 FIRING' : '\u2705 RESOLVED';\n\nlet msg = `${sevEmoji} <b>INCIDENT DETECTED</b>\\n`;\nmsg += `\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n`;\nmsg += `\ud83d\udccd <b>${pod || 'target-app'}</b> / <code>${namespace}</code>\\n`;\nmsg += `\ud83c\udff7 <b>${alertname}</b> \u2014 ${statusLine}\\n`;\nmsg += `\u23f1 Duration: <b>${durationStr}</b>\\n\\n`;\n\nmsg += `\ud83d\udcca <b>Signal Correlation</b>\\n`;\nmsg += `<code>${signalLines}</code>\\n`;\nmsg += `Confidence: <b>${confBadge}</b> (${activeCount}/${totalCount} signals active)\\n\\n`;\n\nmsg += `\ud83e\udde0 <b>AI Assessment</b>\\n`;\nmsg += `<i>${analysis}</i>\\n\\n`;\n\nif (sreAction) {\n  msg += `\u2705 <b>Recommended Action</b>\\n`;\n  msg += `<code>${sreAction}</code>\\n\\n`;\n  msg += `\ud83d\udcac Reply <code>/approve &lt;totp&gt;</code> to execute via S4\\n`;\n} else {\n  msg += `\u2139\ufe0f No write action required \u2014 monitoring only\\n`;\n}\n\nmsg += `\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n`;\nmsg += `\ud83d\udd50 ${new Date().toISOString().replace('T', ' ').slice(0, 19)} UTC`;\n\nreturn [{ json: { message: msg, sreAction, confidenceLabel, alertname, namespace } }];"
       },
       "id": "5e372d14-bfa8-44fc-8f9a-daf2eac882f7",
       "name": "Format Telegram Message",
@@ -190,7 +200,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const { alertname, namespace, confidenceLabel } = $input.first().json;\nconst msg = `❌ <b>S5 Error</b>\\nFailed processing: ${alertname} (${namespace})\\nConfidence was: ${confidenceLabel}`;\nreturn [{ json: { message: msg } }];"
+        "jsCode": "const { alertname, namespace, confidenceLabel } = $input.first().json;\nconst msg = `\u274c <b>S5 Error</b>\\nFailed processing: ${alertname} (${namespace})\\nConfidence was: ${confidenceLabel}`;\nreturn [{ json: { message: msg } }];"
       },
       "id": "df49f10e-7639-4b75-9187-f35d022f5b79",
       "name": "Format Error",
