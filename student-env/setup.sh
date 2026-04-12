@@ -132,7 +132,16 @@ configure_keys() {
   elif [[ -n "$EC2_PUBLIC_IP" ]]; then
     ok "EC2 IP confirmed: $EC2_PUBLIC_IP"
   else
-    err "EC2 IP not set — webhook URLs will be broken. Re-run option 3."
+    err "EC2 IP not set — webhook URLs will be broken. Re-run option 2."
+  fi
+
+  # Auto re-apply dashboard ConfigMap whenever EC2 IP is confirmed/changed
+  if [[ -n "$EC2_PUBLIC_IP" ]] && kubectl get deployment clawops-dashboard -n workshop &>/dev/null 2>&1; then
+    echo "  Updating dashboard ConfigMap with current EC2 IP..."
+    DASH_YAML="$(dirname "$0")/../dashboard/k8s/dashboard.yaml"
+    if [[ -f "$DASH_YAML" ]]; then
+      sed "s|INJECT_PROMETHEUS_URL|${PROMETHEUS_URL:-}|g; s|INJECT_GRAFANA_URL|${GRAFANA_URL:-}|g; s|INJECT_ALERTMANAGER_URL|${ALERTMANAGER_URL:-}|g; s|INJECT_N8N_URL|http://${EC2_PUBLIC_IP}:5678|g; s|INJECT_MCP_URL|http://${EC2_PUBLIC_IP}:8000|g"         "$DASH_YAML" | kubectl apply -f - &>/dev/null &&       kubectl rollout restart deployment/clawops-dashboard -n workshop &>/dev/null &&       ok "Dashboard ConfigMap updated → MCP_URL=http://${EC2_PUBLIC_IP}:8000"
+    fi
   fi
 
   # TOTP 2FA setup — generate using MCP container (has pyotp installed)
