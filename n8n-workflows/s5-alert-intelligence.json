@@ -120,13 +120,8 @@
         "method": "POST",
         "url": "http://mcp-server:8000/tools/kubectl-read",
         "sendBody": true,
-        "parametersBody": {
-          "values": [
-            {
-              "name": "command"
-            }
-          ]
-        }
+        "specifyBody": "json",
+        "jsonBody": "={\"command\": \"{command}\"}"
       },
       "id": "d900cb28-20f9-4e1a-9ec4-035db5109ddc",
       "name": "kubectl_read",
@@ -143,13 +138,8 @@
         "method": "POST",
         "url": "http://mcp-server:8000/tools/promql",
         "sendBody": true,
-        "parametersBody": {
-          "values": [
-            {
-              "name": "query"
-            }
-          ]
-        }
+        "specifyBody": "json",
+        "jsonBody": "={\"query\": \"{query}\"}"
       },
       "id": "49cbdcf8-9eca-429e-82ec-a417c32edb68",
       "name": "promql",
