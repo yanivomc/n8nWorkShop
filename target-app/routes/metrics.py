@@ -2,6 +2,7 @@ from fastapi import APIRouter, Response
 from config import logger, APP_NAME, NAMESPACE, POD_NAME
 import chaos.cpu as cpu_chaos
 import chaos.memory as mem_chaos
+import chaos.errors as error_chaos
 import time
 
 router = APIRouter()
@@ -46,6 +47,34 @@ def _build_metrics() -> str:
             f'# HELP target_chaos_memory_bytes Bytes allocated by memory chaos',
             f'# TYPE target_chaos_memory_bytes gauge',
             f'target_chaos_memory_bytes{{namespace="{NAMESPACE}",pod="{POD_NAME}"}} {mem_mb * 1024 * 1024}',
+        ]
+
+        # Error rate chaos
+        err_active = 1 if error_chaos.is_error_active() else 0
+        lines += [
+            f'# HELP target_chaos_error_active Whether error rate chaos is active',
+            f'# TYPE target_chaos_error_active gauge',
+            f'target_chaos_error_active{{namespace="{NAMESPACE}",pod="{POD_NAME}"}} {err_active}',
+            f'# HELP target_chaos_error_rate Current error rate (0-1)',
+            f'# TYPE target_chaos_error_rate gauge',
+            f'target_chaos_error_rate{{namespace="{NAMESPACE}",pod="{POD_NAME}"}} {error_chaos.get_error_rate()}',
+            f'# HELP target_http_errors_total Total HTTP errors injected',
+            f'# TYPE target_http_errors_total counter',
+            f'target_http_errors_total{{namespace="{NAMESPACE}",pod="{POD_NAME}"}} {error_chaos.get_error_count()}',
+            f'# HELP target_http_requests_total Total HTTP requests tracked',
+            f'# TYPE target_http_requests_total counter',
+            f'target_http_requests_total{{namespace="{NAMESPACE}",pod="{POD_NAME}"}} {error_chaos.get_request_count()}',
+        ]
+
+        # Latency chaos
+        lat_active = 1 if error_chaos.is_latency_active() else 0
+        lines += [
+            f'# HELP target_chaos_latency_active Whether latency chaos is active',
+            f'# TYPE target_chaos_latency_active gauge',
+            f'target_chaos_latency_active{{namespace="{NAMESPACE}",pod="{POD_NAME}"}} {lat_active}',
+            f'# HELP target_chaos_latency_ms Current injected latency in ms',
+            f'# TYPE target_chaos_latency_ms gauge',
+            f'target_chaos_latency_ms{{namespace="{NAMESPACE}",pod="{POD_NAME}"}} {error_chaos.get_latency_ms()}',
         ]
 
         return "\n".join(lines) + "\n"

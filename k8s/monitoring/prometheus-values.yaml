@@ -208,6 +208,28 @@ additionalPrometheusRulesMap:
               summary: "target-app is crash looping"
               description: "Pod {{ $labels.pod }} restarted >1 time in 5 minutes"
 
+      - name: workshop.target-app.errors
+        rules:
+          - alert: TargetAppHighErrorRate
+            expr: target_chaos_error_active{namespace="workshop"} == 1
+            for: 10s
+            labels:
+              severity: critical
+              workshop: "true"
+            annotations:
+              summary: "High error rate on {{ $labels.pod }}"
+              description: "target-app is returning errors at {{ $value | humanizePercentage }} rate"
+
+          - alert: TargetAppHighLatency
+            expr: target_chaos_latency_active{namespace="workshop"} == 1
+            for: 10s
+            labels:
+              severity: warning
+              workshop: "true"
+            annotations:
+              summary: "High latency on {{ $labels.pod }}"
+              description: "target-app is injecting {{ $value }}ms latency on all requests"
+
       - name: workshop.nodes
         rules:
           - alert: NodeMemoryPressure

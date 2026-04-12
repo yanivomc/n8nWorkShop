@@ -114,8 +114,51 @@ def stop_all():
         cpu_chaos.stop_cpu_stress()
         mem_chaos.stop_memory_leak()
         crash_chaos.stop_error_loop()
+        error_chaos.stop_error_rate()
+        error_chaos.stop_latency()
         logger.info("All chaos stopped")
         return {"status": "all stopped"}
     except Exception as e:
         logger.error(f"Stop all error: {e}")
+        return {"status": "error", "detail": str(e)}, 500
+
+
+import chaos.errors as error_chaos
+
+class ErrorRateRequest(BaseModel):
+    rate: float = 1.0  # 0.0-1.0
+
+class LatencyRequest(BaseModel):
+    latency_ms: int = 2000
+
+@router.post("/error-rate")
+def trigger_error_rate(req: ErrorRateRequest):
+    try:
+        error_chaos.start_error_rate(req.rate)
+        return {"status": "started", "scenario": "error-rate", "rate": req.rate}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}, 500
+
+@router.delete("/error-rate")
+def stop_error_rate():
+    try:
+        error_chaos.stop_error_rate()
+        return {"status": "stopped", "scenario": "error-rate"}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}, 500
+
+@router.post("/latency")
+def trigger_latency(req: LatencyRequest):
+    try:
+        error_chaos.start_latency(req.latency_ms)
+        return {"status": "started", "scenario": "latency", "latency_ms": req.latency_ms}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}, 500
+
+@router.delete("/latency")
+def stop_latency():
+    try:
+        error_chaos.stop_latency()
+        return {"status": "stopped", "scenario": "latency"}
+    except Exception as e:
         return {"status": "error", "detail": str(e)}, 500

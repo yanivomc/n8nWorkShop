@@ -214,6 +214,16 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
           <div class="s-desc">Fails health probes,<br>K8s restarts pod</div>
           <div class="s-status" id="st-err"></div>
         </button>
+        <button class="scenario-btn err-t" id="btn-errrate" onclick="trigger('error-rate')" style="background:linear-gradient(135deg,#7c3aed,#4c1d95)">
+          <span class="scenario-icon">💥</span>
+          <span class="scenario-name">Error Rate</span>
+          <span class="scenario-status" id="st-errrate">idle</span>
+        </button>
+        <button class="scenario-btn lat-t" id="btn-latency" onclick="trigger('latency')" style="background:linear-gradient(135deg,#0891b2,#164e63)">
+          <span class="scenario-icon">🐢</span>
+          <span class="scenario-name">High Latency</span>
+          <span class="scenario-status" id="st-latency">idle</span>
+        </button>
         <button class="scenario-btn crash-t" id="btn-crash" onclick="trigger('crash')">
           <div class="s-icon">&#x1F4A5;</div>
           <div class="s-name">Crash Pod</div>
@@ -386,8 +396,8 @@ function renderInst(){
   document.getElementById('st-inst').textContent='INSTANCES: '+alive+'/'+ids.length+' ALIVE';
 }
 
-const SMAP={cpu:'btn-cpu','cpu-sustained':'btn-cpus',memory:'btn-mem','error-loop':'btn-err',crash:'btn-crash',stop:'btn-stop'};
-const SSMAP={cpu:'st-cpu','cpu-sustained':'st-cpus',memory:'st-mem','error-loop':'st-err',crash:'st-crash',stop:'st-stop'};
+const SMAP={cpu:'btn-cpu','cpu-sustained':'btn-cpus',memory:'btn-mem','error-loop':'btn-err',crash:'btn-crash','error-rate':'btn-errrate',latency:'btn-latency',stop:'btn-stop'};
+const SSMAP={cpu:'st-cpu','cpu-sustained':'st-cpus',memory:'st-mem','error-loop':'st-err',crash:'st-crash','error-rate':'st-errrate',latency:'st-latency',stop:'st-stop'};
 
 async function trigger(type){
   if(!selectedId){toast('Select an instance first','warn');return;}
@@ -405,6 +415,8 @@ async function trigger(type){
     else if(type==='memory')res=await fetchJ(base+'/memory','POST',{mb_per_second:50,max_mb:500});
     else if(type==='error-loop')res=await fetchJ(base+'/error-loop','POST',{});
     else if(type==='crash')res=await fetchJ(base+'/crash','POST',{delay_seconds:5});
+    else if(type==='error-rate')res=await fetchJ(base+'/error-rate','POST',{rate:1.0});
+    else if(type==='latency')res=await fetchJ(base+'/latency','POST',{latency_ms:3000});
     else if(type==='stop')res=await fetchJ(base+'/all','DELETE');
     showResp(selectedId,type,JSON.stringify(res,null,2),false);
     if(st)st.textContent='OK: '+(res.status||'done');
