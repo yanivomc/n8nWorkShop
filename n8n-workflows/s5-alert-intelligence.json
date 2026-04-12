@@ -146,7 +146,7 @@
         "parametersBody": {
           "values": [
             {
-              "name": "command"
+              "name": "query"
             }
           ]
         }
