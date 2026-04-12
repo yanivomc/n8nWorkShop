@@ -128,7 +128,7 @@
         "url": "http://mcp-server:8000/tools/kubectl-read",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({command: $fromAI('command', 'kubectl subcommand without kubectl prefix, e.g. get pods -n workshop', 'string')}) }}"
+        "jsonBody": "={\"command\": \"{command}\"}"
       },
       "id": "01cd813c-6c38-4bcd-ac20-c2c3b770db32",
       "name": "kubectl_read",
@@ -151,9 +151,7 @@
               "name": "query"
             }
           ]
-        },
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({query: $fromAI('query', 'A valid PromQL expression, e.g. up or container_memory_usage_bytes{pod=\"target-app\"}', 'string')}) }}"
+        }
       },
       "id": "430c7771-be1c-4ea8-ba0c-790b80220d92",
       "name": "promql",
