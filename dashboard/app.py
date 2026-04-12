@@ -129,7 +129,8 @@ async def proxy_incidents(limit: int = 20):
 async def delete_all_incidents():
     """Proxy DELETE all incidents to MCP server."""
     try:
-        r = await _client.delete(f"{MCP_URL}/incidents")
+        mcp = os.getenv("MCP_URL", "http://localhost:8000")
+        r = await _client.delete(f"{mcp}/incidents")
         return r.json()
     except Exception as e:
         return {"deleted": False, "error": str(e)}
