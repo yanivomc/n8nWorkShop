@@ -251,6 +251,16 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 
     <div class="panel">
       <div class="panel-header">
+        <span class="panel-title">🔐 Incident Audit</span>
+        <button onclick="loadIncidents()" style="background:none;border:1px solid var(--border);color:var(--dim);font-family:var(--mono);font-size:11px;padding:3px 10px;cursor:pointer;letter-spacing:1px;">REFRESH</button>
+      </div>
+      <div id="incidents-list" style="font-size:12px;font-family:var(--mono);overflow-y:auto;max-height:160px;padding:4px 0;">
+        <div style="color:var(--dim);padding:4px">Loading incidents...</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
         <span class="panel-title">Event Log</span>
         <button onclick="document.getElementById('log').innerHTML=''" style="background:none;border:1px solid var(--border);color:var(--dim);font-family:var(--mono);font-size:11px;padding:3px 10px;cursor:pointer;letter-spacing:1px;">CLEAR</button>
       </div>
