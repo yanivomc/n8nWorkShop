@@ -318,11 +318,26 @@ install_monitoring() {
   helm repo update &>/dev/null
   ok "Helm repo ready"
 
+  # Detect if EC2 IP changed since last helm install
+  LAST_INSTALLED_IP=$(helm get values monitoring -n monitoring 2>/dev/null | grep -oP 'EC2_PUBLIC_IP_PLACEHOLDER: \K\S+' || true)
+  CURRENT_WEBHOOK=$(helm get values monitoring -n monitoring 2>/dev/null | grep -oP '(?<=url: "http://)([0-9.]+)(?=:5678)' || true)
+  if [[ -n "$CURRENT_WEBHOOK" && "$CURRENT_WEBHOOK" != "$EC2_PUBLIC_IP" ]]; then
+    warn "EC2 IP changed: old=$CURRENT_WEBHOOK → new=$EC2_PUBLIC_IP"
+    warn "Re-applying Alertmanager webhook with new IP..."
+  elif [[ -n "$CURRENT_WEBHOOK" && "$CURRENT_WEBHOOK" == "$EC2_PUBLIC_IP" ]]; then
+    ok "EC2 IP unchanged ($EC2_PUBLIC_IP) — upgrading to apply any rule changes"
+  else
+    ok "First install — Alertmanager webhook → http://${EC2_PUBLIC_IP}:5678"
+  fi
+
+  # ℹ️  Alertmanager uses EC2 IP directly (NOT ngrok) — more reliable
+  echo "  ℹ️  Alertmanager → n8n: direct EC2 IP (ngrok is for Telegram only)"
+
   # Patch alertmanager webhook URL in values file
   VALUES_FILE="$(dirname "$0")/../k8s/monitoring/prometheus-values.yaml"
   PATCHED_FILE="/tmp/prometheus-values-patched.yaml"
   sed "s|EC2_PUBLIC_IP_PLACEHOLDER|${EC2_PUBLIC_IP}|g" "$VALUES_FILE" > "$PATCHED_FILE"
-  ok "Alertmanager webhook → http://${EC2_PUBLIC_IP}:5678/webhook/prometheus-alert"
+  ok "Alertmanager webhook → http://${EC2_PUBLIC_IP}:5678/webhook/prometheus-alert-s5"
 
   echo "  Installing kube-prometheus-stack (AWS LoadBalancer)..."
   helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
@@ -641,6 +656,32 @@ start_ngrok() {
 
   ngrok config add-authtoken "$NGROK_AUTH_TOKEN" &>/dev/null
 
+  # Allow changing NGROK_DOMAIN if already set
+  if [[ -n "$NGROK_DOMAIN" ]]; then
+    echo ""
+    echo "  Current domain: $NGROK_DOMAIN"
+    echo -n "  Use this domain? [Y/n]: "
+    read change_domain
+    if [[ "${change_domain,,}" == "n" ]]; then
+      echo -n "  New ngrok static domain (or leave blank for random): "
+      read new_domain
+      if [[ -n "$new_domain" ]]; then
+        save_env_var "NGROK_DOMAIN" "$new_domain"
+        NGROK_DOMAIN="$new_domain"
+        ok "Domain updated: $NGROK_DOMAIN"
+        warn "Domain changed → n8n Telegram trigger URL must be updated in n8n UI"
+      fi
+    fi
+  else
+    echo -n "  Enter ngrok static domain (leave blank for random URL): "
+    read new_domain
+    if [[ -n "$new_domain" ]]; then
+      save_env_var "NGROK_DOMAIN" "$new_domain"
+      NGROK_DOMAIN="$new_domain"
+      ok "Domain saved: $NGROK_DOMAIN"
+    fi
+  fi
+
   # Kill any existing ngrok
   pkill -f "ngrok http" 2>/dev/null || true
   sleep 1
@@ -684,6 +725,9 @@ for t in tunnels:
   echo ""
   echo -e "  ${CYAN}→ n8n: http://${EC2_PUBLIC_IP}:5678${NC}"
   echo -e "  ${CYAN}→ ngrok dashboard: http://localhost:4040${NC}"
+  echo ""
+  echo -e "  ${YELLOW}ℹ️  Alertmanager uses EC2 IP directly (not ngrok) — no Prometheus reload needed.${NC}"
+  echo -e "  ${YELLOW}   Only re-run option 3 if EC2 IP changed, not if ngrok domain changed.${NC}"
 }
 
 
@@ -870,9 +914,9 @@ menu() {
     case $choice in
       1) setup_cluster ;;
       2) configure_keys ;;
-      3) install_monitoring ;;
-      4) start_stack ;;
-      5) start_ngrok ;;
+      3) start_stack ;;
+      4) start_ngrok ;;
+      5) install_monitoring ;;
       6) deploy_to_k8s ;;
       7) stop_stack ;;
       8) validate_setup ;;
