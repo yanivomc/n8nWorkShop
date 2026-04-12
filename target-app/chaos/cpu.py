@@ -13,7 +13,7 @@ def _burn(stop: threading.Event):
         _ = sum(i * i for i in range(10000))
 
 
-def start_cpu_stress(cores: int = 1, duration_seconds: int = 60):
+def start_cpu_stress(cores: int = 1, duration_seconds: int = 240):
     """Spin up `cores` threads burning CPU. Auto-stops after duration."""
     global _cpu_threads, _stop_event, _active
     try:
