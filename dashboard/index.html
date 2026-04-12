@@ -252,10 +252,15 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
     <div class="panel">
       <div class="panel-header">
         <span class="panel-title">🔐 Incident Audit</span>
-        <button onclick="loadIncidents()" style="background:none;border:1px solid var(--border);color:var(--dim);font-family:var(--mono);font-size:11px;padding:3px 10px;cursor:pointer;letter-spacing:1px;">REFRESH</button>
+        <div style="display:flex;gap:6px">
+          <button onclick="loadIncidents()" style="background:none;border:1px solid var(--border);color:var(--dim);font-family:var(--mono);font-size:11px;padding:3px 10px;cursor:pointer;letter-spacing:1px;">REFRESH</button>
+          <button onclick="clearIncidents()" style="background:none;border:1px solid #dc2626;color:#dc2626;font-family:var(--mono);font-size:11px;padding:3px 10px;cursor:pointer;letter-spacing:1px;">CLEAR</button>
+        </div>
       </div>
-      <div id="incidents-list" style="font-size:12px;font-family:var(--mono);overflow-y:auto;max-height:160px;padding:4px 0;">
+      <div id="incidents-list" style="font-size:12px;font-family:var(--mono);overflow-y:auto;max-height:120px;padding:4px 0;">
         <div style="color:var(--dim);padding:4px">Loading incidents...</div>
+      </div>
+      <div id="incident-detail" style="display:none;margin-top:8px;padding:8px;background:rgba(0,0,0,0.3);border-radius:6px;font-size:11px;font-family:var(--mono);">
       </div>
     </div>
 
@@ -524,19 +529,52 @@ const LOG_KEY='clawops_logs';
 const INST_KEY='clawops_instances';
 const MAX_LOGS=100;
 
+// Selected incident for detail view
+let selectedIncident = null;
+
+async function clearIncidents(){
+  if(!confirm('Delete all incidents?')) return;
+  try{
+    await fetch('/api/incidents', {method:'DELETE'});
+    document.getElementById('incidents-list').innerHTML='<div style="color:var(--dim);padding:4px">No incidents yet</div>';
+    document.getElementById('incident-detail').style.display='none';
+    log('ok','All incidents cleared');
+  }catch(e){log('err','Clear failed: '+e.message);}
+}
+
 async function loadIncidents(){
   try{
     const r=await fetchJ('/api/incidents?limit=20');
     const el=document.getElementById('incidents-list');
     if(!r.incidents||!r.incidents.length){el.innerHTML='<div style="color:var(--muted);padding:4px">No incidents yet</div>';return;}
     el.innerHTML=r.incidents.map(i=>`
-      <div class="inc-row">
+      <div class="inc-row" onclick="showIncident(${JSON.stringify(JSON.stringify(i))})" style="cursor:pointer">
         <span class="inc-key">#${i.key}</span>
-        <span title="${i.command}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fg)">${i.alertname} — ${i.pod.split('-').slice(-1)[0]||i.namespace}</span>
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fg)">${i.alertname}</span>
         <span class="inc-status-${i.status}">${i.status}</span>
         <span style="color:var(--muted)">${i.created_at.slice(11,16)}z</span>
       </div>`).join('');
   }catch(e){document.getElementById('incidents-list').innerHTML='<div style="color:var(--muted);padding:4px">MCP unavailable</div>';}
+}
+
+function showIncident(jsonStr){
+  const i = JSON.parse(jsonStr);
+  const el = document.getElementById('incident-detail');
+  el.style.display = 'block';
+  const statusColor = {pending:'#f59e0b',approved:'#10b981',resolved:'#6b7280',dismissed:'#6b7280'}[i.status] || '#fff';
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <span style="color:var(--accent);font-weight:600">#${i.key} — ${i.alertname}</span>
+      <span style="color:${statusColor}">${i.status.toUpperCase()}</span>
+    </div>
+    <div style="color:var(--dim);margin-bottom:4px">📍 ${i.pod||i.namespace} / ${i.namespace}</div>
+    <div style="margin-bottom:4px">🕐 ${i.created_at.replace('T',' ').slice(0,19)} UTC</div>
+    <div style="margin-top:6px;padding:6px;background:rgba(255,255,255,0.05);border-radius:4px;word-break:break-all;">
+      <span style="color:var(--dim)">CMD:</span> <span style="color:#10b981">kubectl ${i.command}</span>
+    </div>
+    ${i.resolved_at ? '<div style="color:var(--dim);margin-top:4px">✅ Resolved: '+i.resolved_at.replace('T',' ').slice(0,19)+' UTC</div>' : ''}
+    <button onclick="document.getElementById('incident-detail').style.display='none'" style="margin-top:8px;background:none;border:1px solid var(--border);color:var(--dim);font-family:var(--mono);font-size:10px;padding:2px 8px;cursor:pointer">CLOSE</button>
+  `;
 }
 
 function saveLogs(){

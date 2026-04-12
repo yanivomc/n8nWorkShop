@@ -125,6 +125,21 @@ async def proxy_incidents(limit: int = 20):
     except Exception as e:
         return {"incidents": [], "count": 0, "error": str(e)}
 
+@app.delete("/api/incidents")
+async def delete_all_incidents():
+    """Delete all incidents from MCP server."""
+    try:
+        import sqlite3, os
+        db_path = "/data/incidents.db"
+        if os.path.exists(db_path):
+            conn = sqlite3.connect(db_path)
+            conn.execute("DELETE FROM incidents")
+            conn.commit()
+            conn.close()
+        return {"deleted": True}
+    except Exception as e:
+        return {"deleted": False, "error": str(e)}
+
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "instances": len(_instances)}
