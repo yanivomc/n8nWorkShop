@@ -39,20 +39,20 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        680,
+        900,
         300
       ]
     },
     {
       "parameters": {
-        "jsCode": "// Run all PromQL signals in parallel and score confidence\nconst { alertname, namespace, pod, severity, status, summary, description, signals, alert } = $input.first().json;\nconst promUrl = $env.PROMETHEUS_URL || 'http://localhost:9090';\n\nconst results = [];\nfor (const sig of signals) {\n  try {\n    const url = `${promUrl}/api/v1/query?query=${encodeURIComponent(sig.query)}`;\n    const resp = await $http.get(url);\n    const data = resp.data || resp;\n    const result = data.data?.result || [];\n    const value = result.length > 0 ? parseFloat(result[0].value[1]) : 0;\n    results.push({ ...sig, value, active: value > 0 });\n  } catch(e) {\n    results.push({ ...sig, value: 0, active: false, error: e.message });\n  }\n}\n\nconst activeCount = results.filter(r => r.active).length;\nconst totalCount = results.length;\nconst confidencePct = Math.round((activeCount / totalCount) * 100);\nlet confidenceLabel = 'LOW';\nif (confidencePct >= 66) confidenceLabel = 'HIGH';\nelse if (confidencePct >= 33) confidenceLabel = 'MEDIUM';\n\n// Duration check \u2014 how long has the primary metric been active?\nlet durationStr = 'unknown';\ntry {\n  const durQuery = `${promUrl}/api/v1/query?query=${encodeURIComponent(\n    `time() - (last_over_time(${signals[0].query}[30m]) != 0)`\n  )}`;\n  const dr = await $http.get(durQuery);\n  const drData = dr.data || dr;\n  const drResult = drData.data?.result || [];\n  if (drResult.length > 0) {\n    const seconds = Math.round(parseFloat(drResult[0].value[1]));\n    if (seconds < 60) durationStr = `${seconds}s`;\n    else durationStr = `${Math.floor(seconds/60)}m ${seconds%60}s`;\n  }\n} catch(e) {}\n\nreturn [{ json: {\n  alertname, namespace, pod, severity, status, summary, description, alert,\n  signals: results, activeCount, totalCount, confidencePct, confidenceLabel, durationStr\n} }];"
+        "jsCode": "// Run all PromQL signals in parallel and score confidence\nconst { alertname, namespace, pod, severity, status, summary, description, signals, alert } = $input.first().json;\nconst promUrl = $('Set Prom URL').first().json.promUrl || 'http://localhost:9090';\n\nconst results = [];\nfor (const sig of signals) {\n  try {\n    const url = `${promUrl}/api/v1/query?query=${encodeURIComponent(sig.query)}`;\n    const resp = await $http.get(url);\n    const data = resp.data || resp;\n    const result = data.data?.result || [];\n    const value = result.length > 0 ? parseFloat(result[0].value[1]) : 0;\n    results.push({ ...sig, value, active: value > 0 });\n  } catch(e) {\n    results.push({ ...sig, value: 0, active: false, error: e.message });\n  }\n}\n\nconst activeCount = results.filter(r => r.active).length;\nconst totalCount = results.length;\nconst confidencePct = Math.round((activeCount / totalCount) * 100);\nlet confidenceLabel = 'LOW';\nif (confidencePct >= 66) confidenceLabel = 'HIGH';\nelse if (confidencePct >= 33) confidenceLabel = 'MEDIUM';\n\n// Duration check \u2014 how long has the primary metric been active?\nlet durationStr = 'unknown';\ntry {\n  const durQuery = `${promUrl}/api/v1/query?query=${encodeURIComponent(\n    `time() - (last_over_time(${signals[0].query}[30m]) != 0)`\n  )}`;\n  const dr = await $http.get(durQuery);\n  const drData = dr.data || dr;\n  const drResult = drData.data?.result || [];\n  if (drResult.length > 0) {\n    const seconds = Math.round(parseFloat(drResult[0].value[1]));\n    if (seconds < 60) durationStr = `${seconds}s`;\n    else durationStr = `${Math.floor(seconds/60)}m ${seconds%60}s`;\n  }\n} catch(e) {}\n\nreturn [{ json: {\n  alertname, namespace, pod, severity, status, summary, description, alert,\n  signals: results, activeCount, totalCount, confidencePct, confidenceLabel, durationStr\n} }];"
       },
       "id": "enrich-signals",
       "name": "PromQL Enrichment + Confidence",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        900,
+        1120,
         300
       ]
     },
@@ -79,7 +79,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        1120,
+        1340,
         300
       ]
     },
@@ -92,7 +92,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1340,
+        1560,
         460
       ]
     },
@@ -108,7 +108,7 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 1.7,
       "position": [
-        1340,
+        1560,
         200
       ],
       "credentials": {
@@ -138,7 +138,7 @@
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
       "typeVersion": 1.1,
       "position": [
-        1340,
+        1560,
         360
       ]
     },
@@ -162,7 +162,7 @@
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
       "typeVersion": 1.1,
       "position": [
-        1340,
+        1560,
         460
       ]
     },
@@ -175,7 +175,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1560,
+        1780,
         200
       ]
     },
@@ -193,7 +193,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        1780,
+        2000,
         200
       ],
       "credentials": {
@@ -212,7 +212,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1560,
+        1780,
         400
       ]
     },
@@ -229,7 +229,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        1780,
+        2000,
         400
       ],
       "credentials": {
@@ -248,7 +248,7 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        1340,
+        1560,
         560
       ],
       "credentials": {
@@ -257,6 +257,29 @@
           "name": "Google Gemini(PaLM) Api account"
         }
       }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "prom-url",
+              "name": "promUrl",
+              "value": "={{ $vars.PROMETHEUS_URL || 'http://localhost:9090' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-prom-url",
+      "name": "Set Prom URL",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        680,
+        300
+      ]
     }
   ],
   "connections": {
@@ -275,7 +298,7 @@
       "main": [
         [
           {
-            "node": "Extract Brief + Signal Plan",
+            "node": "Set Prom URL",
             "type": "main",
             "index": 0
           }
@@ -392,6 +415,17 @@
           {
             "node": "AI Agent (Gemini)",
             "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Prom URL": {
+      "main": [
+        [
+          {
+            "node": "Extract Brief + Signal Plan",
+            "type": "main",
             "index": 0
           }
         ]
