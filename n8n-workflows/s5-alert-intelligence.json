@@ -164,15 +164,15 @@
     },
     {
       "parameters": {
-        "jsCode": "const enriched = $('PromQL Enrichment + Confidence').first().json;\nconst agentOutput = $input.first().json.output || '';\n\nconst { alertname, namespace, pod, severity, durationStr, status } = enriched;\n\n// Extract from AI Agent output\nconst aiConfMatch = agentOutput.match(/Confidence:\\s*(HIGH|MEDIUM|LOW)/i);\nconst aiConfidence = aiConfMatch ? aiConfMatch[1].toUpperCase() : 'MEDIUM';\n\n// Extract SRE_ACTION \u2014 single line only\nconst actionMatch = agentOutput.match(/SRE_ACTION:\\s*(kubectl[^\\n]+)/);\nconst sreAction = actionMatch ? actionMatch[1].trim() : null;\n\n// Store incident in MCP if there's an action\nlet incidentKey = null;\nif (sreAction) {\n  try {\n    const resp = await $httpRequest({\n      method: 'POST',\n      url: 'http://mcp-server:8000/incidents',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({\n        alertname, namespace, pod,\n        command: sreAction\n      })\n    });\n    incidentKey = resp.key;\n  } catch(e) {\n    console.log('Incident store failed:', e.message);\n  }\n}\n\n// Clean analysis\nconst analysis = agentOutput\n  .replace(/SRE_ACTION:.+/gs, '')\n  .replace(/Confidence:\\s*(HIGH|MEDIUM|LOW)/gi, '')\n  .trim();\n\nconst confBadge = { HIGH: '\ud83d\udd34 HIGH', MEDIUM: '\ud83d\udfe1 MEDIUM', LOW: '\ud83d\udfe2 LOW' }[aiConfidence] || aiConfidence;\nconst sevEmoji = severity === 'critical' ? '\ud83d\udea8' : '\u26a0\ufe0f';\nconst statusLine = status === 'firing' ? '\ud83d\udd25 FIRING' : '\u2705 RESOLVED';\n\nlet msg = `${sevEmoji} <b>INCIDENT DETECTED</b>`;\nif (incidentKey) msg += ` <code>#${incidentKey}</code>`;\nmsg += `\\n`;\nmsg += `\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n`;\nmsg += `\ud83d\udccd <b>${pod || 'target-app'}</b> / <code>${namespace}</code>\\n`;\nmsg += `\ud83c\udff7 <b>${alertname}</b> \u2014 ${statusLine}\\n`;\nmsg += `\u23f1 Duration: <b>${durationStr}</b>\\n`;\nmsg += `\ud83d\udd0d Confidence: <b>${confBadge}</b>\\n\\n`;\n\nmsg += `\ud83e\udde0 <b>AI Assessment</b>\\n`;\nmsg += `<i>${analysis}</i>\\n\\n`;\n\nif (sreAction) {\n  msg += `\u2705 <b>Recommended Action</b>\\n`;\n  msg += `<code>${sreAction}</code>\\n\\n`;\n  msg += `\ud83d\udcac Reply: <code>/approve &lt;totp&gt; ${incidentKey || ''}</code>\\n`;\n} else {\n  msg += `\u2139\ufe0f No write action required \u2014 monitoring only\\n`;\n}\n\nmsg += `\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n`;\nmsg += `\ud83d\udd50 ${new Date().toISOString().replace('T', ' ').slice(0, 19)} UTC`;\n\nreturn [{ json: { message: msg, sreAction, aiConfidence, alertname, namespace, incidentKey } }];"
+        "jsCode": "const enriched = $('PromQL Enrichment + Confidence').first().json;\nconst agentOutput = $input.first().json.output || '';\n\n// Get incident key from Store Incident node\nlet incidentKey = null;\ntry {\n  const stored = $('Store Incident').first().json;\n  incidentKey = stored.key || null;\n} catch(e) {}\n\nconst { alertname, namespace, pod, severity, durationStr, status } = enriched;\n\n// Extract confidence from AI output\nconst aiConfMatch = agentOutput.match(/Confidence:\\s*(HIGH|MEDIUM|LOW)/i);\nconst aiConfidence = aiConfMatch ? aiConfMatch[1].toUpperCase() : 'MEDIUM';\n\n// Extract SRE_ACTION \u2014 single line only\nconst actionMatch = agentOutput.match(/SRE_ACTION:\\s*(kubectl[^\\n]+)/);\nconst sreAction = actionMatch ? actionMatch[1].trim() : null;\n\n// Clean analysis\nconst analysis = agentOutput\n  .replace(/SRE_ACTION:.+/gs, '')\n  .replace(/Confidence:\\s*(HIGH|MEDIUM|LOW)/gi, '')\n  .trim();\n\nconst confBadge = { HIGH: '\ud83d\udd34 HIGH', MEDIUM: '\ud83d\udfe1 MEDIUM', LOW: '\ud83d\udfe2 LOW' }[aiConfidence] || aiConfidence;\nconst sevEmoji = severity === 'critical' ? '\ud83d\udea8' : '\u26a0\ufe0f';\nconst statusLine = status === 'firing' ? '\ud83d\udd25 FIRING' : '\u2705 RESOLVED';\n\nlet msg = `${sevEmoji} <b>INCIDENT DETECTED</b>`;\nif (incidentKey) msg += ` <code>#${incidentKey}</code>`;\nmsg += `\\n`;\nmsg += `\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n`;\nmsg += `\ud83d\udccd <b>${pod || 'target-app'}</b> / <code>${namespace}</code>\\n`;\nmsg += `\ud83c\udff7 <b>${alertname}</b> \u2014 ${statusLine}\\n`;\nmsg += `\u23f1 Duration: <b>${durationStr}</b>\\n`;\nmsg += `\ud83d\udd0d Confidence: <b>${confBadge}</b>\\n\\n`;\n\nmsg += `\ud83e\udde0 <b>AI Assessment</b>\\n`;\nmsg += `<i>${analysis}</i>\\n\\n`;\n\nif (sreAction) {\n  msg += `\u2705 <b>Recommended Action</b>\\n`;\n  msg += `<code>${sreAction}</code>\\n\\n`;\n  if (incidentKey) {\n    msg += `\ud83d\udcac Reply: <code>/approve &lt;totp&gt; ${incidentKey}</code>\\n`;\n  } else {\n    msg += `\ud83d\udcac Reply: <code>/approve &lt;totp&gt;</code>\\n`;\n  }\n} else {\n  msg += `\u2139\ufe0f No write action required \u2014 monitoring only\\n`;\n}\n\nmsg += `\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n`;\nmsg += `\ud83d\udd50 ${new Date().toISOString().replace('T', ' ').slice(0, 19)} UTC`;\n\nreturn [{ json: { message: msg } }];"
       },
       "id": "17f53959-e070-41bd-bdb2-88f7c3e03cbf",
       "name": "Format Telegram Message",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -5488,
-        -944
+        -6700,
+        -1248
       ]
     },
     {
@@ -296,6 +296,24 @@
         -6848,
         -704
       ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://mcp-server:8000/incidents",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ alertname: $('PromQL Enrichment + Confidence').first().json.alertname, namespace: $('PromQL Enrichment + Confidence').first().json.namespace, pod: $('PromQL Enrichment + Confidence').first().json.pod, command: ($input.first().json.output || '').match(/SRE_ACTION:\\s*(kubectl[^\\n]+)/)?.[1]?.trim() || 'none' }) }}",
+        "options": {}
+      },
+      "id": "store-incident-node",
+      "name": "Store Incident",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -6900,
+        -1248
+      ]
     }
   ],
   "connections": {
@@ -365,7 +383,7 @@
       "main": [
         [
           {
-            "node": "Format Telegram Message",
+            "node": "Store Incident",
             "type": "main",
             "index": 0
           }
@@ -421,6 +439,17 @@
         [
           {
             "node": "Extract Brief + Signal Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Incident": {
+      "main": [
+        [
+          {
+            "node": "Format Telegram Message",
             "type": "main",
             "index": 0
           }
