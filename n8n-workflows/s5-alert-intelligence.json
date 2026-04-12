@@ -7,13 +7,13 @@
         "path": "prometheus-alert-s5",
         "options": {}
       },
-      "id": "8347a3b4-bd89-4a15-9c06-c76ec7197103",
+      "id": "df434d68-8eb2-4b52-b966-0aafc8f59c31",
       "name": "Alertmanager Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
-        -2592,
-        592
+        -6480,
+        -256
       ],
       "webhookId": "1250b629-77d5-43aa-9b62-74b3b8fc0b3b"
     },
@@ -21,39 +21,39 @@
       "parameters": {
         "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst alerts = body.alerts || [];\nif (!alerts.length) return [];\n\nconst alert = alerts[0];\nconst runId = alert.labels?.run_id;\nconst key = `${alert.labels?.alertname}:${alert.labels?.namespace}:${alert.status}`;\nconst now = Date.now();\nconst store = $getWorkflowStaticData('global');\nstore.seen = store.seen || {};\n\n// run_id bypasses dedup entirely (for testing)\nif (runId) {\n  console.log(`DEDUP BYPASS | run_id=${runId} | key=${key}`);\n  store.seen[key] = now;\n  return [{ json: { alert, body, timestamp: new Date().toISOString() } }];\n}\n\nif (store.seen[key] && now - store.seen[key] < 600000) {\n  const ageMin = Math.round((now - store.seen[key]) / 60000);\n  console.log(`DEDUP DROP | ${key} | seen ${ageMin}min ago (window=10min)`);\n  // Return output so n8n shows why it stopped\n  return [{ json: { deduped: true, reason: `Already seen ${ageMin}min ago`, key, nextAllowedIn: `${10 - ageMin}min` } }];\n}\n\nstore.seen[key] = now;\nreturn [{ json: { alert, body, timestamp: new Date().toISOString() } }];"
       },
-      "id": "9f032966-dc66-40af-9f3c-d52b6a7c0d47",
+      "id": "15f68872-272c-457c-b142-639d8e799f3e",
       "name": "Dedup Filter",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -2368,
-        592
+        -6256,
+        -256
       ]
     },
     {
       "parameters": {
         "jsCode": "const data = $input.first().json;\nconst alert = data.alert || {};\nconst labels = alert.labels || {};\nconst annotations = alert.annotations || {};\n\nconst alertname = labels.alertname || 'Unknown';\nconst namespace = labels.namespace || labels.exported_namespace || 'workshop';\nconst pod = labels.pod || labels.exported_pod || '';\nconst severity = labels.severity || 'warning';\nconst status = alert.status || 'firing';\nconst summary = annotations.summary || alertname;\nconst description = annotations.description || '';\n\nconst signalMap = {\n  TargetAppCPUStress: [\n    { name: 'cpu_active', query: `target_chaos_cpu_active{namespace=\"${namespace}\"}`, label: 'CPU Stress' },\n    { name: 'memory_active', query: `target_chaos_memory_active{namespace=\"${namespace}\"}`, label: 'Memory Leak' },\n    { name: 'restarts', query: `increase(kube_pod_container_status_restarts_total{namespace=\"${namespace}\",pod=~\"target-app.*\"}[5m])`, label: 'Pod Restarts' }\n  ],\n  TargetAppMemoryLeak: [\n    { name: 'memory_active', query: `target_chaos_memory_active{namespace=\"${namespace}\"}`, label: 'Memory Leak' },\n    { name: 'memory_bytes', query: `target_chaos_memory_bytes{namespace=\"${namespace}\"}`, label: 'Memory Allocated' },\n    { name: 'cpu_active', query: `target_chaos_cpu_active{namespace=\"${namespace}\"}`, label: 'CPU Stress' }\n  ],\n  TargetAppMemoryCritical: [\n    { name: 'memory_bytes', query: `target_chaos_memory_bytes{namespace=\"${namespace}\"}`, label: 'Memory Allocated' },\n    { name: 'memory_active', query: `target_chaos_memory_active{namespace=\"${namespace}\"}`, label: 'Memory Leak Active' },\n    { name: 'cpu_active', query: `target_chaos_cpu_active{namespace=\"${namespace}\"}`, label: 'CPU Stress' }\n  ],\n  TargetAppCrashLooping: [\n    { name: 'restarts', query: `increase(kube_pod_container_status_restarts_total{namespace=\"${namespace}\",pod=~\"target-app.*\"}[5m])`, label: 'Pod Restarts' },\n    { name: 'not_ready', query: `kube_pod_status_ready{namespace=\"${namespace}\",condition=\"true\",pod=~\"target-app.*\"}`, label: 'Pod Ready' },\n    { name: 'memory_active', query: `target_chaos_memory_active{namespace=\"${namespace}\"}`, label: 'Memory Leak' }\n  ]\n};\n\nconst signals = signalMap[alertname] || [\n  { name: 'restarts', query: `increase(kube_pod_container_status_restarts_total{namespace=\"${namespace}\"}[5m])`, label: 'Pod Restarts' }\n];\n\nreturn [{ json: { alertname, namespace, pod, severity, status, summary, description, signals, alert, body: data.body } }];"
       },
-      "id": "db8edfe4-f814-4426-abf3-8f55e9dc272e",
+      "id": "2a9df669-68b4-4adb-9deb-35fc46b23886",
       "name": "Extract Brief + Signal Plan",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1920,
-        592
+        -5808,
+        -256
       ]
     },
     {
       "parameters": {
         "jsCode": "const input = $input.first().json;\nconst { alertname, namespace, pod, severity, status, summary, description, signals, alert, body } = input;\n\nconst results = [];\nfor (const sig of signals) {\n  try {\n    const resp = await $helpers.httpRequest({\n      method: 'POST',\n      url: 'http://mcp-server:8000/tools/promql',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({ query: sig.query })\n    });\n    const result = resp.result || resp.data?.result || [];\n    const value = Array.isArray(result) && result.length > 0 \n      ? parseFloat(result[0].value?.[1] || result[0] || 0) \n      : 0;\n    results.push({ ...sig, value, active: value > 0 });\n  } catch(e) {\n    results.push({ ...sig, value: 0, active: false, error: String(e.message || e) });\n  }\n}\n\nconst activeCount = results.filter(r => r.active).length;\nconst totalCount = results.length;\nconst confidencePct = Math.round((activeCount / totalCount) * 100);\nlet confidenceLabel = 'LOW';\nif (confidencePct >= 66) confidenceLabel = 'HIGH';\nelse if (confidencePct >= 33) confidenceLabel = 'MEDIUM';\n\nlet durationStr = 'unknown';\ntry {\n  const startsAt = alert?.startsAt || '';\n  if (startsAt && !startsAt.startsWith('0001')) {\n    const secs = Math.round((Date.now() - new Date(startsAt).getTime()) / 1000);\n    durationStr = secs < 60 ? `${secs}s` : `${Math.floor(secs/60)}m ${secs%60}s`;\n  }\n} catch(e) {}\n\nreturn [{ json: {\n  alertname, namespace, pod, severity, status, summary, description, alert, body,\n  signals: results, activeCount, totalCount, confidencePct, confidenceLabel, durationStr\n} }];"
       },
-      "id": "4eb3f951-9f5f-4af8-a9cc-cc28d1477531",
+      "id": "6f411079-5958-4c39-9f2e-b52f512894db",
       "name": "PromQL Enrichment + Confidence",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1696,
-        592
+        -5584,
+        -256
       ]
     },
     {
@@ -75,26 +75,26 @@
         },
         "options": {}
       },
-      "id": "8dd12b6b-9def-4803-ac70-da80d1421538",
+      "id": "7f61ae4b-9882-4ddd-b081-9316a24971b2",
       "name": "Worth Escalating?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        -1472,
-        592
+        -5360,
+        -256
       ]
     },
     {
       "parameters": {
-        "jsCode": "// Low confidence \u2014 just log, don't escalate\nconst { alertname, namespace, confidenceLabel, confidencePct } = $input.first().json;\nconsole.log(`S5 LOW CONFIDENCE | ${alertname} | ${namespace} | ${confidencePct}% \u2014 not escalating`);\nreturn [];"
+        "jsCode": "// Low confidence — just log, don't escalate\nconst { alertname, namespace, confidenceLabel, confidencePct } = $input.first().json;\nconsole.log(`S5 LOW CONFIDENCE | ${alertname} | ${namespace} | ${confidencePct}% — not escalating`);\nreturn [];"
       },
-      "id": "f074f2fe-c917-4459-b8ed-8456432d22cd",
+      "id": "50464b3c-8993-4e4d-b4ed-2a0b799225fb",
       "name": "Log Only (Low Confidence)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1136,
-        736
+        -5024,
+        -112
       ]
     },
     {
@@ -102,75 +102,65 @@
         "promptType": "define",
         "text": "={{ ['Investigate this Kubernetes incident:', 'Alert: ' + $('PromQL Enrichment + Confidence').first().json.alertname, 'Namespace: ' + $('PromQL Enrichment + Confidence').first().json.namespace, 'Pod: ' + $('PromQL Enrichment + Confidence').first().json.pod, 'Severity: ' + $('PromQL Enrichment + Confidence').first().json.severity, 'Duration: ' + $('PromQL Enrichment + Confidence').first().json.durationStr, 'Summary: ' + $('PromQL Enrichment + Confidence').first().json.summary, 'Description: ' + $('PromQL Enrichment + Confidence').first().json.description, 'Confidence: ' + $('PromQL Enrichment + Confidence').first().json.confidenceLabel + ' (' + $('PromQL Enrichment + Confidence').first().json.confidencePct + '%)', 'Signals: ' + JSON.stringify($('PromQL Enrichment + Confidence').first().json.signals.map(s => s.label + '=' + s.value)), 'Use kubectl_read and promql tools to verify. Then assess root cause.'].join('\\n') }}",
         "options": {
-          "systemMessage": "You are a senior SRE. Investigate the incident using your tools:\n\nTOOL USAGE RULES:\n- kubectl_read: use field \"command\" \u2192 e.g. {\"command\": \"kubectl get pods -n workshop\"}\n- promql: use field \"query\" \u2192 e.g. {\"query\": \"target_chaos_cpu_active{namespace=\\\"workshop\\\"}\"}\n\nINVESTIGATION STEPS:\n1. kubectl_read: {\"command\": \"kubectl get pods -n workshop\"}\n2. promql: {\"query\": \"target_chaos_cpu_active{namespace=\\\"workshop\\\"}\"}\n3. promql: {\"query\": \"target_chaos_memory_active{namespace=\\\"workshop\\\"}\"}\n\nRESPONSE FORMAT:\nRoot cause: <2 sentences max>\nSRE_ACTION: kubectl <command>   \u2190 only if action needed, otherwise omit\n\nExpert audience. No basics."
+          "systemMessage": "You are a senior SRE. Investigate the incident using your tools:\n\nTOOL USAGE RULES:\n- kubectl_read: use field \"command\" → e.g. {\"command\": \"kubectl get pods -n workshop\"}\n- promql: use field \"query\" → e.g. {\"query\": \"target_chaos_cpu_active{namespace=\\\"workshop\\\"}\"}\n\nINVESTIGATION STEPS:\n1. kubectl_read: {\"command\": \"kubectl get pods -n workshop\"}\n2. promql: {\"query\": \"target_chaos_cpu_active{namespace=\\\"workshop\\\"}\"}\n3. promql: {\"query\": \"target_chaos_memory_active{namespace=\\\"workshop\\\"}\"}\n\nRESPONSE FORMAT:\nRoot cause: <2 sentences max>\nSRE_ACTION: kubectl <command>   ← only if action needed, otherwise omit\n\nExpert audience. No basics."
         }
       },
-      "id": "09fcc409-9ce1-40e7-a6ce-e0d795a7e6b6",
+      "id": "f3cb96e8-afd1-4ca2-9243-d3928ece2460",
       "name": "AI Agent (Gemini)",
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 1.7,
       "position": [
-        -1200,
-        336
+        -5088,
+        -512
       ]
     },
     {
       "parameters": {
-        "toolDescription": "Run read-only kubectl commands to investigate the cluster",
+        "toolDescription": "Run any read-only kubectl command against the cluster. Adapt the command to whatever resource type is being investigated — pods, deployments, nodes, services, endpoints, HPAs, PVCs, etc.",
         "method": "POST",
         "url": "http://mcp-server:8000/tools/kubectl-read",
         "sendBody": true,
-        "parametersBody": {
-          "values": [
-            {
-              "name": "command"
-            }
-          ]
-        }
+        "specifyBody": "json",
+        "jsonBody": "={\"command\": \"{command}\"}"
       },
-      "id": "7626c74a-7a4c-4d39-8a4e-d05b3db06761",
+      "id": "d900cb28-20f9-4e1a-9ec4-035db5109ddc",
       "name": "kubectl_read",
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
       "typeVersion": 1.1,
       "position": [
-        -1120,
-        560
+        -5008,
+        -288
       ]
     },
     {
       "parameters": {
-        "toolDescription": "Run PromQL queries against Prometheus",
+        "toolDescription": "Run any PromQL query against Prometheus for live metrics. Use queries relevant to the resource type and symptom being investigated.",
         "method": "POST",
         "url": "http://mcp-server:8000/tools/promql",
         "sendBody": true,
-        "parametersBody": {
-          "values": [
-            {
-              "name": "query"
-            }
-          ]
-        }
+        "specifyBody": "json",
+        "jsonBody": "={\"query\": \"{query}\"}"
       },
-      "id": "2332472e-9cbb-47ff-80a9-e1dc9a0a2ff2",
+      "id": "49cbdcf8-9eca-429e-82ec-a417c32edb68",
       "name": "promql",
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
       "typeVersion": 1.1,
       "position": [
-        -992,
-        560
+        -4880,
+        -288
       ]
     },
     {
       "parameters": {
-        "jsCode": "const enriched = $('PromQL Enrichment + Confidence').first().json;\nconst agentOutput = $input.first().json.output || '';\n\nconst { alertname, namespace, pod, severity, summary, description, signals, activeCount, totalCount, confidencePct, confidenceLabel, durationStr, status } = enriched;\n\n// Signal bars (visual)\nconst bar = (val, max) => {\n  const pct = max > 0 ? Math.min(val / max, 1) : (val > 0 ? 1 : 0);\n  const filled = Math.round(pct * 8);\n  return '\u2588'.repeat(filled) + '\u2591'.repeat(8 - filled);\n};\n\nconst signalLines = signals.map(s => {\n  const display = s.name === 'memory_bytes'\n    ? `${Math.round(s.value / 1024 / 1024)}MB`\n    : s.value.toFixed(1);\n  const b = s.name === 'memory_bytes' ? bar(s.value, 500 * 1024 * 1024) : bar(s.value, 1);\n  const icon = s.active ? '\ud83d\udd34' : '\ud83d\udfe2';\n  return `  ${icon} <b>${s.label.padEnd(16)}</b> ${b}  ${display}`;\n}).join('\\n');\n\n// Extract SRE_ACTION if present\nconst actionMatch = agentOutput.match(/SRE_ACTION:\\s*(.+)/);\nconst sreAction = actionMatch ? actionMatch[1].trim() : null;\nconst analysis = agentOutput.replace(/SRE_ACTION:.+/, '').trim();\n\n// Confidence badge\nconst confBadge = { HIGH: '\ud83d\udd34 HIGH', MEDIUM: '\ud83d\udfe1 MEDIUM', LOW: '\ud83d\udfe2 LOW' }[confidenceLabel] || confidenceLabel;\nconst sevEmoji = severity === 'critical' ? '\ud83d\udea8' : '\u26a0\ufe0f';\nconst statusLine = status === 'firing' ? '\ud83d\udd25 FIRING' : '\u2705 RESOLVED';\n\nlet msg = `${sevEmoji} <b>INCIDENT DETECTED</b>\\n`;\nmsg += `\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n`;\nmsg += `\ud83d\udccd <b>${pod || 'target-app'}</b> / <code>${namespace}</code>\\n`;\nmsg += `\ud83c\udff7 <b>${alertname}</b> \u2014 ${statusLine}\\n`;\nmsg += `\u23f1 Duration: <b>${durationStr}</b>\\n\\n`;\n\nmsg += `\ud83d\udcca <b>Signal Correlation</b>\\n`;\nmsg += `<code>${signalLines}</code>\\n`;\nmsg += `Confidence: <b>${confBadge}</b> (${activeCount}/${totalCount} signals active)\\n\\n`;\n\nmsg += `\ud83e\udde0 <b>AI Assessment</b>\\n`;\nmsg += `<i>${analysis}</i>\\n\\n`;\n\nif (sreAction) {\n  msg += `\u2705 <b>Recommended Action</b>\\n`;\n  msg += `<code>${sreAction}</code>\\n\\n`;\n  msg += `\ud83d\udcac Reply <code>/approve &lt;totp&gt;</code> to execute via S4\\n`;\n} else {\n  msg += `\u2139\ufe0f No write action required \u2014 monitoring only\\n`;\n}\n\nmsg += `\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n`;\nmsg += `\ud83d\udd50 ${new Date().toISOString().replace('T', ' ').slice(0, 19)} UTC`;\n\nreturn [{ json: { message: msg, sreAction, confidenceLabel, alertname, namespace } }];"
+        "jsCode": "const enriched = $('PromQL Enrichment + Confidence').first().json;\nconst agentOutput = $input.first().json.output || '';\n\nconst { alertname, namespace, pod, severity, summary, description, signals, activeCount, totalCount, confidencePct, confidenceLabel, durationStr, status } = enriched;\n\n// Signal bars (visual)\nconst bar = (val, max) => {\n  const pct = max > 0 ? Math.min(val / max, 1) : (val > 0 ? 1 : 0);\n  const filled = Math.round(pct * 8);\n  return '█'.repeat(filled) + '░'.repeat(8 - filled);\n};\n\nconst signalLines = signals.map(s => {\n  const display = s.name === 'memory_bytes'\n    ? `${Math.round(s.value / 1024 / 1024)}MB`\n    : s.value.toFixed(1);\n  const b = s.name === 'memory_bytes' ? bar(s.value, 500 * 1024 * 1024) : bar(s.value, 1);\n  const icon = s.active ? '🔴' : '🟢';\n  return `  ${icon} <b>${s.label.padEnd(16)}</b> ${b}  ${display}`;\n}).join('\\n');\n\n// Extract SRE_ACTION if present\nconst actionMatch = agentOutput.match(/SRE_ACTION:\\s*(.+)/);\nconst sreAction = actionMatch ? actionMatch[1].trim() : null;\nconst analysis = agentOutput.replace(/SRE_ACTION:.+/, '').trim();\n\n// Confidence badge\nconst confBadge = { HIGH: '🔴 HIGH', MEDIUM: '🟡 MEDIUM', LOW: '🟢 LOW' }[confidenceLabel] || confidenceLabel;\nconst sevEmoji = severity === 'critical' ? '🚨' : '⚠️';\nconst statusLine = status === 'firing' ? '🔥 FIRING' : '✅ RESOLVED';\n\nlet msg = `${sevEmoji} <b>INCIDENT DETECTED</b>\\n`;\nmsg += `━━━━━━━━━━━━━━━━━━━━\\n`;\nmsg += `📍 <b>${pod || 'target-app'}</b> / <code>${namespace}</code>\\n`;\nmsg += `🏷 <b>${alertname}</b> — ${statusLine}\\n`;\nmsg += `⏱ Duration: <b>${durationStr}</b>\\n\\n`;\n\nmsg += `📊 <b>Signal Correlation</b>\\n`;\nmsg += `<code>${signalLines}</code>\\n`;\nmsg += `Confidence: <b>${confBadge}</b> (${activeCount}/${totalCount} signals active)\\n\\n`;\n\nmsg += `🧠 <b>AI Assessment</b>\\n`;\nmsg += `<i>${analysis}</i>\\n\\n`;\n\nif (sreAction) {\n  msg += `✅ <b>Recommended Action</b>\\n`;\n  msg += `<code>${sreAction}</code>\\n\\n`;\n  msg += `💬 Reply <code>/approve &lt;totp&gt;</code> to execute via S4\\n`;\n} else {\n  msg += `ℹ️ No write action required — monitoring only\\n`;\n}\n\nmsg += `━━━━━━━━━━━━━━━━━━━━\\n`;\nmsg += `🕐 ${new Date().toISOString().replace('T', ' ').slice(0, 19)} UTC`;\n\nreturn [{ json: { message: msg, sreAction, confidenceLabel, alertname, namespace } }];"
       },
-      "id": "a1cf53ab-7b4f-4e76-8954-be0c4f072bf5",
+      "id": "5e372d14-bfa8-44fc-8f9a-daf2eac882f7",
       "name": "Format Telegram Message",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -784,
-        352
+        -4672,
+        -496
       ]
     },
     {
@@ -182,13 +172,13 @@
           "parse_mode": "HTML"
         }
       },
-      "id": "68511082-b80f-42ea-a73e-72820bd9f288",
+      "id": "4214b3a7-6dfd-4a5d-88b2-42f7a5de2dd1",
       "name": "Send to Telegram",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        -560,
-        352
+        -4448,
+        -496
       ],
       "webhookId": "0fd5bf29-2923-4ca7-b8ba-a3b1ed273a07",
       "credentials": {
@@ -200,15 +190,15 @@
     },
     {
       "parameters": {
-        "jsCode": "const { alertname, namespace, confidenceLabel } = $input.first().json;\nconst msg = `\u274c <b>S5 Error</b>\\nFailed processing: ${alertname} (${namespace})\\nConfidence was: ${confidenceLabel}`;\nreturn [{ json: { message: msg } }];"
+        "jsCode": "const { alertname, namespace, confidenceLabel } = $input.first().json;\nconst msg = `❌ <b>S5 Error</b>\\nFailed processing: ${alertname} (${namespace})\\nConfidence was: ${confidenceLabel}`;\nreturn [{ json: { message: msg } }];"
       },
-      "id": "e035b666-d8f8-4290-97d3-6d73ad44e278",
+      "id": "df49f10e-7639-4b75-9187-f35d022f5b79",
       "name": "Format Error",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -784,
-        544
+        -4672,
+        -304
       ]
     },
     {
@@ -219,13 +209,13 @@
           "parse_mode": "HTML"
         }
       },
-      "id": "61f21d77-8d9c-4639-8848-50a461e90c65",
+      "id": "9f2d9360-cfcf-45c8-83bc-e0bc0f4c25d9",
       "name": "Telegram Error",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        -560,
-        544
+        -4448,
+        -304
       ],
       "webhookId": "8732a283-9102-4e7b-bb66-fb298f37250e",
       "credentials": {
@@ -239,13 +229,13 @@
       "parameters": {
         "options": {}
       },
-      "id": "58b18589-9593-4a1f-8cbe-ac0dd559499b",
+      "id": "db8bbe8b-7064-4b46-9398-b7892947973a",
       "name": "Gemini Chat Model",
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        -1248,
-        560
+        -5136,
+        -288
       ],
       "credentials": {
         "googlePalmApi": {
@@ -286,13 +276,13 @@
         },
         "options": {}
       },
-      "id": "d53ee869-9df0-4220-a0c7-a104696e3bec",
+      "id": "17c5c213-0db9-4907-80ad-984432927c83",
       "name": "Set Prom URL",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -2144,
-        592
+        -6032,
+        -256
       ]
     }
   ],
@@ -437,7 +427,7 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "4116137a-a12c-4272-95d1-1e12920315ba",
+  "versionId": "a0636030-2e0e-4f4d-b5d4-b47ec5002521",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "ac50dbf6da727fdb5a094e04ed9324b36d79d032776f5b7daa6bbe46e9c1bc30"
