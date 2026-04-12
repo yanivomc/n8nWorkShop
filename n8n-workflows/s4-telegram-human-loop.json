@@ -446,6 +446,72 @@
         -908,
         528
       ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const incident = $input.first().json;\nconst chatId = $('Validate Approval').first().json.chatId;\nif (incident.status !== 'pending') {\n  return [{ json: { \n    blocked: true,\n    chatId,\n    message: `\u26a0\ufe0f Incident #${incident.key} is already <b>${incident.status}</b>. Cannot re-execute.`\n  }}];\n}\nreturn [{ json: { ...incident, blocked: false, chatId } }];"
+      },
+      "id": "check-pending-node",
+      "name": "Check Pending Only",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -932,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true
+          },
+          "conditions": [
+            {
+              "id": "blocked-cond",
+              "leftValue": "={{ $json.blocked }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "blocked-if-node",
+      "name": "Is Blocked?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -712,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "send-blocked-node",
+      "name": "Send Blocked Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -492,
+        448
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "jcA0ZMKocCJNhas2",
+          "name": "Telegram account"
+        }
+      }
     }
   ],
   "connections": {
@@ -628,7 +694,7 @@
       "main": [
         [
           {
-            "node": "Execute Write",
+            "node": "Check Pending Only",
             "type": "main",
             "index": 0
           }
@@ -658,6 +724,35 @@
         [
           {
             "node": "Send Execution Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Pending Only": {
+      "main": [
+        [
+          {
+            "node": "Is Blocked?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Blocked?": {
+      "main": [
+        [
+          {
+            "node": "Send Blocked Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Execute Write",
             "type": "main",
             "index": 0
           }
