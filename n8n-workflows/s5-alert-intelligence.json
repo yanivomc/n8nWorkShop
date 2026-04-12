@@ -1,0 +1,222 @@
+{
+  "name": "S5 - Alert Intelligence",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "prometheus-alert-s5",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Alertmanager Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Dedup filter — skip repeated firings within 10 min unless run_id present\nconst body = $input.first().json.body || $input.first().json;\nconst alerts = body.alerts || [];\nif (!alerts.length) return [];\n\nconst alert = alerts[0];\nconst runId = alert.labels?.run_id;\nconst key = `${alert.labels?.alertname}:${alert.labels?.namespace}:${alert.status}`;\nconst now = Date.now();\nconst store = $getWorkflowStaticData('global');\nstore.seen = store.seen || {};\n\nif (!runId && store.seen[key] && now - store.seen[key] < 600000) {\n  console.log('DEDUP: skipping duplicate alert:', key);\n  return [];\n}\nstore.seen[key] = now;\n\nreturn [{ json: { alert, body, timestamp: new Date().toISOString() } }];"
+      },
+      "id": "dedup-filter",
+      "name": "Dedup Filter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract alert brief from Alertmanager payload\nconst { alert } = $input.first().json;\nconst labels = alert.labels || {};\nconst annotations = alert.annotations || {};\n\nconst alertname = labels.alertname || 'Unknown';\nconst namespace = labels.namespace || labels.exported_namespace || 'unknown';\nconst pod = labels.pod || labels.exported_pod || '';\nconst severity = labels.severity || 'warning';\nconst status = alert.status || 'firing';\nconst summary = annotations.summary || alertname;\nconst description = annotations.description || '';\n\n// Map alertname to PromQL signals to check\nconst signalMap = {\n  TargetAppCPUStress: [\n    { name: 'cpu_active', query: `target_chaos_cpu_active{namespace=\"${namespace}\"}`, label: 'CPU Stress' },\n    { name: 'memory_active', query: `target_chaos_memory_active{namespace=\"${namespace}\"}`, label: 'Memory Leak' },\n    { name: 'restarts', query: `increase(kube_pod_container_status_restarts_total{namespace=\"${namespace}\",pod=~\"target-app.*\"}[5m])`, label: 'Pod Restarts' }\n  ],\n  TargetAppMemoryLeak: [\n    { name: 'memory_active', query: `target_chaos_memory_active{namespace=\"${namespace}\"}`, label: 'Memory Leak' },\n    { name: 'memory_bytes', query: `target_chaos_memory_bytes{namespace=\"${namespace}\"}`, label: 'Memory Allocated' },\n    { name: 'cpu_active', query: `target_chaos_cpu_active{namespace=\"${namespace}\"}`, label: 'CPU Stress' }\n  ],\n  TargetAppCrashLooping: [\n    { name: 'restarts', query: `increase(kube_pod_container_status_restarts_total{namespace=\"${namespace}\",pod=~\"target-app.*\"}[5m])`, label: 'Pod Restarts' },\n    { name: 'not_ready', query: `kube_pod_status_ready{namespace=\"${namespace}\",condition=\"true\",pod=~\"target-app.*\"}`, label: 'Pod Ready' },\n    { name: 'memory_active', query: `target_chaos_memory_active{namespace=\"${namespace}\"}`, label: 'Memory Leak' }\n  ]\n};\n\nconst signals = signalMap[alertname] || [\n  { name: 'restarts', query: `increase(kube_pod_container_status_restarts_total{namespace=\"${namespace}\"}[5m])`, label: 'Pod Restarts' }\n];\n\nreturn [{ json: { alertname, namespace, pod, severity, status, summary, description, signals, alert } }];"
+      },
+      "id": "extract-brief",
+      "name": "Extract Brief + Signal Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Run all PromQL signals in parallel and score confidence\nconst { alertname, namespace, pod, severity, status, summary, description, signals, alert } = $input.first().json;\nconst promUrl = $env.PROMETHEUS_URL || 'http://localhost:9090';\n\nconst results = [];\nfor (const sig of signals) {\n  try {\n    const url = `${promUrl}/api/v1/query?query=${encodeURIComponent(sig.query)}`;\n    const resp = await $http.get(url);\n    const data = resp.data || resp;\n    const result = data.data?.result || [];\n    const value = result.length > 0 ? parseFloat(result[0].value[1]) : 0;\n    results.push({ ...sig, value, active: value > 0 });\n  } catch(e) {\n    results.push({ ...sig, value: 0, active: false, error: e.message });\n  }\n}\n\nconst activeCount = results.filter(r => r.active).length;\nconst totalCount = results.length;\nconst confidencePct = Math.round((activeCount / totalCount) * 100);\nlet confidenceLabel = 'LOW';\nif (confidencePct >= 66) confidenceLabel = 'HIGH';\nelse if (confidencePct >= 33) confidenceLabel = 'MEDIUM';\n\n// Duration check — how long has the primary metric been active?\nlet durationStr = 'unknown';\ntry {\n  const durQuery = `${promUrl}/api/v1/query?query=${encodeURIComponent(\n    `time() - (last_over_time(${signals[0].query}[30m]) != 0)`\n  )}`;\n  const dr = await $http.get(durQuery);\n  const drData = dr.data || dr;\n  const drResult = drData.data?.result || [];\n  if (drResult.length > 0) {\n    const seconds = Math.round(parseFloat(drResult[0].value[1]));\n    if (seconds < 60) durationStr = `${seconds}s`;\n    else durationStr = `${Math.floor(seconds/60)}m ${seconds%60}s`;\n  }\n} catch(e) {}\n\nreturn [{ json: {\n  alertname, namespace, pod, severity, status, summary, description, alert,\n  signals: results, activeCount, totalCount, confidencePct, confidenceLabel, durationStr\n} }];"
+      },
+      "id": "enrich-signals",
+      "name": "PromQL Enrichment + Confidence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.confidenceLabel }}",
+              "rightValue": "LOW",
+              "operator": { "type": "string", "operation": "notEquals" }
+            }
+          ]
+        }
+      },
+      "id": "confidence-gate",
+      "name": "Worth Escalating?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Low confidence — just log, don't escalate\nconst { alertname, namespace, confidenceLabel, confidencePct } = $input.first().json;\nconsole.log(`S5 LOW CONFIDENCE | ${alertname} | ${namespace} | ${confidencePct}% — not escalating`);\nreturn [];"
+      },
+      "id": "log-only",
+      "name": "Log Only (Low Confidence)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 460]
+    },
+    {
+      "parameters": {
+        "model": "gemini-2.0-flash",
+        "options": {
+          "systemMessage": "You are a senior SRE investigating a Kubernetes incident. You have been given an enriched alert with correlated signal data.\n\nYour job:\n1. Confirm or challenge the AI assessment based on the signal data\n2. Identify the most likely root cause\n3. If a remediation action is appropriate, end with exactly:\n   SRE_ACTION: kubectl <command>\n   (omit SRE_ACTION if no write action needed)\n\nBe concise. Max 3 sentences of analysis. Focus on what matters for the on-call engineer.\nDo NOT explain what Kubernetes is. Assume expert audience."
+        }
+      },
+      "id": "ai-agent",
+      "name": "AI Agent (Gemini)",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [1340, 200],
+      "credentials": {
+        "googlePalmApi": { "id": "1", "name": "Google Gemini(PaLM) Api account" }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Run read-only kubectl commands to investigate the cluster",
+        "method": "POST",
+        "url": "http://mcp-server:8000/tools/kubectl-read",
+        "sendBody": true,
+        "bodyParameters": {
+          "values": [{ "name": "command" }]
+        },
+        "toolName": "kubectl_read"
+      },
+      "id": "kubectl-read",
+      "name": "kubectl_read",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [1340, 360]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Run PromQL queries against Prometheus",
+        "method": "POST",
+        "url": "http://mcp-server:8000/tools/promql",
+        "sendBody": true,
+        "bodyParameters": {
+          "values": [{ "name": "query" }]
+        },
+        "toolName": "promql"
+      },
+      "id": "promql-tool",
+      "name": "promql",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [1340, 460]
+    },
+    {
+      "parameters": {
+        "jsCode": "const enriched = $('PromQL Enrichment + Confidence').first().json;\nconst agentOutput = $input.first().json.output || '';\n\nconst { alertname, namespace, pod, severity, summary, description, signals, activeCount, totalCount, confidencePct, confidenceLabel, durationStr, status } = enriched;\n\n// Signal bars (visual)\nconst bar = (val, max) => {\n  const pct = max > 0 ? Math.min(val / max, 1) : (val > 0 ? 1 : 0);\n  const filled = Math.round(pct * 8);\n  return '█'.repeat(filled) + '░'.repeat(8 - filled);\n};\n\nconst signalLines = signals.map(s => {\n  const display = s.name === 'memory_bytes'\n    ? `${Math.round(s.value / 1024 / 1024)}MB`\n    : s.value.toFixed(1);\n  const b = s.name === 'memory_bytes' ? bar(s.value, 500 * 1024 * 1024) : bar(s.value, 1);\n  const icon = s.active ? '🔴' : '🟢';\n  return `  ${icon} <b>${s.label.padEnd(16)}</b> ${b}  ${display}`;\n}).join('\\n');\n\n// Extract SRE_ACTION if present\nconst actionMatch = agentOutput.match(/SRE_ACTION:\\s*(.+)/);\nconst sreAction = actionMatch ? actionMatch[1].trim() : null;\nconst analysis = agentOutput.replace(/SRE_ACTION:.+/, '').trim();\n\n// Confidence badge\nconst confBadge = { HIGH: '🔴 HIGH', MEDIUM: '🟡 MEDIUM', LOW: '🟢 LOW' }[confidenceLabel] || confidenceLabel;\nconst sevEmoji = severity === 'critical' ? '🚨' : '⚠️';\nconst statusLine = status === 'firing' ? '🔥 FIRING' : '✅ RESOLVED';\n\nlet msg = `${sevEmoji} <b>INCIDENT DETECTED</b>\\n`;\nmsg += `━━━━━━━━━━━━━━━━━━━━\\n`;\nmsg += `📍 <b>${pod || 'target-app'}</b> / <code>${namespace}</code>\\n`;\nmsg += `🏷 <b>${alertname}</b> — ${statusLine}\\n`;\nmsg += `⏱ Duration: <b>${durationStr}</b>\\n\\n`;\n\nmsg += `📊 <b>Signal Correlation</b>\\n`;\nmsg += `<code>${signalLines}</code>\\n`;\nmsg += `Confidence: <b>${confBadge}</b> (${activeCount}/${totalCount} signals active)\\n\\n`;\n\nmsg += `🧠 <b>AI Assessment</b>\\n`;\nmsg += `<i>${analysis}</i>\\n\\n`;\n\nif (sreAction) {\n  msg += `✅ <b>Recommended Action</b>\\n`;\n  msg += `<code>${sreAction}</code>\\n\\n`;\n  msg += `💬 Reply <code>/approve &lt;totp&gt;</code> to execute via S4\\n`;\n} else {\n  msg += `ℹ️ No write action required — monitoring only\\n`;\n}\n\nmsg += `━━━━━━━━━━━━━━━━━━━━\\n`;\nmsg += `🕐 ${new Date().toISOString().replace('T', ' ').slice(0, 19)} UTC`;\n\nreturn [{ json: { message: msg, sreAction, confidenceLabel, alertname, namespace } }];"
+      },
+      "id": "format-message",
+      "name": "Format Telegram Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "id": "telegram-send",
+      "name": "Send to Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1780, 200],
+      "credentials": {
+        "telegramApi": { "id": "2", "name": "Telegram Bot" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const { alertname, namespace, confidenceLabel } = $input.first().json;\nconst msg = `❌ <b>S5 Error</b>\\nFailed processing: ${alertname} (${namespace})\\nConfidence was: ${confidenceLabel}`;\nreturn [{ json: { message: msg } }];"
+      },
+      "id": "format-error",
+      "name": "Format Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 400]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "={{ $json.message }}",
+        "additionalFields": { "parse_mode": "HTML" }
+      },
+      "id": "telegram-error",
+      "name": "Telegram Error",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1780, 400],
+      "credentials": {
+        "telegramApi": { "id": "2", "name": "Telegram Bot" }
+      }
+    }
+  ],
+  "connections": {
+    "Alertmanager Webhook": {
+      "main": [[{ "node": "Dedup Filter", "type": "main", "index": 0 }]]
+    },
+    "Dedup Filter": {
+      "main": [[{ "node": "Extract Brief + Signal Plan", "type": "main", "index": 0 }]]
+    },
+    "Extract Brief + Signal Plan": {
+      "main": [[{ "node": "PromQL Enrichment + Confidence", "type": "main", "index": 0 }]]
+    },
+    "PromQL Enrichment + Confidence": {
+      "main": [[{ "node": "Worth Escalating?", "type": "main", "index": 0 }]]
+    },
+    "Worth Escalating?": {
+      "main": [
+        [{ "node": "AI Agent (Gemini)", "type": "main", "index": 0 }],
+        [{ "node": "Log Only (Low Confidence)", "type": "main", "index": 0 }]
+      ]
+    },
+    "AI Agent (Gemini)": {
+      "main": [[{ "node": "Format Telegram Message", "type": "main", "index": 0 }]],
+      "error": [[{ "node": "Format Error", "type": "main", "index": 0 }]]
+    },
+    "kubectl_read": {
+      "ai_tool": [[{ "node": "AI Agent (Gemini)", "type": "ai_tool", "index": 0 }]]
+    },
+    "promql": {
+      "ai_tool": [[{ "node": "AI Agent (Gemini)", "type": "ai_tool", "index": 0 }]]
+    },
+    "Format Telegram Message": {
+      "main": [[{ "node": "Send to Telegram", "type": "main", "index": 0 }]]
+    },
+    "Format Error": {
+      "main": [[{ "node": "Telegram Error", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  }
+}
