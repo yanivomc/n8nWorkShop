@@ -206,7 +206,7 @@
     {
       "parameters": {
         "chatId": "={{ $('Validate Approval').first().json.chatId }}",
-        "text": "=\u2705 <b>Executed by {{ $('Validate Approval').first().json.approvedBy }}</b> (@{{ $('Validate Approval').first().json.username }} / ID: {{ $('Validate Approval').first().json.userId }}):\n<code>kubectl {{ $('Validate Approval').first().json.command }}</code>\n\n{{ $json.output }}\n\n\ud83d\udd50 {{ new Date().toUTCString() }}",
+        "text": "=\u2705 <b>Executed by {{ $('Validate Approval').first().json.approvedBy }}</b>:\n<code>kubectl {{ $('Execute Write').first().json.command?.replace(/^kubectl\\s+/i,'') || $('Validate Approval').first().json.command || '' }}</code>\n\n{{ $('Execute Write').first().json.output || $json.output || '' }}\n\n\ud83d\udd50 {{ new Date().toUTCString() }}\n\nThis message was sent automatically with n8n",
         "additionalFields": {
           "parse_mode": "HTML"
         }
