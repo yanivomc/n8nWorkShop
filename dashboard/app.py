@@ -119,7 +119,8 @@ async def remove_instance(inst_id: str):
 async def proxy_incidents(limit: int = 20):
     """Proxy incidents list from MCP server."""
     try:
-        r = await _client.get(f"http://mcp-server:8000/incidents?limit={limit}")
+        mcp_url = os.getenv("MCP_URL", "http://mcp-server:8000")
+        r = await _client.get(f"{mcp_url}/incidents?limit={limit}")
         return r.json()
     except Exception as e:
         return {"incidents": [], "count": 0, "error": str(e)}
