@@ -1,12 +1,13 @@
+# ── Workshop ingress — ONE LB, all services ───────────────────────────────────
+# Dashboard at root, n8n at /n8n, MCP at /mcp
+# n8n gets its own ingress (no rewrite) — it handles its own paths via N8N_PATH
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: workshop-ingress
+  name: workshop-ingress-dashboard
   namespace: workshop
   annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
     nginx.ingress.kubernetes.io/proxy-body-size: "50m"
-    # WebSocket + SSE support
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-buffering: "off"
@@ -15,23 +16,53 @@ spec:
   rules:
     - http:
         paths:
-          # Dashboard — root path (main entry point for students)
-          - path: /()(.*)
-            pathType: ImplementationSpecific
+          # Dashboard — root (must be last to not catch /n8n and /mcp)
+          - path: /
+            pathType: Prefix
             backend:
               service:
                 name: clawops-dashboard
                 port:
                   number: 80
-          # n8n — /n8n prefix
-          - path: /n8n(/|$)(.*)
-            pathType: ImplementationSpecific
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: workshop-ingress-n8n
+  namespace: workshop
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    # No rewrite — n8n handles /n8n prefix itself via N8N_PATH env var
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /n8n
+            pathType: Prefix
             backend:
               service:
                 name: n8n
                 port:
                   number: 5678
-          # MCP server docs — /mcp prefix
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: workshop-ingress-mcp
+  namespace: workshop
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          # MCP — rewrite /mcp/xxx → /xxx (FastAPI doesn't know about prefix)
           - path: /mcp(/|$)(.*)
             pathType: ImplementationSpecific
             backend:
@@ -40,7 +71,7 @@ spec:
                 port:
                   number: 8000
 ---
-# Separate ingress for monitoring (different namespace)
+# Monitoring ingress — separate namespace
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
