@@ -213,6 +213,8 @@ ok "target-app"
 
 # ── PHASE 6: Ingress rules ────────────────────────────────────────────────────
 hdr "Phase 6 — Ingress rules"
+# Delete old single ingress if exists (avoid duplicate path conflicts)
+kubectl delete ingress workshop-ingress -n workshop 2>/dev/null || true
 kubectl apply -f "$INGRESS_DIR/ingress.yaml" >> "$LOG_FILE" 2>&1
 ok "Ingress rules applied"
 
