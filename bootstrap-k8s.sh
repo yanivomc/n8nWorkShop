@@ -5,7 +5,7 @@
 # Usage: bash bootstrap-k8s.sh
 # ─────────────────────────────────────────────────────────────────────────────
 
-set -e
+set -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSHOP_DIR="$SCRIPT_DIR/k8s/workshop"
@@ -22,15 +22,19 @@ hdr()  { echo -e "\n${BOLD}${CYAN}  ── $1 ──${NC}"; }
 
 # ── Step 1: Install ingress-nginx ─────────────────────────────────────────────
 hdr "Step 1 — ingress-nginx"
+echo "  Adding helm repos..."
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx 2>/dev/null || true
-helm repo update &>/dev/null
-if helm status ingress-nginx -n ingress-nginx &>/dev/null 2>&1; then
+echo "  Updating helm repos..."
+helm repo update 2>/dev/null || true
+echo "  Checking if ingress-nginx already installed..."
+if helm status ingress-nginx -n ingress-nginx 2>/dev/null | grep -q "deployed"; then
   ok "Already installed — skipping"
 else
+  echo "  Installing ingress-nginx (this takes ~60s)..."
   helm install ingress-nginx ingress-nginx/ingress-nginx \
     -n ingress-nginx --create-namespace \
     -f "$INGRESS_DIR/ingress-nginx-values.yaml" \
-    --wait --timeout 3m
+    --wait --timeout 5m
   ok "ingress-nginx installed"
 fi
 
@@ -52,8 +56,8 @@ ok "Ingress LB: $INGRESS_LB"
 # ── Step 3: Install Prometheus + Grafana ──────────────────────────────────────
 hdr "Step 3 — Monitoring stack"
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts 2>/dev/null || true
-helm repo update &>/dev/null
-if helm status monitoring -n monitoring &>/dev/null 2>&1; then
+helm repo update 2>/dev/null || true
+if helm status monitoring -n monitoring 2>/dev/null | grep -q "deployed"; then
   ok "Already installed — skipping"
 else
   # Alertmanager → n8n via internal K8s service name (no IP needed ever)
