@@ -1,0 +1,76 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: workshop-ingress
+  namespace: workshop
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    # WebSocket + SSE support
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          # Dashboard — root path (main entry point for students)
+          - path: /()(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: clawops-dashboard
+                port:
+                  number: 80
+          # n8n — /n8n prefix
+          - path: /n8n(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: n8n
+                port:
+                  number: 5678
+          # MCP server docs — /mcp prefix
+          - path: /mcp(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: mcp-server
+                port:
+                  number: 8000
+---
+# Separate ingress for monitoring (different namespace)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: monitoring-ingress
+  namespace: monitoring
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /prometheus(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: monitoring-kube-prometheus-prometheus
+                port:
+                  number: 9090
+          - path: /grafana(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: monitoring-grafana
+                port:
+                  number: 80
+          - path: /alertmanager(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: monitoring-kube-prometheus-alertmanager
+                port:
+                  number: 9093

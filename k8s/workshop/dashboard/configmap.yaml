@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dashboard-config
+  namespace: workshop
+data:
+  # All internal K8s service names — no IPs needed
+  PROMETHEUS_URL: "INJECT_PROMETHEUS_URL"
+  GRAFANA_URL: "INJECT_GRAFANA_URL"
+  ALERTMANAGER_URL: "INJECT_ALERTMANAGER_URL"
+  # Internal service names — always work regardless of EC2 IP
+  N8N_URL: "http://n8n.workshop.svc.cluster.local:5678"
+  MCP_URL: "http://mcp-server.workshop.svc.cluster.local:8000"
