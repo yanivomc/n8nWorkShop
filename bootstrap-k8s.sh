@@ -202,7 +202,8 @@ ok "MCP server"
 # Dashboard
 sed "s|INJECT_PROMETHEUS_URL|${PROMETHEUS_URL:-}|g; \
      s|INJECT_GRAFANA_URL|${GRAFANA_URL:-}|g; \
-     s|INJECT_ALERTMANAGER_URL|${ALERTMANAGER_URL:-}|g" \
+     s|INJECT_ALERTMANAGER_URL|${ALERTMANAGER_URL:-}|g; \
+     s|INJECT_INGRESS_LB|${INGRESS_LB}|g" \
   "$WORKSHOP_DIR/dashboard/configmap.yaml" | kubectl apply -f - >> "$LOG_FILE" 2>&1
 kubectl apply -f "$WORKSHOP_DIR/dashboard/deployment.yaml" >> "$LOG_FILE" 2>&1
 ok "Dashboard"
@@ -288,7 +289,7 @@ echo -e "${BOLD}${GREEN}  ✅  Bootstrap complete!${NC}"
 echo -e "${BOLD}${GREEN}  ════════════════════════════════════════════${NC}"
 echo ""
 echo -e "${CYAN}  All services via ONE LB:${NC}"
-echo -e "  📊  Dashboard:    http://${INGRESS_LB}/"
+echo -e "  📊  Dashboard:    http://${INGRESS_LB}/dashboard"
 echo -e "  🤖  n8n:          http://${INGRESS_LB}/n8n"
 echo -e "  🔧  MCP Docs:     http://${INGRESS_LB}/mcp/docs"
 echo -e "  📈  Prometheus:   ${PROMETHEUS_URL:-http://${INGRESS_LB}/prometheus}"
