@@ -1,4 +1,4 @@
-# Workshop ingress — n8n at /n8n (no rewrite, N8N_PATH handles it)
+# n8n at ROOT — no subpath pain, works out of the box
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -14,7 +14,7 @@ spec:
   rules:
     - http:
         paths:
-          - path: /n8n
+          - path: /
             pathType: Prefix
             backend:
               service:
@@ -22,7 +22,31 @@ spec:
                 port:
                   number: 5678
 ---
-# MCP at /mcp (with rewrite — FastAPI sees clean paths)
+# Dashboard at /dashboard (rewrite strips prefix)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: workshop-ingress-dashboard
+  namespace: workshop
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /dashboard(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: clawops-dashboard
+                port:
+                  number: 80
+---
+# MCP at /mcp (rewrite strips prefix)
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -45,30 +69,7 @@ spec:
                 port:
                   number: 8000
 ---
-# Dashboard at / (catch-all, must be separate ingress with lower priority)
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: workshop-ingress-dashboard
-  namespace: workshop
-  annotations:
-    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-buffering: "off"
-spec:
-  ingressClassName: nginx
-  rules:
-    - http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: clawops-dashboard
-                port:
-                  number: 80
----
-# Monitoring ingress — separate namespace
+# Monitoring — separate namespace
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
