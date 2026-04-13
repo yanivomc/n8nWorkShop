@@ -135,6 +135,28 @@ ok "Prometheus:   ${PROMETHEUS_URL:-pending}"
 ok "Grafana:      ${GRAFANA_URL:-pending}"
 ok "Alertmanager: ${ALERTMANAGER_URL:-pending}"
 
+# ── PHASE 4.5: Build & push MCP server image ─────────────────────────────────
+hdr "Phase 4.5 — MCP server image"
+
+MCP_IMAGE="yanivomc/mcp-server:latest"
+
+# Check if image exists on Docker Hub
+if docker manifest inspect "$MCP_IMAGE" >> "$LOG_FILE" 2>&1; then
+  ok "MCP image already on Docker Hub"
+else
+  info "Building MCP server image (first time — takes ~2 min)..."
+  if ! command -v docker &>/dev/null; then
+    warn "Docker not found — skipping image build. Make sure $MCP_IMAGE exists on Docker Hub."
+  else
+    cd "$SCRIPT_DIR/mcp-server"
+    docker build -t "$MCP_IMAGE" . >> "$LOG_FILE" 2>&1 || die "MCP image build failed"
+    info "Pushing MCP image to Docker Hub..."
+    docker push "$MCP_IMAGE" >> "$LOG_FILE" 2>&1 || die "MCP image push failed — are you logged in? Run: docker login"
+    ok "MCP image built and pushed"
+    cd "$SCRIPT_DIR"
+  fi
+fi
+
 # ── PHASE 5: Deploy workshop services ────────────────────────────────────────
 hdr "Phase 5 — Workshop services"
 
