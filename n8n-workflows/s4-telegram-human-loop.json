@@ -208,7 +208,7 @@
         "url": "http://mcp-server.clawops.svc.cluster.local:8000/tools/kubectl-write",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ (() => {\n  const v = $('Validate Approval').first().json;\n  let command;\n  if (v.useKey) {\n    try {\n      command = $('Fetch Incident Command').first().json.command;\n    } catch(e) {}\n    if (!command) {\n      const store = $getWorkflowStaticData('global');\n      command = store.pending?.[v.chatId]?.command;\n    }\n  } else {\n    command = v.command;\n  }\n  return JSON.stringify({\n    command: command,\n    approval_token: v.token,\n    approved_by: v.approvedBy\n  });\n})() }}",
+        "jsonBody": "={{ (() => {\n  const v = $('Validate Approval').first().json;\n  let command;\n  if (v.useKey) {\n    try { command = $('Fetch Incident Command').first().json.command; } catch(e) {}\n    if (!command) {\n      const store = $getWorkflowStaticData('global');\n      command = store.pending?.[v.chatId]?.command;\n    }\n  } else {\n    command = v.command;\n  }\n  // Strip 'kubectl ' prefix \u2014 MCP expects bare command\n  if (command) command = command.replace(/^kubectl\\s+/i, '');\n  return JSON.stringify({\n    command: command,\n    approval_token: v.token,\n    approved_by: v.approvedBy\n  });\n})() }}",
         "options": {}
       },
       "id": "90d32f55-dc0b-417b-832a-228351c4cfad",
