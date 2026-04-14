@@ -1,6 +1,7 @@
 import os, time, logging, sys, asyncio
 import httpx
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
+from fastapi.responses import RedirectResponse, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, Response
@@ -147,5 +148,9 @@ async def config_js():
   mcp:     "{os.getenv('MCP_URL', 'http://localhost:8000')}",
 }};"""
     return Response(content=js, media_type="application/javascript")
+
+@app.get("/dashboard")
+async def dashboard_redirect():
+    return RedirectResponse(url="/dashboard/")
 
 app.mount("/", StaticFiles(directory="/app/static", html=True), name="static")
