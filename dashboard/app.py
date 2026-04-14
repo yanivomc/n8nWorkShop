@@ -29,6 +29,8 @@ def _chat_event(msg: dict):
         try: _chat_subscribers.remove(q)
         except: pass
 
+MCP_URL = os.getenv("MCP_INTERNAL_URL", os.getenv("MCP_URL", "http://mcp-server.clawops.svc.cluster.local:8000"))
+
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
     format="%(asctime)s | %(levelname)-8s | dashboard | %(message)s")
 logger = logging.getLogger("dashboard")
