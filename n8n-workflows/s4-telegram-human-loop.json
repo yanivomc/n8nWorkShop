@@ -110,7 +110,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const output = $input.first().json.output || '';\nconst chatId = $('Route Message').first().json.chatId;\nconst match = output.match(/SRE_ACTION:\\s*(.+)/);\nif (match) {\n  const cmd = match[1].trim().replace(/^kubectl\\s+/i, '');\n  const store = $getWorkflowStaticData('global');\n  if (!store.pending) store.pending = {};\n  store.pending[chatId] = { command: cmd };\n  return [{ json: {\n    needsApproval: true,\n    chatId,\n    approvalPrompt: '\u26a0\ufe0f SRE Action suggested:\\nkubectl ' + cmd + '\\n\\n\ud83d\udd10 Enter your 6-digit Authenticator code:\\n\u2705 /approve <6-digit-code>\\n\u274c /deny'\n  }}];\n}\nreturn [{ json: { needsApproval: false, chatId, message: output } }];"
+        "jsCode": "const output = $input.first().json.output || '';\nconst chatId = $('Route Message').first().json.chatId;\nconst match = output.match(/SRE_ACTION:\\s*(.+)/);\nif (match) {\n  const cmd = match[1].trim().replace(/^kubectl\\s+/i, '');\n  const key = Math.random().toString(36).substring(2,6);\n  const store = $getWorkflowStaticData('global');\n  if (!store.pending) store.pending = {};\n  store.pending[chatId] = { command: cmd, key };\n  return [{ json: {\n    needsApproval: true,\n    chatId,\n    key,\n    command: cmd,\n    approvalPrompt: '\u26a0\ufe0f SRE Action suggested:\\nkubectl ' + cmd + '\\n\\n\ud83d\udd10 Enter your 6-digit Authenticator code:\\n\u2705 /approve <totp> ' + key + '\\n\u274c /deny'\n  }}];\n}\nreturn [{ json: { needsApproval: false, chatId, message: output } }];"
       },
       "id": "80a057ac-eb04-40f7-9352-3c52ab5f506a",
       "name": "Check Write Needed",
@@ -191,7 +191,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const text = $input.first().json.text.trim();\nconst chatId = $input.first().json.chatId;\nconst from = $input.first().json.from;\n\nif (text.startsWith('/deny')) {\n  const store = $getWorkflowStaticData('global');\n  if (store.pending) delete store.pending[chatId];\n  return [{ json: { route: 'deny', chatId, message: '\u274c Action denied by ' + from + '. No changes made.' } }];\n}\n\nconst parts = text.split(' ');\n// /approve <totp> <key>  \u2192 3 parts\n// /approve <key>         \u2192 2 parts (user forgot totp \u2014 prompt them)\nif (parts.length < 3) {\n  return [{ json: { route: 'deny', chatId, message: '\u26a0\ufe0f Format: /approve <6-digit-totp> <incident-key>\\nExample: /approve 123456 ' + (parts[1]||'k42a') } }];\n}\n\nconst totpCode = parts[1];\nconst incidentKey = parts[2];\n\nreturn [{ json: { route: 'approval', chatId, incidentKey, approvedBy: from, token: totpCode, useKey: true } }];"
+        "jsCode": "const text = $input.first().json.text.trim();\nconst chatId = $input.first().json.chatId;\nconst from = $input.first().json.from;\n\nif (text.startsWith('/deny')) {\n  const store = $getWorkflowStaticData('global');\n  if (store.pending) delete store.pending[chatId];\n  return [{ json: { route: 'deny', chatId, message: '\u274c Action denied by ' + from + '. No changes made.' } }];\n}\n\nconst parts = text.split(' ');\n// /approve <totp> <key>\nif (parts.length < 3) {\n  return [{ json: { route: 'deny', chatId, message: '\u26a0\ufe0f Format: /approve <6-digit-totp> <incident-key>\\nExample: /approve 123456 k42a' } }];\n}\n\nconst totpCode = parts[1];\nconst incidentKey = parts[2];\n\nreturn [{ json: { route: 'approval', chatId, incidentKey, approvedBy: from, token: totpCode, useKey: true } }];"
       },
       "id": "f0904892-8540-44fe-a7cd-046b733e6578",
       "name": "Validate Approval",
@@ -208,7 +208,7 @@
         "url": "http://mcp-server.clawops.svc.cluster.local:8000/tools/kubectl-write",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ (() => {\n  const useKey = $('Validate Approval').first().json.useKey;\n  const command = useKey \n    ? $('Fetch Incident Command').first().json.command\n    : $('Validate Approval').first().json.command;\n  return JSON.stringify({\n    command: command,\n    approval_token: $('Validate Approval').first().json.token,\n    approved_by: $('Validate Approval').first().json.approvedBy\n  });\n})() }}",
+        "jsonBody": "={{ (() => {\n  const v = $('Validate Approval').first().json;\n  let command;\n  if (v.useKey) {\n    try {\n      command = $('Fetch Incident Command').first().json.command;\n    } catch(e) {}\n    if (!command) {\n      const store = $getWorkflowStaticData('global');\n      command = store.pending?.[v.chatId]?.command;\n    }\n  } else {\n    command = v.command;\n  }\n  return JSON.stringify({\n    command: command,\n    approval_token: v.token,\n    approved_by: v.approvedBy\n  });\n})() }}",
         "options": {}
       },
       "id": "90d32f55-dc0b-417b-832a-228351c4cfad",
@@ -556,6 +556,30 @@
       "position": [
         9392,
         592
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://mcp-server.clawops.svc.cluster.local:8000/incidents",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ alertname: 'SRE Action', namespace: 'workshop', pod: 'n/a', command: 'kubectl ' + $json.approvalPrompt.match(/kubectl (.+)\\n/)[1], key: $json.key, severity: 'warning' }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "store-chat-incident-001",
+      "name": "Store Chat Incident",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        8272,
+        160
       ]
     }
   ],
