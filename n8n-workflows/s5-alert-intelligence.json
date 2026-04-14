@@ -1,7 +1,6 @@
 {
   "updatedAt": "2026-04-12T10:15:51.667Z",
   "createdAt": "2026-04-12T06:28:21.466Z",
-  "id": "LPVbHkn9iHSOPANu",
   "name": "S5 - Alert Intelligence",
   "description": null,
   "active": true,
@@ -487,7 +486,6 @@
     "templateCredsSetupCompleted": true
   },
   "pinData": {},
-  "versionId": "74c6454e-d577-4cc6-88a8-8ace79878ffd",
   "activeVersionId": "74c6454e-d577-4cc6-88a8-8ace79878ffd",
   "versionCounter": 160,
   "triggerCount": 1,
