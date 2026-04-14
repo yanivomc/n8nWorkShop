@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-server
+  namespace: clawops
+  labels:
+    app: mcp-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mcp-server
+  template:
+    metadata:
+      labels:
+        app: mcp-server
+    spec:
+      serviceAccountName: mcp-server
+      containers:
+        - name: mcp-server
+          image: yanivomc/mcp-server:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: mcp-config
+          env:
+            - name: TOTP_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: mcp-secrets
+                  key: TOTP_SECRET
+            - name: WRITE_APPROVAL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: mcp-secrets
+                  key: WRITE_APPROVAL_TOKEN
+          volumeMounts:
+            - name: mcp-data
+              mountPath: /data
+  
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+      volumes:
+        - name: mcp-data
+          persistentVolumeClaim:
+            claimName: mcp-data
+

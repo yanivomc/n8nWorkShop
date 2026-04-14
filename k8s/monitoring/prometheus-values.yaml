@@ -1,13 +1,11 @@
-# kube-prometheus-stack values — n8n DevOps Workshop
-# AWS kops cluster — using AWS LoadBalancer for Prometheus and Grafana
-#
-# Install (handled by setup.sh option 6):
-#   helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
-#     -n monitoring --create-namespace -f prometheus-values.yaml
+# kube-prometheus-stack values — ClawOps Workshop
+# All services ClusterIP — nginx ingress handles external access
 
 # ── Prometheus ─────────────────────────────────────────────────────────
 prometheus:
   prometheusSpec:
+    routePrefix: /prometheus
+    externalUrl: http://INJECT_INGRESS_LB/prometheus
     retention: 24h
     resources:
       requests:
@@ -19,14 +17,9 @@ prometheus:
     podMonitorSelectorNilUsesHelmValues: false
     serviceMonitorSelectorNilUsesHelmValues: false
     ruleSelectorNilUsesHelmValues: false
-    # Watch ALL namespaces for PrometheusRules (not just monitoring namespace)
     ruleNamespaceSelector: {}
-
   service:
-    type: LoadBalancer
-    annotations:
-      service.beta.kubernetes.io/aws-load-balancer-type: "classic"
-      service.beta.kubernetes.io/aws-load-balancer-internal: "false"
+    type: ClusterIP
     port: 9090
 
 # ── Grafana ────────────────────────────────────────────────────────────
@@ -34,14 +27,16 @@ grafana:
   enabled: true
   adminUser: admin
   adminPassword: workshop123
-
+  # Use env vars — more reliable than grafana.ini for subpath
+  env:
+    GF_SERVER_ROOT_URL: "http://INJECT_INGRESS_LB/grafana"
+    GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+  grafana.ini:
+    security:
+      allow_embedding: true
   service:
-    type: LoadBalancer
-    annotations:
-      service.beta.kubernetes.io/aws-load-balancer-type: "classic"
-      service.beta.kubernetes.io/aws-load-balancer-internal: "false"
+    type: ClusterIP
     port: 80
-
   resources:
     requests:
       memory: 128Mi
@@ -49,7 +44,6 @@ grafana:
     limits:
       memory: 256Mi
       cpu: 200m
-
   dashboardProviders:
     dashboardproviders.yaml:
       apiVersion: 1
@@ -61,7 +55,6 @@ grafana:
           disableDeletion: false
           options:
             path: /var/lib/grafana/dashboards/workshop
-
   dashboards:
     default:
       kubernetes-cluster:
@@ -73,27 +66,20 @@ grafana:
         revision: 1
         datasource: Prometheus
 
-  grafana.ini:
-    security:
-      allow_embedding: true
-
 # ── Alertmanager ───────────────────────────────────────────────────────
 alertmanager:
   alertmanagerSpec:
+    routePrefix: /
+    externalUrl: http://INJECT_INGRESS_LB/alertmanager
     resources:
       requests:
         memory: 64Mi
         cpu: 50m
       limits:
         memory: 128Mi
-
   service:
-    type: LoadBalancer
-    annotations:
-      service.beta.kubernetes.io/aws-load-balancer-type: "classic"
-      service.beta.kubernetes.io/aws-load-balancer-internal: "false"
+    type: ClusterIP
     port: 9093
-
   config:
     global:
       resolve_timeout: 5m
@@ -113,9 +99,6 @@ alertmanager:
       - name: null-receiver
       - name: n8n-webhook
         webhook_configs:
-          # Injected by setup.sh option 6 from EC2_PUBLIC_IP in .env
-          # S5 is the production alert handler (confidence-gated, enriched)
-          # S3 is deactivated — kept for teaching only
           - url: "http://EC2_PUBLIC_IP_PLACEHOLDER:5678/webhook/prometheus-alert-s5"
             send_resolved: true
 
@@ -123,7 +106,6 @@ alertmanager:
 additionalPrometheusRulesMap:
   workshop-alerts:
     groups:
-
       - name: workshop.pods
         rules:
           - alert: PodCrashLooping
@@ -134,8 +116,7 @@ additionalPrometheusRulesMap:
               workshop: "true"
             annotations:
               summary: "Pod {{ $labels.pod }} is crash looping"
-              description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} restarted {{ $value | humanizePercentage }} times/min"
-
+              description: "Pod {{ $labels.pod }} in {{ $labels.namespace }} restarted {{ $value | humanizePercentage }} times/min"
           - alert: PodOOMKilled
             expr: kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1
             for: 0m
@@ -144,8 +125,7 @@ additionalPrometheusRulesMap:
               workshop: "true"
             annotations:
               summary: "Pod {{ $labels.pod }} OOMKilled"
-              description: "Container {{ $labels.container }} in {{ $labels.namespace }}/{{ $labels.pod }} was killed — memory limit exceeded"
-
+              description: "Container {{ $labels.container }} in {{ $labels.namespace }}/{{ $labels.pod }} was OOMKilled"
           - alert: PodNotReady
             expr: kube_pod_status_ready{condition="true"} == 0
             for: 2m
@@ -155,7 +135,6 @@ additionalPrometheusRulesMap:
             annotations:
               summary: "Pod {{ $labels.pod }} not ready"
               description: "Pod {{ $labels.pod }} in {{ $labels.namespace }} not ready for 2+ minutes"
-
           - alert: DeploymentReplicasMismatch
             expr: kube_deployment_spec_replicas != kube_deployment_status_available_replicas
             for: 3m
@@ -177,7 +156,6 @@ additionalPrometheusRulesMap:
             annotations:
               summary: "CPU stress active on {{ $labels.pod }}"
               description: "target-app pod {{ $labels.pod }} is running CPU stress scenario"
-
           - alert: TargetAppMemoryLeak
             expr: target_chaos_memory_active{namespace="workshop"} == 1
             for: 10s
@@ -187,7 +165,6 @@ additionalPrometheusRulesMap:
             annotations:
               summary: "Memory leak active on {{ $labels.pod }}"
               description: "target-app pod {{ $labels.pod }} is leaking memory"
-
           - alert: TargetAppMemoryCritical
             expr: target_chaos_memory_bytes{namespace="workshop"} > 400 * 1024 * 1024
             for: 10s
@@ -197,7 +174,6 @@ additionalPrometheusRulesMap:
             annotations:
               summary: "Memory leak critical on {{ $labels.pod }}"
               description: "target-app pod {{ $labels.pod }} allocated over 400MB"
-
           - alert: TargetAppCrashLooping
             expr: increase(kube_pod_container_status_restarts_total{namespace="workshop", pod=~"target-app.*"}[5m]) > 1
             for: 0s
@@ -218,8 +194,7 @@ additionalPrometheusRulesMap:
               workshop: "true"
             annotations:
               summary: "High error rate on {{ $labels.pod }}"
-              description: "target-app is returning errors at {{ $value | humanizePercentage }} rate"
-
+              description: "target-app is returning errors"
           - alert: TargetAppHighLatency
             expr: target_chaos_latency_active{namespace="workshop"} == 1
             for: 10s
@@ -228,7 +203,7 @@ additionalPrometheusRulesMap:
               workshop: "true"
             annotations:
               summary: "High latency on {{ $labels.pod }}"
-              description: "target-app is injecting {{ $value }}ms latency on all requests"
+              description: "target-app is injecting latency on all requests"
 
       - name: workshop.nodes
         rules:
@@ -241,7 +216,6 @@ additionalPrometheusRulesMap:
             annotations:
               summary: "Node {{ $labels.node }} memory pressure"
               description: "Node {{ $labels.node }} is under memory pressure"
-
           - alert: NodeHighCPU
             expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
             for: 2m

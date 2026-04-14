@@ -1,11 +1,35 @@
 import os, time, logging, sys, asyncio
 import httpx
 from fastapi import FastAPI, Request
+from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
+
+# ── Chat store (in-memory, ring buffer) ───────────────────────────────────────
+import json, time as _time
+from collections import deque
+from fastapi.responses import StreamingResponse
+
+_chat_messages = deque(maxlen=200)   # persist last 200 messages
+_chat_subscribers = []               # active SSE connections
+
+def _chat_event(msg: dict):
+    """Store message and fan-out to all SSE subscribers."""
+    _chat_messages.append(msg)
+    dead = []
+    for q in _chat_subscribers:
+        try:
+            q.put_nowait(msg)
+        except Exception:
+            dead.append(q)
+    for q in dead:
+        try: _chat_subscribers.remove(q)
+        except: pass
+
+MCP_URL = os.getenv("MCP_INTERNAL_URL", os.getenv("MCP_URL", "http://mcp-server.clawops.svc.cluster.local:8000"))
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
     format="%(asctime)s | %(levelname)-8s | dashboard | %(message)s")
@@ -139,12 +163,127 @@ async def health():
 
 @app.get("/config.js")
 async def config_js():
+    base_path = os.getenv('DASHBOARD_BASE_PATH', '').rstrip('/')
     js = f"""window.CLAWOPS_CONFIG = {{
-  prom:    "{os.getenv('PROMETHEUS_URL', 'http://localhost:9090')}",
-  grafana: "{os.getenv('GRAFANA_URL', 'http://localhost:3000')}",
-  am:      "{os.getenv('ALERTMANAGER_URL', 'http://localhost:9093')}",
-  n8n:     "{os.getenv('N8N_URL', 'http://localhost:5678')}",
+  prom:     "{os.getenv('PROMETHEUS_URL', 'http://localhost:9090')}",
+  grafana:  "{os.getenv('GRAFANA_URL', 'http://localhost:3000')}",
+  am:       "{os.getenv('ALERTMANAGER_URL', 'http://localhost:9093')}",
+  n8n:      "{os.getenv('N8N_URL', 'http://localhost:5678')}",
+  mcp:      "{os.getenv('MCP_URL', 'http://localhost:8000')}",
+  basePath: "{base_path}",
+  n8nInternal: "{os.getenv('N8N_INTERNAL_URL', '')}",
+  s4Webhook: "{os.getenv('S4_WEBHOOK_PATH', '/webhook/dashboard-chat')}",
+  masterIp: "{os.getenv('MASTER_IP', '')}",
+  masterTerminalPort: "{os.getenv('MASTER_TERMINAL_PORT', '5000')}",
+  masterVscodePort: "{os.getenv('MASTER_VSCODE_PORT', '5001')}",
 }};"""
     return Response(content=js, media_type="application/javascript")
+
+# ── Chat API ──────────────────────────────────────────────────────────────────
+class ChatMsg(BaseModel):
+    role: str        # "system" | "agent" | "user"
+    content: str
+    meta: dict = {}  # optional: alertname, key, severity etc
+
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate
+
+    model_config = {"arbitrary_types_allowed": True}
+
+    def __init__(self, **data):
+        if isinstance(data.get("meta"), str):
+            import json as _json
+            try:
+                data["meta"] = _json.loads(data["meta"])
+            except Exception:
+                data["meta"] = {}
+        super().__init__(**data)
+
+@app.post("/api/chat/send")
+async def chat_send(msg: ChatMsg):
+    """n8n → dashboard: post a message (incident alert, execution result)."""
+    payload = {
+        "id": int(_time.time() * 1000),
+        "role": msg.role,
+        "content": msg.content,
+        "meta": msg.meta,
+        "ts": _time.strftime("%H:%M:%S")
+    }
+    _chat_event(payload)
+    return {"ok": True}
+
+@app.post("/api/chat/message")
+async def chat_message(request: Request):
+    """Browser → n8n: student types a message (e.g. /approve 123456 k42a)."""
+    body = await request.json()
+    text = body.get("text", "").strip()
+    if not text:
+        return {"ok": False, "error": "empty message"}
+
+    # Echo to chat as user message
+    payload = {
+        "id": int(_time.time() * 1000),
+        "role": "user",
+        "content": text,
+        "meta": {},
+        "ts": _time.strftime("%H:%M:%S")
+    }
+    _chat_event(payload)
+
+    # Forward to n8n S4 webhook
+    n8n_url = os.getenv("N8N_INTERNAL_URL", "http://n8n.clawops.svc.cluster.local:5678")
+    webhook_path = os.getenv("S4_WEBHOOK_PATH", "/webhook/dashboard-chat")
+    try:
+        r = await _client.post(
+            f"{n8n_url}{webhook_path}",
+            json={"text": text, "chatId": "dashboard", "from": "student"},
+            timeout=5.0
+        )
+        return {"ok": True, "forwarded": r.status_code}
+    except Exception as e:
+        logger.warning(f"Could not forward to n8n: {e}")
+        return {"ok": True, "forwarded": False}
+
+@app.get("/api/chat/history")
+async def chat_history():
+    """Return all buffered messages for reconnecting clients."""
+    return list(_chat_messages)
+
+@app.get("/api/chat/stream")
+async def chat_stream(request: Request):
+    """SSE endpoint — browser connects and receives real-time chat messages."""
+    import asyncio
+    queue = asyncio.Queue()
+    _chat_subscribers.append(queue)
+
+    async def event_generator():
+        # Send history first
+        for msg in list(_chat_messages):
+            yield f"data: {json.dumps(msg)}\n\n"
+        # Stream new messages
+        try:
+            while not await request.is_disconnected():
+                try:
+                    msg = await asyncio.wait_for(queue.get(), timeout=15.0)
+                    yield f"data: {json.dumps(msg)}\n\n"
+                except asyncio.TimeoutError:
+                    yield f": ping\n\n"  # keep-alive
+        finally:
+            try: _chat_subscribers.remove(queue)
+            except: pass
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        }
+    )
+
+@app.get("/dashboard")
+async def dashboard_redirect():
+    return RedirectResponse(url="/dashboard/")
 
 app.mount("/", StaticFiles(directory="/app/static", html=True), name="static")

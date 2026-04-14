@@ -1,7 +1,6 @@
 {
   "updatedAt": "2026-04-12T10:15:51.667Z",
   "createdAt": "2026-04-12T06:28:21.466Z",
-  "id": "LPVbHkn9iHSOPANu",
   "name": "S5 - Alert Intelligence",
   "description": null,
   "active": true,
@@ -125,7 +124,7 @@
       "parameters": {
         "toolDescription": "Run any read-only kubectl command against the cluster. Adapt the command to whatever resource type is being investigated \u2014 pods, deployments, nodes, services, endpoints, HPAs, PVCs, etc.",
         "method": "POST",
-        "url": "http://mcp-server:8000/tools/kubectl-read",
+        "url": "http://mcp-server.clawops.svc.cluster.local:8000/tools/kubectl-read",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\"command\": \"{command}\"}"
@@ -143,7 +142,7 @@
       "parameters": {
         "toolDescription": "Run any PromQL query against Prometheus for live metrics. Use queries relevant to the resource type and symptom being investigated.",
         "method": "POST",
-        "url": "http://mcp-server:8000/tools/promql",
+        "url": "http://mcp-server.clawops.svc.cluster.local:8000/tools/promql",
         "sendBody": true,
         "parametersBody": {
           "values": [
@@ -177,17 +176,37 @@
     },
     {
       "parameters": {
-        "chatId": "TELEGRAM_CHAT_ID_CHANGEME",
-        "text": "={{ $json.message }}",
-        "additionalFields": {
-          "disable_web_page_preview": true,
-          "parse_mode": "HTML"
+        "method": "POST",
+        "url": "http://clawops-dashboard.clawops.svc.cluster.local:80/api/chat/send",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "role",
+              "value": "agent"
+            },
+            {
+              "name": "content",
+              "value": "={{ '\ud83d\udea8 ' + $('PromQL Enrichment + Confidence').first().json.alertname + ' detected!\\n\\n' + $('AI Agent (Gemini)').first().json.output + '\\n\\n\ud83d\udd10 To approve: /approve <6-digit-totp> ' + $('Store Incident').first().json.key }}"
+            },
+            {
+              "name": "meta",
+              "value": "={{ $('Store Incident').first().json.key }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
         }
       },
       "id": "603f0a1d-e19a-406f-bc61-36a40bc630b9",
-      "name": "Send to Telegram",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
+      "name": "Send to Dashboard Chat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         -5264,
         -944
@@ -300,7 +319,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://mcp-server:8000/incidents",
+        "url": "http://mcp-server.clawops.svc.cluster.local:8000/incidents",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({\n  alertname: $('PromQL Enrichment + Confidence').first().json.alertname,\n  namespace: $('PromQL Enrichment + Confidence').first().json.namespace,\n  pod: $('PromQL Enrichment + Confidence').first().json.pod,\n  command: (($('AI Agent (Gemini)').first().json.output || '').match(/SRE_ACTION:\\s*(kubectl[^\\n]+)/) || [])[1]?.trim().replace(/^kubectl\\s+/i, '') || 'none'\n}) }}",
@@ -412,17 +431,6 @@
         ]
       ]
     },
-    "Format Telegram Message": {
-      "main": [
-        [
-          {
-            "node": "Send to Telegram",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Gemini Chat Model": {
       "ai_languageModel": [
         [
@@ -449,7 +457,7 @@
       "main": [
         [
           {
-            "node": "Format Telegram Message",
+            "node": "Send to Dashboard Chat",
             "type": "main",
             "index": 0
           }
@@ -478,7 +486,6 @@
     "templateCredsSetupCompleted": true
   },
   "pinData": {},
-  "versionId": "74c6454e-d577-4cc6-88a8-8ace79878ffd",
   "activeVersionId": "74c6454e-d577-4cc6-88a8-8ace79878ffd",
   "versionCounter": 160,
   "triggerCount": 1,

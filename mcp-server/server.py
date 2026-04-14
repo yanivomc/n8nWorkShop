@@ -12,7 +12,7 @@ app = FastAPI(
 )
 
 PROMETHEUS_URL = os.getenv("PROMETHEUS_URL", "http://prometheus-server:9090")
-KUBECONFIG     = os.getenv("KUBECONFIG", "/root/.kube/config")
+# In-cluster ServiceAccount auth — no kubeconfig needed when running as K8s pod
 TOTP_SECRET    = os.getenv("TOTP_SECRET", "")          # base32 secret for Authy/Google Auth
 WRITE_TOKEN    = os.getenv("WRITE_APPROVAL_TOKEN", "")  # fallback static token
 
@@ -53,7 +53,7 @@ def is_write_command(cmd: str) -> bool:
     return cmd.strip().split()[0].lower() in WRITE_VERBS
 
 def run_kubectl(cmd: str, timeout: int = 30) -> dict:
-    full = f"kubectl {cmd} --kubeconfig={KUBECONFIG}"
+    full = f"kubectl {cmd}"
     logger.info(f"kubectl: {full}")
     r = subprocess.run(full, shell=True, capture_output=True, text=True, timeout=timeout)
     if r.returncode != 0:

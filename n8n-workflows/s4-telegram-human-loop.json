@@ -1,58 +1,50 @@
 {
   "name": "S4 - Telegram Human Loop",
-  "active": true,
   "nodes": [
     {
       "parameters": {
-        "updates": [
-          "message"
-        ],
-        "additionalFields": {}
+        "httpMethod": "POST",
+        "path": "dashboard-chat",
+        "options": {}
       },
-      "id": "7e3fb805-d81c-4230-82ca-4720c390a8c1",
-      "name": "Telegram Trigger",
-      "type": "n8n-nodes-base.telegramTrigger",
-      "typeVersion": 1.1,
+      "id": "ba725537-788e-4aa4-9761-a2a13467657b",
+      "name": "Dashboard Chat Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
       "position": [
-        -2176,
-        384
+        6880,
+        624
       ],
-      "webhookId": "telegram-bot",
-      "credentials": {
-        "telegramApi": {
-          "id": "jcA0ZMKocCJNhas2",
-          "name": "Telegram account"
-        }
-      }
+      "webhookId": "telegram-bot"
     },
     {
       "parameters": {
-        "jsCode": "const msg = $input.first().json.message;\nconst text = (msg?.text || '').trim();\nconst chatId = msg?.chat?.id?.toString();\nconst from = msg?.from?.first_name || 'Engineer';\nconst route = (text.startsWith('/approve ') || text.startsWith('/deny ')) ? 'approval' : 'query';\nreturn [{ json: { route, text, chatId, from } }];"
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst text = (body.text || '').trim();\nconst chatId = body.chatId || 'dashboard';\nconst from = body.from || 'student';\nconst route = (text.startsWith('/approve ') || text.startsWith('/deny ')) ? 'approval' : 'query';\nreturn [{ json: { route, text, chatId, from } }];"
       },
-      "id": "459ca681-c9a1-4e19-986a-b5fc33c0666b",
+      "id": "f36a9d79-cc5c-40b4-85a1-8cf6370e42ef",
       "name": "Route Message",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1952,
-        384
+        7104,
+        624
       ]
     },
     {
       "parameters": {
         "promptType": "define",
-        "text": "={{ $json.from }} asks: {{ $json.text }}\n\nAnswer using kubectl_read and/or promql. Be concise \u2014 this is a Telegram chat reply.\nFormat your response clearly with emojis. Keep it under 300 words.",
+        "text": "={{ $json.from }} asks: {{ $json.text }}\n\nAnswer using kubectl_read and/or promql. Be concise \u2014 this is a chat reply.\nFormat your response clearly with emojis. Keep it under 300 words.",
         "options": {
-          "systemMessage": "You are a Kubernetes SRE assistant helping engineers via Telegram chat.\n\nYou have tools:\n1. kubectl_read \u2014 read-only kubectl. Parameter: \"command\"\n2. promql \u2014 PromQL queries. Parameter: \"query\"  \n3. kubectl_write \u2014 write operations, REQUIRES valid TOTP token\n4. lookup_incident \u2014 look up stored kubectl command by 4-char incident key. Parameter: \"key\"\n\n## When user sends /approve <totp> <key> (e.g. /approve 123456 k42a):\n1. Extract the 4-char key (e.g. k42a)\n2. Call lookup_incident with that key \u2192 get the stored command\n3. Call kubectl_write with: TOTP=<totp> and the retrieved command\n4. Reply with confirmation\n\n## For all other messages:\nInvestigate freely using kubectl_read and promql.\nBe concise, use emojis \u2705 \u274c \u26a0\ufe0f \ud83d\udcca\nIf action needed, end with: SRE_ACTION: kubectl <command>"
+          "systemMessage": "You are a Kubernetes SRE assistant helping engineers via dashboard chat.\n\nYou have tools:\n1. kubectl_read \u2014 read-only kubectl. Parameter: \"command\"\n2. promql \u2014 PromQL queries. Parameter: \"query\"  \n3. kubectl_write \u2014 write operations, REQUIRES valid TOTP token\n4. lookup_incident \u2014 look up stored kubectl command by 4-char incident key. Parameter: \"key\"\n\n## When user sends /approve <totp> <key> (e.g. /approve 123456 k42a):\n1. Extract the 4-char key (e.g. k42a)\n2. Call lookup_incident with that key \u2192 get the stored command\n3. Call kubectl_write with: TOTP=<totp> and the retrieved command\n4. Reply with confirmation\n\n## For all other messages:\nInvestigate freely using kubectl_read and promql.\nBe concise, use emojis \u2705 \u274c \u26a0\ufe0f \ud83d\udcca\nIf action needed, end with: SRE_ACTION: kubectl <command>"
         }
       },
-      "id": "892c14c5-9024-431c-bfe2-f031d19ff1a4",
+      "id": "eeb11615-901c-4e3a-aa61-07cf9ed550f6",
       "name": "K8s Assistant",
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 1.7,
       "position": [
-        -1376,
-        128
+        7744,
+        352
       ],
       "onError": "continueErrorOutput"
     },
@@ -60,196 +52,241 @@
       "parameters": {
         "options": {}
       },
-      "id": "49c43d8a-966e-4929-9eb3-a0bd66d77c8f",
+      "id": "03b2ed7f-35ae-4a41-9802-6023275790e8",
       "name": "Gemini Assistant",
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        -1504,
-        352
+        7552,
+        576
       ],
       "credentials": {
         "googlePalmApi": {
-          "id": "4Jw86EqmWdx0n1FD",
+          "id": "GQ1hkgYO7ltcNZw8",
           "name": "Google Gemini(PaLM) Api account"
         }
       }
     },
     {
       "parameters": {
-        "toolDescription": "Run kubectl commands to investigate the cluster state. Examples: get pods -n prod, describe pod <n> -n <ns>, get nodes, get events -A --sort-by=.lastTimestamp. Use this to gather information and diagnose issues.",
+        "toolDescription": "Run kubectl commands to investigate the cluster state.",
         "method": "POST",
-        "url": "http://mcp-server:8000/tools/kubectl-read",
+        "url": "http://mcp-server.clawops.svc.cluster.local:8000/tools/kubectl-read",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\"command\": \"{command}\"}"
       },
-      "id": "227e6d68-88ae-4904-ae43-fd9291dc0eb1",
+      "id": "89ebe874-0716-4ce4-b0ae-e2c2cd9d2187",
       "name": "kubectl_read",
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
       "typeVersion": 1.1,
       "position": [
-        -1248,
-        352
+        7808,
+        576
       ]
     },
     {
       "parameters": {
-        "toolDescription": "Run PromQL queries against Prometheus to get live metrics. Use single quotes for label selectors.",
+        "toolDescription": "Run PromQL queries against Prometheus to get live metrics.",
         "method": "POST",
-        "url": "http://mcp-server:8000/tools/promql",
+        "url": "http://mcp-server.clawops.svc.cluster.local:8000/tools/promql",
         "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\"query\": \"{query}\"}"
+        "parametersBody": {
+          "values": [
+            {
+              "name": "query"
+            }
+          ]
+        }
       },
-      "id": "3931ba66-f2fa-4050-964e-ff44649a1f3a",
+      "id": "7545e27b-14a3-428f-b055-14f0a8f2e976",
       "name": "promql",
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
       "typeVersion": 1.1,
       "position": [
-        -1120,
+        7936,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = $input.first().json.output || '';\nconst chatId = $('Route Message').first().json.chatId;\nconst match = output.match(/SRE_ACTION:\\s*(.+)/);\nif (match) {\n  const cmd = match[1].trim().replace(/^kubectl\\s+/i, '');\n  return [{ json: { needsApproval: true, chatId, command: cmd } }];\n}\nreturn [{ json: { needsApproval: false, chatId, message: output } }];"
+      },
+      "id": "80a057ac-eb04-40f7-9352-3c52ab5f506a",
+      "name": "Check Write Needed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8272,
         352
       ]
     },
     {
       "parameters": {
-        "jsCode": "const output = $input.first().json.output || '';\nconst chatId = $('Route Message').first().json.chatId;\nconst match = output.match(/SRE_ACTION:\\s*(.+)/);\nif (match) {\n  // Strip leading 'kubectl ' if Gemini included it\n  const cmd = match[1].trim().replace(/^kubectl\\s+/i, '');\n  const store = $getWorkflowStaticData('global');\n  if (!store.pending) store.pending = {};\n  store.pending[chatId] = { command: cmd };\n  return [{ json: {\n    needsApproval: true,\n    chatId,\n    approvalPrompt: '\u26a0\ufe0f <b>SRE Action suggested:</b>\\n<code>kubectl ' + cmd + '</code>\\n\\n\ud83d\udd10 Enter your 6-digit Authenticator code:\\n\u2705 <code>/approve &lt;6-digit-code&gt;</code>\\n\u274c <code>/deny</code>'\n  }}];\n}\nreturn [{ json: { needsApproval: false, chatId, message: output } }];"
-      },
-      "id": "538bf030-a32c-4f38-8ae5-7ae6c234c7a7",
-      "name": "Check Write Needed",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -912,
-        240
-      ]
-    },
-    {
-      "parameters": {
-        "chatId": "={{ $json.chatId }}",
-        "text": "={{ $json.approvalPrompt }}",
-        "additionalFields": {
-          "parse_mode": "HTML"
+        "method": "POST",
+        "url": "http://clawops-dashboard.clawops.svc.cluster.local:80/api/chat/send",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "role",
+              "value": "agent"
+            },
+            {
+              "name": "content",
+              "value": "={{ '\u26a0\ufe0f SRE Action suggested:\\nkubectl ' + $('Check Write Needed').first().json.command + '\\n\\n\ud83d\udd10 Enter your 6-digit Authenticator code like so:\\n\u2705 /approve <totp> ' + $json.key + '\\n\u274c /deny' }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
         }
       },
-      "id": "2566c760-2ee2-4dfc-aca1-4fad884437b3",
+      "id": "e7fc52cc-6bd5-4b27-a12a-bbaa098bd081",
       "name": "Send Approval Request",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
-        -464,
-        144
-      ],
-      "webhookId": "fd5872aa-7fb2-4ca8-a05a-1090b58f21aa",
-      "credentials": {
-        "telegramApi": {
-          "id": "jcA0ZMKocCJNhas2",
-          "name": "Telegram account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "chatId": "={{ $json.chatId }}",
-        "text": "={{ $json.message }}",
-        "additionalFields": {
-          "parse_mode": "HTML"
-        }
-      },
-      "id": "c2dacdda-9c97-4a7c-bc57-17fdc843fddd",
-      "name": "Send Answer",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
-      "position": [
-        -464,
-        336
-      ],
-      "webhookId": "109c2e40-5bfc-483f-8481-4fa886c211f2",
-      "credentials": {
-        "telegramApi": {
-          "id": "jcA0ZMKocCJNhas2",
-          "name": "Telegram account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "const text = $input.first().json.text.trim();\nconst chatId = $input.first().json.chatId;\nconst from = $input.first().json.from;\n\nif (text.startsWith('/deny')) {\n  const store = $getWorkflowStaticData('global');\n  if (store.pending) delete store.pending[chatId];\n  console.log(JSON.stringify({ event: 'DENIED', user: from, chatId, timestamp: new Date().toISOString() }));\n  return [{ json: { route: 'deny', chatId, message: '\u274c Action denied by ' + from + '. No changes made.' } }];\n}\n\n// Parse: /approve <totp> [optional-key]\nconst parts = text.split(' ');\nconst totpCode = parts[1] || '';\nconst incidentKey = parts[2] || null;\n\nif (incidentKey) {\n  // S5 incident flow \u2014 key provided, look up from MCP\n  console.log(JSON.stringify({ event: 'APPROVE_BY_KEY', user: from, chatId, incidentKey, timestamp: new Date().toISOString() }));\n  return [{ json: { route: 'approval', chatId, incidentKey, approvedBy: from, token: totpCode, useKey: true } }];\n} else {\n  // Normal chat flow \u2014 look up from static data\n  const store = $getWorkflowStaticData('global');\n  const pending = store.pending?.[chatId];\n  if (!pending) {\n    return [{ json: { route: 'deny', chatId, message: '\u26a0\ufe0f No pending action. Ask your question first or provide an incident key.' } }];\n  }\n  const command = pending.command;\n  delete store.pending[chatId];\n  console.log(JSON.stringify({ event: 'APPROVE_BY_STATIC', user: from, chatId, command, timestamp: new Date().toISOString() }));\n  return [{ json: { route: 'approval', chatId, command, approvedBy: from, token: totpCode, useKey: false } }];\n}"
-      },
-      "id": "9303dd3d-422d-425b-81e2-cfef7ac558a9",
-      "name": "Validate Approval",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -1312,
-        528
+        8720,
+        256
       ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "http://mcp-server:8000/tools/kubectl-write",
+        "url": "http://clawops-dashboard.clawops.svc.cluster.local:80/api/chat/send",
         "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ (() => {\n  const useKey = $('Validate Approval').first().json.useKey;\n  const command = useKey \n    ? $('Fetch Incident Command').first().json.command\n    : $('Validate Approval').first().json.command;\n  return JSON.stringify({\n    command: command,\n    approval_token: $('Validate Approval').first().json.token,\n    approved_by: $('Validate Approval').first().json.approvedBy\n  });\n})() }}",
-        "options": {}
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "role",
+              "value": "agent"
+            },
+            {
+              "name": "content",
+              "value": "={{ $('Check Write Needed').first().json.message }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
       },
-      "id": "66fa8609-f669-4d17-9bbf-6bc458b7b49b",
-      "name": "Execute Write",
+      "id": "3bf1df86-0ad5-4041-9f3e-05655b38e509",
+      "name": "Send Answer",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -912,
-        528
+        8720,
+        448
       ]
     },
     {
       "parameters": {
-        "chatId": "={{ $('Validate Approval').first().json.chatId }}",
-        "text": "=\u2705 <b>Executed by {{ $('Validate Approval').first().json.approvedBy }}</b>:\n<code>kubectl {{ $('Execute Write').first().json.command?.replace(/^kubectl\\s+/i,'') || $('Validate Approval').first().json.command || '' }}</code>\n\n{{ $('Execute Write').first().json.output || $json.output || '' }}\n\n\ud83d\udd50 {{ new Date().toUTCString() }}\n\nThis message was sent automatically with n8n",
-        "additionalFields": {
-          "parse_mode": "HTML"
-        }
+        "jsCode": "const text = $input.first().json.text.trim();\nconst chatId = $input.first().json.chatId;\nconst from = $input.first().json.from;\n\nif (text.startsWith('/deny')) {\n  const store = $getWorkflowStaticData('global');\n  if (store.pending) delete store.pending[chatId];\n  return [{ json: { route: 'deny', chatId, message: '\u274c Action denied by ' + from + '. No changes made.' } }];\n}\n\nconst parts = text.split(' ');\n// /approve <totp> <key>\nif (parts.length < 3) {\n  return [{ json: { route: 'deny', chatId, message: '\u26a0\ufe0f Format: /approve <6-digit-totp> <incident-key>\\nExample: /approve 123456 k42a' } }];\n}\n\nconst totpCode = parts[1];\nconst incidentKey = parts[2];\n\nreturn [{ json: { route: 'approval', chatId, incidentKey, approvedBy: from, token: totpCode, useKey: true } }];"
       },
-      "id": "fde54d79-35cf-4302-b526-4b22004d7d50",
-      "name": "Send Execution Result",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
+      "id": "f0904892-8540-44fe-a7cd-046b733e6578",
+      "name": "Validate Approval",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
-        -688,
-        528
-      ],
-      "webhookId": "0ef3c1bb-8646-4cc1-ba91-b7486a54376a",
-      "credentials": {
-        "telegramApi": {
-          "id": "jcA0ZMKocCJNhas2",
-          "name": "Telegram account"
-        }
-      }
+        7808,
+        816
+      ]
     },
     {
       "parameters": {
-        "chatId": "={{ $json.chatId }}",
-        "text": "={{ $json.message }}",
-        "additionalFields": {
-          "parse_mode": "HTML"
+        "method": "POST",
+        "url": "http://mcp-server.clawops.svc.cluster.local:8000/tools/kubectl-write",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ (() => {\n  const v = $('Validate Approval').first().json;\n  let command;\n  if (v.useKey) {\n    try { command = $('Fetch Incident Command').first().json.command; } catch(e) {}\n    if (!command) {\n      const store = $getWorkflowStaticData('global');\n      command = store.pending?.[v.chatId]?.command;\n    }\n  } else {\n    command = v.command;\n  }\n  // Strip 'kubectl ' prefix \u2014 MCP expects bare command\n  if (command) command = command.replace(/^kubectl\\s+/i, '');\n  return JSON.stringify({\n    command: command,\n    approval_token: v.token,\n    approved_by: v.approvedBy\n  });\n})() }}",
+        "options": {}
+      },
+      "id": "90d32f55-dc0b-417b-832a-228351c4cfad",
+      "name": "Execute Write",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        9392,
+        816
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://clawops-dashboard.clawops.svc.cluster.local:80/api/chat/send",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "role",
+              "value": "agent"
+            },
+            {
+              "name": "content",
+              "value": "={{ '\u2705 Executed by ' + $('Validate Approval').first().json.approvedBy + ': kubectl ' + ($('Execute Write').first().json.command || 'unknown') }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
         }
       },
-      "id": "575b0a6b-5746-44a1-a181-7df34560cad2",
-      "name": "Send Denial",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
+      "id": "ab2751d0-f79c-416f-b0ed-fba138bc8853",
+      "name": "Send Execution Result",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
-        -2176,
-        752
-      ],
-      "webhookId": "6ce97b27-7ab7-41b9-8855-1c37e41ee25a",
-      "credentials": {
-        "telegramApi": {
-          "id": "jcA0ZMKocCJNhas2",
-          "name": "Telegram account"
+        9840,
+        816
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://clawops-dashboard.clawops.svc.cluster.local:80/api/chat/send",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "role",
+              "value": "agent"
+            },
+            {
+              "name": "content",
+              "value": "={{ String($json.message || $json.output || '...') }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
         }
-      }
+      },
+      "id": "fd9452a2-7782-4660-94d2-19dc7f477582",
+      "name": "Send Denial",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        8496,
+        912
+      ]
     },
     {
       "parameters": {
@@ -274,13 +311,13 @@
         },
         "options": {}
       },
-      "id": "3d753d02-02bb-4a00-bd99-67b20c004c96",
+      "id": "448e6f15-6dec-4617-b91a-5d65e39cb754",
       "name": "Is Query?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        -1728,
-        384
+        7328,
+        624
       ]
     },
     {
@@ -294,7 +331,7 @@
           "conditions": [
             {
               "id": "cond2",
-              "leftValue": "={{ $json.needsApproval }}",
+              "leftValue": "={{ $('Check Write Needed').first().json.needsApproval }}",
               "rightValue": true,
               "operator": {
                 "type": "boolean",
@@ -306,13 +343,13 @@
         },
         "options": {}
       },
-      "id": "9b380e0f-7e3a-4ad2-a007-523222841f02",
+      "id": "7dae4486-b501-46ed-99bd-5a8f60a12c34",
       "name": "Needs Approval?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        -688,
-        240
+        8496,
+        352
       ]
     },
     {
@@ -321,13 +358,13 @@
         "sessionKey": "={{ $('Route Message').first().json.chatId }}",
         "contextWindowLength": 10
       },
-      "id": "b9ec61db-c600-4a03-b456-1a55b6ebf73d",
+      "id": "4be3b0eb-6cd3-460e-bc6d-f2938df051e3",
       "name": "Chat Memory",
       "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
       "typeVersion": 1.3,
       "position": [
-        -1376,
-        352
+        7680,
+        576
       ]
     },
     {
@@ -353,44 +390,41 @@
         },
         "options": {}
       },
-      "id": "a1b2c3d4-0217-0217-0217-000000000217",
+      "id": "f68355df-78ae-4c0f-a974-1ac7a80f3051",
       "name": "Approval Valid?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        -1050,
-        528
+        8272,
+        816
       ]
     },
     {
       "parameters": {
-        "toolDescription": "Look up an incident by its 4-char key to retrieve the stored kubectl command. Use this when the user sends /approve with a key like 'k42a'. Parameter: key (the 4-char incident key)",
-        "method": "GET",
-        "url": "=http://mcp-server:8000/incidents/{{ $fromAI('key', 'the 4-char incident key from the approve command', 'string') }}",
-        "options": {}
+        "toolDescription": "Look up an incident by its 4-char key to retrieve the stored kubectl command.",
+        "url": "=http://mcp-server.clawops.svc.cluster.local:8000/incidents/{{ $fromAI('key', 'the 4-char incident key', 'string') }}"
       },
-      "id": "lookup-incident-tool",
+      "id": "28e93544-2814-4d2d-a515-8cd781701715",
       "name": "lookup_incident",
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
       "typeVersion": 1.1,
       "position": [
-        -2800,
-        -800
+        8064,
+        576
       ]
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "=http://mcp-server:8000/incidents/{{ $json.incidentKey }}",
+        "url": "=http://mcp-server.clawops.svc.cluster.local:8000/incidents/{{ $json.incidentKey }}",
         "options": {}
       },
-      "id": "lookup-incident-http",
+      "id": "158329f1-ba35-454d-bd15-91f37ec0c07a",
       "name": "Fetch Incident Command",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -1152,
-        528
+        8720,
+        640
       ]
     },
     {
@@ -414,19 +448,19 @@
         },
         "options": {}
       },
-      "id": "use-key-if-node",
+      "id": "6849eff6-63a7-4537-982e-112b534f29ca",
       "name": "Use Key?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        -1372,
-        528
+        8496,
+        720
       ]
     },
     {
       "parameters": {
         "method": "PATCH",
-        "url": "=http://mcp-server:8000/incidents/{{ $('Validate Approval').first().json.incidentKey || 'unknown' }}",
+        "url": "=http://mcp-server.clawops.svc.cluster.local:8000/incidents/{{ $('Validate Approval').first().json.incidentKey || 'unknown' }}",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\"status\": \"resolved\"}",
@@ -438,26 +472,26 @@
           }
         }
       },
-      "id": "patch-incident-resolved",
+      "id": "39a72675-5542-4d98-96ba-57f0f85e2944",
       "name": "Mark Incident Resolved",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -908,
-        528
+        9616,
+        816
       ]
     },
     {
       "parameters": {
-        "jsCode": "const incident = $input.first().json;\nconst chatId = $('Validate Approval').first().json.chatId;\nif (incident.status !== 'pending') {\n  return [{ json: { \n    blocked: true,\n    chatId,\n    message: `\u26a0\ufe0f Incident #${incident.key} is already <b>${incident.status}</b>. Cannot re-execute.`\n  }}];\n}\nreturn [{ json: { ...incident, blocked: false, chatId } }];"
+        "jsCode": "const incident = $input.first().json;\nconst chatId = $('Validate Approval').first().json.chatId;\nif (incident.status !== 'pending') {\n  return [{ json: { \n    blocked: true,\n    chatId,\n    message: '\u26a0\ufe0f Incident #' + incident.key + ' is already ' + incident.status + '. Cannot re-execute.'\n  }}];\n}\nreturn [{ json: { ...incident, blocked: false, chatId } }];"
       },
-      "id": "check-pending-node",
+      "id": "91186d3f-02ab-4948-9a73-8289a9b0f316",
       "name": "Check Pending Only",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -932,
-        528
+        8944,
+        640
       ]
     },
     {
@@ -481,41 +515,77 @@
         },
         "options": {}
       },
-      "id": "blocked-if-node",
+      "id": "76c30ea4-cf86-4e47-81eb-321482011c53",
       "name": "Is Blocked?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        -712,
-        528
+        9168,
+        640
       ]
     },
     {
       "parameters": {
-        "chatId": "={{ $json.chatId }}",
-        "text": "={{ $json.message }}",
-        "additionalFields": {
-          "parse_mode": "HTML"
+        "method": "POST",
+        "url": "http://clawops-dashboard.clawops.svc.cluster.local:80/api/chat/send",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "role",
+              "value": "agent"
+            },
+            {
+              "name": "content",
+              "value": "={{ String($json.message || $json.output || '...') }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
         }
       },
-      "id": "send-blocked-node",
+      "id": "3c3c3d58-af3e-40e0-a282-5a14ec1a9b6f",
       "name": "Send Blocked Message",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
-        -492,
-        448
-      ],
-      "credentials": {
-        "telegramApi": {
-          "id": "jcA0ZMKocCJNhas2",
-          "name": "Telegram account"
-        }
-      }
+        9392,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://mcp-server.clawops.svc.cluster.local:8000/incidents",
+        "sendBody": true,
+        "specifyBody": "json",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "jsonBody": "={{ JSON.stringify({ alertname: \"Chat SRE Action\", namespace: \"workshop\", pod: \"n/a\", command: \"kubectl \" + $(\"Check Write Needed\").first().json.command }) }}"
+      },
+      "id": "store-chat-incident-001",
+      "name": "Store Chat Incident",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        8272,
+        160
+      ]
     }
   ],
+  "pinData": {},
   "connections": {
-    "Telegram Trigger": {
+    "Dashboard Chat Trigger": {
       "main": [
         [
           {
@@ -531,6 +601,24 @@
         [
           {
             "node": "Is Query?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Query?": {
+      "main": [
+        [
+          {
+            "node": "K8s Assistant",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Validate Approval",
             "type": "main",
             "index": 0
           }
@@ -570,6 +658,28 @@
         ]
       ]
     },
+    "lookup_incident": {
+      "ai_tool": [
+        [
+          {
+            "node": "K8s Assistant",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "K8s Assistant",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "K8s Assistant": {
       "main": [
         [
@@ -585,47 +695,7 @@
       "main": [
         [
           {
-            "node": "Needs Approval?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Validate Approval": {
-      "main": [
-        [
-          {
-            "node": "Approval Valid?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Execute Write": {
-      "main": [
-        [
-          {
-            "node": "Mark Incident Resolved",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Is Query?": {
-      "main": [
-        [
-          {
-            "node": "K8s Assistant",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Validate Approval",
+            "node": "Store Chat Incident",
             "type": "main",
             "index": 0
           }
@@ -650,12 +720,12 @@
         ]
       ]
     },
-    "Chat Memory": {
-      "ai_memory": [
+    "Validate Approval": {
+      "main": [
         [
           {
-            "node": "K8s Assistant",
-            "type": "ai_memory",
+            "node": "Approval Valid?",
+            "type": "main",
             "index": 0
           }
         ]
@@ -673,28 +743,6 @@
         [
           {
             "node": "Send Denial",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "lookup_incident": {
-      "ai_tool": [
-        [
-          {
-            "node": "K8s Assistant",
-            "type": "ai_tool",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Fetch Incident Command": {
-      "main": [
-        [
-          {
-            "node": "Check Pending Only",
             "type": "main",
             "index": 0
           }
@@ -719,11 +767,11 @@
         ]
       ]
     },
-    "Mark Incident Resolved": {
+    "Fetch Incident Command": {
       "main": [
         [
           {
-            "node": "Send Execution Result",
+            "node": "Check Pending Only",
             "type": "main",
             "index": 0
           }
@@ -758,13 +806,47 @@
           }
         ]
       ]
+    },
+    "Execute Write": {
+      "main": [
+        [
+          {
+            "node": "Mark Incident Resolved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Incident Resolved": {
+      "main": [
+        [
+          {
+            "node": "Send Execution Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Chat Incident": {
+      "main": [
+        [
+          {
+            "node": "Needs Approval?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
+  "active": true,
   "settings": {
     "executionOrder": "v1",
     "saveManualExecutions": true,
     "saveDataErrorExecution": "all",
     "saveDataSuccessExecution": "all"
   },
-  "staticData": null
+  "tags": []
 }

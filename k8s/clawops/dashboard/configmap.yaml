@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dashboard-config
+  namespace: clawops
+data:
+  # Monitoring LBs — injected by bootstrap
+  PROMETHEUS_URL: "INJECT_PROMETHEUS_URL"
+  GRAFANA_URL: "INJECT_GRAFANA_URL"
+  ALERTMANAGER_URL: "INJECT_ALERTMANAGER_URL"
+  # Public LB URLs for dashboard nav links — injected by bootstrap
+  N8N_URL: "http://INJECT_INGRESS_LB/"
+  MCP_URL: "http://INJECT_INGRESS_LB/mcp"
+  # Internal service URL for dashboard API proxying
+  DASHBOARD_BASE_PATH: "/dashboard"
+  N8N_INTERNAL_URL: "http://n8n.clawops.svc.cluster.local:5678"
+  S4_WEBHOOK_PATH: "/webhook/dashboard-chat"
+  MASTER_IP: "INJECT_MASTER_IP"
+  MASTER_TERMINAL_PORT: "5000"
+  MASTER_VSCODE_PORT: "5001"
+  MCP_INTERNAL_URL: "http://mcp-server.clawops.svc.cluster.local:8000"
