@@ -156,6 +156,21 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
     <a class="hlink" id="link-grafana" href="#" target="_blank"><span class="dot"></span>GRAFANA</a>
     <a class="hlink" id="link-am" href="#" target="_blank"><span class="dot"></span>ALERTMANAGER</a>
     <a class="hlink" id="link-n8n" href="#" target="_blank"><span class="dot"></span>N8N</a>
+    <!-- Center tab buttons -->
+    <div style="position:absolute;left:50%;transform:translateX(-50%);display:flex;gap:8px;">
+      <button id="btn-dashboard" onclick="switchTab('dashboard')"
+        style="background:rgba(0,212,255,0.12);border:1px solid #00D4FF;color:#00D4FF;font-family:Consolas,monospace;font-size:11px;font-weight:bold;padding:5px 16px;cursor:pointer;letter-spacing:2px;">
+        ◉ DASHBOARD
+      </button>
+      <button id="btn-terminal" onclick="switchTab('terminal')"
+        style="background:rgba(0,200,150,0.06);border:1px solid #00C896;color:#00C896;font-family:Consolas,monospace;font-size:11px;font-weight:bold;padding:5px 16px;cursor:pointer;letter-spacing:2px;opacity:0.6;">
+        ⚡ TERMINAL
+      </button>
+      <button onclick="openVscode()"
+        style="background:rgba(123,47,255,0.06);border:1px solid #7B2FFF;color:#7B2FFF;font-family:Consolas,monospace;font-size:11px;font-weight:bold;padding:5px 16px;cursor:pointer;letter-spacing:2px;opacity:0.6;">
+        ⬡ VSCODE ↗
+      </button>
+    </div>
     
     <button class="cfg-btn" onclick="openConfig()">&#x2699; CONFIGURE</button>
   </div>
@@ -706,7 +721,7 @@ document.addEventListener('DOMContentLoaded', function() {
   var ip  = cfg.masterIp || '';
   if (ip) {
     var vsPort = cfg.masterVscodePort || '5001';
-    document.getElementById('link-vscode').href = 'http://' + ip + ':' + vsPort;
+    // VS Code opens via openVscode() function
   }
   // ESC → back to dashboard
   document.addEventListener('keydown', function(e) {
