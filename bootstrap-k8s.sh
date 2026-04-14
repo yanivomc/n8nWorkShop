@@ -379,9 +379,15 @@ kubectl create secret generic workshop-kubeconfig \
 ok "kubeconfig secret (clawops)"
 
 # TOTP + write token — auto-generated, no student input needed
-TOTP_SECRET=$(python3 -c "import pyotp; print(pyotp.random_base32())" 2>/dev/null || \
-              openssl rand -base64 20 | tr -d '+=/' | cut -c1-32)
-WRITE_TOKEN=$(openssl rand -hex 32)
+# Reuse existing TOTP if cluster already has one — new cluster = new key
+TOTP_SECRET=$(kubectl get secret mcp-secrets -n clawops   -o jsonpath='{.data.TOTP_SECRET}' 2>/dev/null | base64 -d 2>/dev/null || echo "")
+if [[ -z "$TOTP_SECRET" ]]; then
+  TOTP_SECRET=$(python3 -c "import pyotp; print(pyotp.random_base32())" 2>/dev/null ||                 openssl rand -base64 20 | tr -d '+=/' | cut -c1-32)
+  info "Generated new TOTP secret"
+else
+  ok "Reusing existing TOTP secret from cluster"
+fi
+WRITE_TOKEN=$(kubectl get secret mcp-secrets -n clawops   -o jsonpath='{.data.WRITE_APPROVAL_TOKEN}' 2>/dev/null | base64 -d 2>/dev/null ||   openssl rand -hex 32)
 
 kubectl create secret generic mcp-secrets \
   --from-literal=TOTP_SECRET="$TOTP_SECRET" \
