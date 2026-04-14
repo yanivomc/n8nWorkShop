@@ -130,6 +130,15 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 @keyframes fadeIn{from{opacity:0;transform:translateX(-4px);}to{opacity:1;}}
 @keyframes slideIn{from{opacity:0;transform:translateX(20px);}to{opacity:1;}}
 @keyframes fadeOut{to{opacity:0;transform:translateX(20px);}}
+
+  /* Tab panels */
+  #panel-dashboard { display:block; }
+  #panel-terminal  { display:none; height:calc(100vh - 94px); }
+  #terminal-iframe { width:100%; height:100%; border:none; background:#000; }
+
+#panel-dashboard { display:block; }
+#panel-terminal  { display:none; height:calc(100vh - 94px); }
+#terminal-iframe { width:100%; height:100%; border:none; background:#000; font-size:16px; }
 </style>
 <script src="config.js" onerror="console.log('No config.js — using defaults')"></script>
 </head>
@@ -147,8 +156,8 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
     <a class="hlink" id="link-grafana" href="#" target="_blank"><span class="dot"></span>GRAFANA</a>
     <a class="hlink" id="link-am" href="#" target="_blank"><span class="dot"></span>ALERTMANAGER</a>
     <a class="hlink" id="link-n8n" href="#" target="_blank"><span class="dot"></span>N8N</a>
-    <a class="hlink" id="tab-terminal-btn" href="#" onclick="showTerminalTab();return false;"><span class="dot" style="background:#00C896"></span>TERMINAL</a>
-    <a class="hlink" id="link-vscode" href="#" target="_blank" title="Open VS Code in new tab"><span class="dot" style="background:#7B2FFF"></span>VSCODE</a>
+    <a class="hlink" id="tab-terminal-btn" href="#" onclick="switchTab('terminal');return false;" style="opacity:0.7"><span class="dot" style="background:#00C896"></span>TERMINAL</a>
+    <a class="hlink" id="link-vscode" href="#" target="_blank" title="Open VS Code in new tab"><span class="dot" style="background:#7B2FFF"></span>VSCODE↗</a>
     <button class="cfg-btn" onclick="openConfig()">&#x2699; CONFIGURE</button>
   </div>
 </header>
@@ -160,6 +169,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
   <div class="status-item" style="margin-left:auto"><span id="clock" style="color:var(--dim)">--</span></div>
 </div>
 
+<div id="panel-dashboard">
 <div class="main">
   <div class="left-col">
     <div class="panel">
@@ -645,53 +655,63 @@ try{const bc=new BroadcastChannel('clawops');bc.onmessage=e=>{if(e.data&&e.data.
 document.getElementById('modal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeConfig();});
 </script>
 
-<!-- Terminal Tab Overlay -->
-<div id="terminal-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:#080C18;z-index:9999;flex-direction:column;">
-  <div style="display:flex;align-items:center;padding:8px 16px;background:#0D1F3C;border-bottom:1px solid #1E3A5F;">
-    <span style="color:#00D4FF;font-family:Consolas,monospace;font-size:13px;font-weight:bold;letter-spacing:2px;">⚡ TERMINAL</span>
-    <span style="margin-left:12px;color:#8892A4;font-size:11px;font-family:Consolas,monospace;" id="terminal-host-label"></span>
-    <div style="margin-left:auto;display:flex;gap:8px;">
-      <button onclick="document.getElementById('terminal-iframe').src=document.getElementById('terminal-iframe').src" 
-        style="background:none;border:1px solid #1E3A5F;color:#8892A4;font-family:Consolas;font-size:10px;padding:3px 10px;cursor:pointer;letter-spacing:1px;">RELOAD</button>
-      <button onclick="hideTerminalTab()" 
-        style="background:none;border:1px solid #FF4444;color:#FF4444;font-family:Consolas;font-size:10px;padding:3px 10px;cursor:pointer;letter-spacing:1px;">✕ CLOSE</button>
-    </div>
-  </div>
-  <iframe id="terminal-iframe" src="" 
-    style="flex:1;border:none;width:100%;height:calc(100% - 42px);"
-    allow="clipboard-read; clipboard-write">
-  </iframe>
+
+</div><!-- /panel-dashboard -->
+<div id="panel-terminal">
+  <iframe id="terminal-iframe" src="" allow="clipboard-read; clipboard-write" 
+    style="width:100%;height:100%;border:none;background:#000;"></iframe>
 </div>
 
 <script>
-function showTerminalTab() {
-  const cfg = window.CLAWOPS_CONFIG || {};
-  const ip = cfg.masterIp || '';
-  const port = cfg.masterTerminalPort || '5000';
-  if (!ip) { alert('MASTER_IP not configured — set it in the dashboard ConfigMap'); return; }
-  const url = 'http://' + ip + ':' + port;
-  document.getElementById('terminal-iframe').src = url;
-  document.getElementById('terminal-host-label').textContent = url;
-  const el = document.getElementById('terminal-overlay');
-  el.style.display = 'flex';
+var _activeTab = 'dashboard';
+
+function switchTab(tab) {
+  _activeTab = tab;
+  var dash = document.getElementById('panel-dashboard');
+  var term = document.getElementById('panel-terminal');
+  var btn  = document.getElementById('tab-terminal-btn');
+
+  if (tab === 'terminal') {
+    dash.style.display = 'none';
+    term.style.display = 'block';
+    btn.style.opacity  = '1';
+    btn.style.color    = 'var(--accent)';
+    // Only load iframe src if not already loaded
+    var iframe = document.getElementById('terminal-iframe');
+    if (!iframe.src || iframe.src === window.location.href) {
+      var cfg = window.CLAWOPS_CONFIG || {};
+      var ip  = cfg.masterIp || '';
+      var port = cfg.masterTerminalPort || '5000';
+      if (!ip) { alert('MASTER_IP not configured in dashboard ConfigMap'); switchTab('dashboard'); return; }
+      iframe.src = 'http://' + ip + ':' + port;
+    }
+  } else {
+    term.style.display = 'none';
+    dash.style.display = 'block';
+    btn.style.opacity  = '0.7';
+    btn.style.color    = '';
+  }
 }
-function hideTerminalTab() {
-  document.getElementById('terminal-overlay').style.display = 'none';
-  document.getElementById('terminal-iframe').src = '';
-}
-// Wire up VS Code link
+
+// Wire VS Code link + TERMINAL active highlight
 document.addEventListener('DOMContentLoaded', function() {
-  const cfg = window.CLAWOPS_CONFIG || {};
-  const ip = cfg.masterIp || '';
-  const vsPort = cfg.masterVscodePort || '5001';
+  var cfg = window.CLAWOPS_CONFIG || {};
+  var ip  = cfg.masterIp || '';
   if (ip) {
+    var vsPort = cfg.masterVscodePort || '5001';
     document.getElementById('link-vscode').href = 'http://' + ip + ':' + vsPort;
   }
-  // ESC to close terminal
+  // ESC → back to dashboard
   document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') hideTerminalTab();
+    if (e.key === 'Escape' && _activeTab === 'terminal') switchTab('dashboard');
   });
 });
+
+// Expose reload for the toolbar refresh button (if added later)
+function reloadTerminal() {
+  var iframe = document.getElementById('terminal-iframe');
+  iframe.src = iframe.src;
+}
 </script>
 </body>
 </html>
