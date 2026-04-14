@@ -25,6 +25,154 @@ die()  { err "$*"; echo "  See $LOG_FILE for details"; exit 1; }
 run()  { "$@" >> "$LOG_FILE" 2>&1; }
 
 echo "" > "$LOG_FILE"
+# ── Menu ─────────────────────────────────────────────────────────────────────
+show_menu() {
+  echo ""
+  echo -e "${BOLD}${CYAN}  ╔══════════════════════════════════════════╗${NC}"
+  echo -e "${BOLD}${CYAN}  ║       ClawOps Workshop Bootstrap         ║${NC}"
+  echo -e "${BOLD}${CYAN}  ╚══════════════════════════════════════════╝${NC}"
+  echo ""
+  echo -e "  ${CYAN}1)${NC} Full bootstrap     (install/upgrade everything)"
+  echo -e "  ${CYAN}2)${NC} Update configs     (refresh configmaps + restart pods)"
+  echo -e "  ${CYAN}3)${NC} Update ingress     (re-apply ingress rules)"
+  echo -e "  ${CYAN}4)${NC} Import workflows   (push S2/S4/S5 to n8n)"
+  echo -e "  ${CYAN}5)${NC} Validate           (run health checks)"
+  echo -e "  ${RED}6)${NC} Delete ALL         (wipe everything — fresh start)"
+  echo -e "  ${CYAN}q)${NC} Quit"
+  echo ""
+  echo -n "  Choice [1]: "
+  read CHOICE
+  CHOICE=${CHOICE:-1}
+}
+
+delete_all() {
+  hdr "Delete ALL Workshop Resources"
+  echo -e "${RED}  ⚠️  This will delete ALL workshop namespaces and monitoring!${NC}"
+  echo -n "  Type 'yes' to confirm: "
+  read confirm
+  [[ "$confirm" != "yes" ]] && { warn "Aborted."; return; }
+
+  info "Deleting ingresses..."
+  kubectl delete ingress --all -n clawops 2>/dev/null || true
+  kubectl delete ingress --all -n workshop 2>/dev/null || true
+  kubectl delete ingress --all -n monitoring 2>/dev/null || true
+
+  info "Deleting clawops namespace (n8n, mcp, dashboard)..."
+  kubectl delete namespace clawops 2>/dev/null || true
+
+  info "Deleting workshop namespace (target-app)..."
+  kubectl delete namespace workshop 2>/dev/null || true
+
+  info "Deleting monitoring stack..."
+  helm uninstall monitoring -n monitoring 2>/dev/null || true
+  kubectl delete namespace monitoring 2>/dev/null || true
+
+  info "Deleting ingress-nginx..."
+  helm uninstall ingress-nginx -n ingress-nginx 2>/dev/null || true
+  kubectl delete namespace ingress-nginx 2>/dev/null || true
+
+  ok "All resources deleted. Run option 1 for fresh bootstrap."
+}
+
+update_configs() {
+  hdr "Update Configs + Restart Pods"
+  load_ingress_lb
+  load_monitoring_urls
+  detect_master_ip
+  apply_configmaps
+  restart_pods
+  ok "Done"
+}
+
+load_ingress_lb() {
+  INGRESS_LB=$(kubectl get svc ingress-nginx-controller -n ingress-nginx     -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
+  [[ -z "$INGRESS_LB" ]] && INGRESS_LB=$(kubectl get svc ingress-nginx-controller -n ingress-nginx     -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
+  [[ -z "$INGRESS_LB" ]] && die "Ingress LB not found — run full bootstrap first"
+  ok "Ingress LB: $INGRESS_LB"
+}
+
+load_monitoring_urls() {
+  PROMETHEUS_URL="http://$(kubectl get svc monitoring-kube-prometheus-prometheus -n monitoring     -o jsonpath='{.spec.clusterIP}' 2>/dev/null):9090"
+  GRAFANA_URL="http://$(kubectl get svc monitoring-grafana -n monitoring     -o jsonpath='{.spec.clusterIP}' 2>/dev/null)"
+  ALERTMANAGER_URL="http://$(kubectl get svc monitoring-kube-prometheus-alertmanager -n monitoring     -o jsonpath='{.spec.clusterIP}' 2>/dev/null):9093"
+}
+
+detect_master_ip() {
+  if [[ -z "$MASTER_IP" ]]; then
+    MASTER_IP=$(curl -sf --max-time 3 http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null)
+  fi
+  if [[ -z "$MASTER_IP" ]]; then
+    MASTER_IP=$(curl -sf --max-time 3 https://checkip.amazonaws.com 2>/dev/null | tr -d '\n')
+  fi
+  [[ -n "$MASTER_IP" ]] && ok "Master IP: $MASTER_IP" || warn "Could not detect MASTER_IP"
+}
+
+apply_configmaps() {
+  info "Applying configmaps with fresh values..."
+  sed "s|INJECT_N8N_HOST|${INGRESS_LB}|g;        s|INJECT_N8N_PASSWORD|changeme123|g;        s|INJECT_PROMETHEUS_URL|${PROMETHEUS_URL:-http://prometheus-pending}|g"     "$CLAWOPS_DIR/n8n/configmap.yaml" | kubectl apply -f - >> "$LOG_FILE" 2>&1
+
+  sed "s|INJECT_PROMETHEUS_URL|${PROMETHEUS_URL:-http://prometheus-pending}|g"     "$CLAWOPS_DIR/mcp-server/configmap.yaml" | kubectl apply -f - >> "$LOG_FILE" 2>&1
+
+  sed "s|INJECT_PROMETHEUS_URL|${PROMETHEUS_URL:-}|g;        s|INJECT_GRAFANA_URL|${GRAFANA_URL:-}|g;        s|INJECT_ALERTMANAGER_URL|${ALERTMANAGER_URL:-}|g;        s|INJECT_INGRESS_LB|${INGRESS_LB}|g;        s|INJECT_MASTER_IP|${MASTER_IP}|g"     "$CLAWOPS_DIR/dashboard/configmap.yaml" | kubectl apply -f - >> "$LOG_FILE" 2>&1
+  ok "Configmaps applied"
+}
+
+restart_pods() {
+  info "Restarting pods..."
+  kubectl rollout restart deployment/n8n -n clawops >> "$LOG_FILE" 2>&1 || true
+  kubectl rollout restart deployment/mcp-server -n clawops >> "$LOG_FILE" 2>&1 || true
+  kubectl rollout restart deployment/clawops-dashboard -n clawops >> "$LOG_FILE" 2>&1 || true
+  sleep 30
+  ok "Pods restarted"
+}
+
+update_ingress() {
+  hdr "Update Ingress Rules"
+  kubectl delete ingress --all -n clawops 2>/dev/null || true
+  kubectl delete ingress --all -n monitoring 2>/dev/null || true
+  kubectl apply -f "$INGRESS_DIR/ingress.yaml" >> "$LOG_FILE" 2>&1
+  ok "Ingress applied"
+}
+
+import_workflows() {
+  hdr "Import n8n Workflows"
+  load_ingress_lb
+  N8N_IP=$(kubectl get svc n8n -n clawops -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
+  N8N_URL="http://${N8N_IP}:5678"
+  echo -n "  Enter n8n API key: "
+  read N8N_KEY
+  [[ -z "$N8N_KEY" ]] && { warn "No key — skipping"; return; }
+  for wf in s2-ai-agent-mcp s4-telegram-human-loop s5-alert-intelligence; do
+    python3 -c "
+import json
+with open('n8n-workflows/${wf}.json') as f: d=json.load(f)
+d['settings']={'executionOrder':'v1','saveManualExecutions':True,'saveDataErrorExecution':'all','saveDataSuccessExecution':'all'}
+with open('/tmp/${wf}.json','w') as f: json.dump(d,f)" 2>/dev/null
+    result=$(curl -sf -X POST "${N8N_URL}/api/v1/workflows"       -H "X-N8N-API-KEY: ${N8N_KEY}" -H "Content-Type: application/json"       -d @/tmp/${wf}.json 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('id','ERR'))" 2>/dev/null)
+    [[ -n "$result" && "$result" != "ERR" ]] && ok "Imported $wf (id: $result)" || warn "Failed: $wf"
+  done
+}
+
+# ── Entry point ───────────────────────────────────────────────────────────────
+show_menu
+case $CHOICE in
+  1) : ;; # fall through to full bootstrap below
+  2) update_configs; exit 0 ;;
+  3) load_ingress_lb; update_ingress; exit 0 ;;
+  4) import_workflows; exit 0 ;;
+  5) load_ingress_lb
+     N8N_IP=$(kubectl get svc n8n -n clawops -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
+     MCP_IP=$(kubectl get svc mcp-server -n clawops -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
+     source <(grep -v '^#' "$0" | grep "^check\|^PASS\|^FAIL")
+     # Just run validation block
+     bash "$0" --validate-only 2>/dev/null || true
+     exit 0 ;;
+  6) delete_all; exit 0 ;;
+  q|Q) exit 0 ;;
+  *) warn "Invalid — running full bootstrap" ;;
+esac
+
+
 
 # ── PHASE 0: Install dependencies ────────────────────────────────────────────
 hdr "Phase 0 — Dependencies"
