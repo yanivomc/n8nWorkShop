@@ -38,6 +38,7 @@ show_menu() {
   echo -e "  ${CYAN}4)${NC} Import workflows   (push S2/S4/S5 to n8n)"
   echo -e "  ${CYAN}5)${NC} Validate           (run health checks)"
   echo -e "  ${RED}6)${NC} Delete ALL         (wipe everything — fresh start)"
+  echo -e "  ${CYAN}7)${NC} Show TOTP / QR code  (instructor — re-display secret)"
   echo -e "  ${CYAN}q)${NC} Quit"
   echo ""
   echo -n "  Choice [1]: "
@@ -140,6 +141,20 @@ restart_pods() {
   ok "Pods restarted"
 }
 
+show_totp() {
+  hdr "TOTP Secret"
+  TOTP_SECRET=$(kubectl get secret mcp-secrets -n clawops     -o jsonpath='{.data.TOTP_SECRET}' 2>/dev/null | base64 -d 2>/dev/null || echo "")
+  if [[ -z "$TOTP_SECRET" ]]; then
+    warn "No TOTP secret found — run full bootstrap first"
+    return
+  fi
+  echo ""
+  echo -e "  ${BOLD}TOTP_SECRET=${TOTP_SECRET}${NC}"
+  echo -e "  📱  QR: https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=otpauth%3A%2F%2Ftotp%2FClawOps%2520Workshop%3Fsecret%3D${TOTP_SECRET}%26issuer%3Dn8nWorkshop"
+  echo ""
+  ok "Open the QR URL in your browser to scan with Authy / Google Authenticator"
+}
+
 update_ingress() {
   hdr "Update Ingress Rules"
   kubectl delete ingress --all -n clawops 2>/dev/null || true
@@ -207,6 +222,7 @@ case $CHOICE in
      bash "$0" --validate-only 2>/dev/null || true
      exit 0 ;;
   6) delete_all; exit 0 ;;
+  7) show_totp; exit 0 ;;
   q|Q) exit 0 ;;
   *) warn "Invalid — running full bootstrap" ;;
 esac
