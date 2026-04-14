@@ -155,7 +155,8 @@ show_totp() {
       --from-literal=TOTP_SECRET="$TOTP_SECRET" \
       --from-literal=WRITE_APPROVAL_TOKEN="$WRITE_TOKEN" \
       -n clawops --dry-run=client -o yaml | kubectl apply -f - >> "$LOG_FILE" 2>&1
-    ok "Generated and saved new TOTP secret"
+    kubectl rollout restart deployment/mcp-server -n clawops >> "$LOG_FILE" 2>&1 || true
+    ok "Generated and saved new TOTP secret (mcp-server restarted)"
   fi
   echo ""
   echo -e "  ${BOLD}TOTP_SECRET=${TOTP_SECRET}${NC}"
