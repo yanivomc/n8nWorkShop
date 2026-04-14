@@ -168,7 +168,7 @@
             },
             {
               "name": "content",
-              "value": "={{ $json.message }}"
+              "value": "={{ String($json.message || $json.output || '...') }}"
             }
           ]
         },
@@ -267,7 +267,7 @@
             },
             {
               "name": "content",
-              "value": "={{ $json.message }}"
+              "value": "={{ String($json.message || $json.output || '...') }}"
             }
           ]
         },
@@ -537,7 +537,7 @@
             },
             {
               "name": "content",
-              "value": "={{ $json.message }}"
+              "value": "={{ String($json.message || $json.output || '...') }}"
             }
           ]
         },
