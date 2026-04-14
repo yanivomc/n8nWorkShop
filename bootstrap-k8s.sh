@@ -115,13 +115,13 @@ if helm status monitoring -n monitoring 2>/dev/null | grep -q "deployed"; then
 else
   info "Installing kube-prometheus-stack (2-3 min)..."
   # Alertmanager → n8n via internal K8s DNS — never needs IP update!
-  sed "s|EC2_PUBLIC_IP_PLACEHOLDER|n8n.workshop.svc.cluster.local|g" \
+  sed "s|EC2_PUBLIC_IP_PLACEHOLDER|n8n.clawops.svc.cluster.local|g" \
     "$MONITORING_DIR/prometheus-values.yaml" > /tmp/prom-values.yaml
 
-  helm install monitoring prometheus-community/kube-prometheus-stack \
+  helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
     -n monitoring --create-namespace \
     -f /tmp/prom-values.yaml \
-    --wait --timeout 5m >> "$LOG_FILE" 2>&1 || die "Monitoring install failed"
+    --wait --timeout 5m >> "$LOG_FILE" 2>&1 || die "Monitoring install/upgrade failed"
   ok "Monitoring installed"
 fi
 
@@ -165,6 +165,10 @@ hdr "Phase 5 — Workshop services"
 kubectl apply -f "$WORKSHOP_DIR/namespace.yaml"
 kubectl apply -f "$CLAWOPS_DIR/namespace.yaml" >> "$LOG_FILE" 2>&1
 ok "Namespaces: workshop + clawops"
+
+# MCP RBAC — ServiceAccount with in-cluster auth
+kubectl apply -f "$CLAWOPS_DIR/mcp-server/rbac.yaml" >> "$LOG_FILE" 2>&1
+ok "MCP RBAC (ServiceAccount)"
 
 # kubeconfig secret for MCP
 kubectl create secret generic workshop-kubeconfig \
