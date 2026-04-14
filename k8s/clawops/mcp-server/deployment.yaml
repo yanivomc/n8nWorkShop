@@ -15,6 +15,7 @@ spec:
       labels:
         app: mcp-server
     spec:
+      serviceAccountName: mcp-server
       containers:
         - name: mcp-server
           image: yanivomc/mcp-server:latest
@@ -38,9 +39,7 @@ spec:
           volumeMounts:
             - name: mcp-data
               mountPath: /data
-            - name: kubeconfig
-              mountPath: /root/.kube
-              readOnly: true
+  
           resources:
             requests:
               cpu: "100m"
@@ -58,6 +57,4 @@ spec:
         - name: mcp-data
           persistentVolumeClaim:
             claimName: mcp-data
-        - name: kubeconfig
-          secret:
-            secretName: workshop-kubeconfig
+

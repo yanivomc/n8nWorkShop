@@ -6,5 +6,4 @@ metadata:
 data:
   PROMETHEUS_URL: "INJECT_PROMETHEUS_URL"
   # kubeconfig is mounted from a secret
-  KUBECONFIG: "/root/.kube/config"
   # TOTP_SECRET and WRITE_APPROVAL_TOKEN injected from secret
