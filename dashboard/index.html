@@ -602,8 +602,8 @@ async function loadIncidents(){
   try{
     const r=await fetchJ(API_BASE+'/api/incidents?limit=20');
     const el=document.getElementById('incidents-list');
-    if(!r.incidents||!r.incidents.length){el.innerHTML='<div style="color:var(--muted);padding:4px">No incidents yet</div>';return;}
-    el.innerHTML=r.incidents.map(i=>`
+    const incidents_list = Array.isArray(r) ? r : (r.incidents||[]); if(!incidents_list.length){el.innerHTML='<div style="color:var(--muted);padding:4px">No incidents yet</div>';return;}
+    el.innerHTML=incidents_list.map(i=>`
       <div class="inc-row" onclick="showIncident(this)" data-incident='${JSON.stringify(i).replace(/'/g, "&#39;")}' style="cursor:pointer">
         <span class="inc-key">#${i.key}</span>
         <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--fg)">${i.alertname}</span>

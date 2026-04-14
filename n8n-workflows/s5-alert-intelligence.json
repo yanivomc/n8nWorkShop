@@ -125,7 +125,7 @@
       "parameters": {
         "toolDescription": "Run any read-only kubectl command against the cluster. Adapt the command to whatever resource type is being investigated \u2014 pods, deployments, nodes, services, endpoints, HPAs, PVCs, etc.",
         "method": "POST",
-        "url": "http://mcp-server:8000/tools/kubectl-read",
+        "url": "http://mcp-server.clawops.svc.cluster.local:8000/tools/kubectl-read",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\"command\": \"{command}\"}"
@@ -143,7 +143,7 @@
       "parameters": {
         "toolDescription": "Run any PromQL query against Prometheus for live metrics. Use queries relevant to the resource type and symptom being investigated.",
         "method": "POST",
-        "url": "http://mcp-server:8000/tools/promql",
+        "url": "http://mcp-server.clawops.svc.cluster.local:8000/tools/promql",
         "sendBody": true,
         "parametersBody": {
           "values": [
@@ -188,7 +188,7 @@
             },
             {
               "name": "content",
-              "value": "={{ $('Store Incident').first().json.alertname + ' detected!\\n\\n' + $('AI Agent (Gemini)').first().json.output + '\\n\\n\ud83d\udd10 To approve: /approve <totp> ' + $('Store Incident').first().json.key }}"
+              "value": "={{ '\ud83d\udea8 ' + $('PromQL Enrichment + Confidence').first().json.alertname + ' detected!\\n\\n' + $('AI Agent (Gemini)').first().json.output + '\\n\\n\ud83d\udd10 To approve: /approve <6-digit-totp> ' + $('Store Incident').first().json.key }}"
             },
             {
               "name": "meta",
@@ -320,7 +320,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://mcp-server:8000/incidents",
+        "url": "http://mcp-server.clawops.svc.cluster.local:8000/incidents",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({\n  alertname: $('PromQL Enrichment + Confidence').first().json.alertname,\n  namespace: $('PromQL Enrichment + Confidence').first().json.namespace,\n  pod: $('PromQL Enrichment + Confidence').first().json.pod,\n  command: (($('AI Agent (Gemini)').first().json.output || '').match(/SRE_ACTION:\\s*(kubectl[^\\n]+)/) || [])[1]?.trim().replace(/^kubectl\\s+/i, '') || 'none'\n}) }}",
