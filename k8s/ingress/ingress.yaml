@@ -22,6 +22,27 @@ spec:
                 port:
                   number: 5678
 ---
+# Exact /dashboard → redirect to /dashboard/ (no trailing slash fix)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: workshop-ingress-dashboard-redirect
+  namespace: clawops
+  annotations:
+    nginx.ingress.kubernetes.io/permanent-redirect: "http://$host/dashboard/"
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /dashboard
+            pathType: Exact
+            backend:
+              service:
+                name: clawops-dashboard
+                port:
+                  number: 80
+---
 # Dashboard at /dashboard
 apiVersion: networking.k8s.io/v1
 kind: Ingress
