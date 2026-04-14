@@ -133,9 +133,9 @@ GRAFANA_URL=$(kubectl get svc monitoring-grafana -n monitoring \
   -o jsonpath='http://{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
 ALERTMANAGER_URL=$(kubectl get svc monitoring-kube-prometheus-alertmanager -n monitoring \
   -o jsonpath='http://{.status.loadBalancer.ingress[0].hostname}:9093' 2>/dev/null)
-ok "Prometheus:   ${PROMETHEUS_URL:-pending}"
-ok "Grafana:      ${GRAFANA_URL:-pending}"
-ok "Alertmanager: ${ALERTMANAGER_URL:-pending}"
+ok "Prometheus: via ingress http://${INGRESS_LB}/prometheus"
+ok "Grafana: via ingress http://${INGRESS_LB}/grafana"
+ok "Alertmanager: via ingress http://${INGRESS_LB}/alertmanager"
 
 # ── PHASE 4.5: Build & push MCP server image ─────────────────────────────────
 hdr "Phase 4.5 — MCP server image"
@@ -241,6 +241,8 @@ kubectl rollout restart deployment/n8n -n clawops >> "$LOG_FILE" 2>&1 || true
 kubectl rollout restart deployment/mcp-server -n clawops >> "$LOG_FILE" 2>&1 || true
 kubectl rollout restart deployment/clawops-dashboard -n clawops >> "$LOG_FILE" 2>&1 || true
 ok "Deployments restarted (configmaps refreshed)"
+info "Waiting 30s for pods to restart..."
+sleep 30
 
 # Target app
 kubectl apply -f "$WORKSHOP_DIR/target-app/deployment.yaml" >> "$LOG_FILE" 2>&1
@@ -327,8 +329,8 @@ echo -e "${CYAN}  All services via ONE LB:${NC}"
 echo -e "  📊  Dashboard:    http://${INGRESS_LB}/dashboard"
 echo -e "  🤖  n8n:          http://${INGRESS_LB}/n8n"
 echo -e "  🔧  MCP Docs:     http://${INGRESS_LB}/mcp/docs"
-echo -e "  📈  Prometheus:   ${PROMETHEUS_URL:-http://${INGRESS_LB}/prometheus}"
-echo -e "  📊  Grafana:      ${GRAFANA_URL:-http://${INGRESS_LB}/grafana}  (admin/workshop123)"
+echo -e "  📈  Prometheus:   http://${INGRESS_LB}/prometheus"
+echo -e "  📊  Grafana:      http://${INGRESS_LB}/grafana  (admin/workshop123)"
 echo -e "  🔔  Alertmanager: ${ALERTMANAGER_URL:-pending}"
 echo ""
 echo -e "${YELLOW}  📋  INSTRUCTOR — TOTP secret (add to Authy for live demos):${NC}"

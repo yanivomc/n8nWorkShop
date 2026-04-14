@@ -1,5 +1,5 @@
 # kube-prometheus-stack values — n8n DevOps Workshop
-# AWS kops cluster — using AWS LoadBalancer for Prometheus and Grafana
+# Services are ClusterIP — nginx ingress handles external access via /prometheus, /grafana, /alertmanager
 #
 # Install (handled by setup.sh option 6):
 #   helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
@@ -8,6 +8,8 @@
 # ── Prometheus ─────────────────────────────────────────────────────────
 prometheus:
   prometheusSpec:
+    routePrefix: /prometheus
+    externalUrl: http://INJECT_INGRESS_LB/prometheus
     retention: 24h
     resources:
       requests:
@@ -23,22 +25,22 @@ prometheus:
     ruleNamespaceSelector: {}
 
   service:
-    type: LoadBalancer
-    annotations:
-      service.beta.kubernetes.io/aws-load-balancer-type: "classic"
+    type: ClusterIP
       service.beta.kubernetes.io/aws-load-balancer-internal: "false"
     port: 9090
 
 # ── Grafana ────────────────────────────────────────────────────────────
 grafana:
+  grafana.ini:
+    server:
+      root_url: "%(protocol)s://%(domain)s/grafana"
+      serve_from_sub_path: true
   enabled: true
   adminUser: admin
   adminPassword: workshop123
 
   service:
-    type: LoadBalancer
-    annotations:
-      service.beta.kubernetes.io/aws-load-balancer-type: "classic"
+    type: ClusterIP
       service.beta.kubernetes.io/aws-load-balancer-internal: "false"
     port: 80
 
@@ -88,9 +90,7 @@ alertmanager:
         memory: 128Mi
 
   service:
-    type: LoadBalancer
-    annotations:
-      service.beta.kubernetes.io/aws-load-balancer-type: "classic"
+    type: ClusterIP
       service.beta.kubernetes.io/aws-load-balancer-internal: "false"
     port: 9093
 
