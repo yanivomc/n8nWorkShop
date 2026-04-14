@@ -156,8 +156,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
     <a class="hlink" id="link-grafana" href="#" target="_blank"><span class="dot"></span>GRAFANA</a>
     <a class="hlink" id="link-am" href="#" target="_blank"><span class="dot"></span>ALERTMANAGER</a>
     <a class="hlink" id="link-n8n" href="#" target="_blank"><span class="dot"></span>N8N</a>
-    <a class="hlink" id="tab-terminal-btn" href="#" onclick="switchTab('terminal');return false;" style="opacity:0.7"><span class="dot" style="background:#00C896"></span>TERMINAL</a>
-    <a class="hlink" id="link-vscode" href="#" target="_blank" title="Open VS Code in new tab"><span class="dot" style="background:#7B2FFF"></span>VSCODE↗</a>
+    
     <button class="cfg-btn" onclick="openConfig()">&#x2699; CONFIGURE</button>
   </div>
 </header>
@@ -669,16 +668,16 @@ function switchTab(tab) {
   _activeTab = tab;
   var dash = document.getElementById('panel-dashboard');
   var term = document.getElementById('panel-terminal');
-  var btn  = document.getElementById('tab-terminal-btn');
+  var btnD = document.getElementById('btn-dashboard');
+  var btnT = document.getElementById('btn-terminal');
 
   if (tab === 'terminal') {
     dash.style.display = 'none';
     term.style.display = 'block';
-    btn.style.opacity  = '1';
-    btn.style.color    = 'var(--accent)';
-    // Only load iframe src if not already loaded
+    if(btnD) { btnD.style.opacity='0.45'; btnD.style.background='rgba(0,212,255,0.04)'; }
+    if(btnT) { btnT.style.opacity='1';    btnT.style.background='rgba(0,200,150,0.18)'; }
     var iframe = document.getElementById('terminal-iframe');
-    if (!iframe.src || iframe.src === window.location.href) {
+    if (!iframe.src || iframe.src === window.location.href || iframe.src === 'about:blank') {
       var cfg = window.CLAWOPS_CONFIG || {};
       var ip  = cfg.masterIp || '';
       var port = cfg.masterTerminalPort || '5000';
@@ -688,9 +687,17 @@ function switchTab(tab) {
   } else {
     term.style.display = 'none';
     dash.style.display = 'block';
-    btn.style.opacity  = '0.7';
-    btn.style.color    = '';
+    if(btnD) { btnD.style.opacity='1';    btnD.style.background='rgba(0,212,255,0.08)'; }
+    if(btnT) { btnT.style.opacity='0.45'; btnT.style.background='rgba(0,200,150,0.04)'; }
   }
+}
+
+function openVscode() {
+  var cfg = window.CLAWOPS_CONFIG || {};
+  var ip  = cfg.masterIp || '';
+  var port = cfg.masterVscodePort || '5001';
+  if (!ip) { alert('MASTER_IP not configured in dashboard ConfigMap'); return; }
+  window.open('http://' + ip + ':' + port, '_blank');
 }
 
 // Wire VS Code link + TERMINAL active highlight
