@@ -270,11 +270,15 @@ else
   ok "helm: $(helm version --short 2>/dev/null)"
 fi
 
-# python3 + pyotp (for TOTP generation)
+# python3 + pyotp (for TOTP generation) — install system-wide
 if ! python3 -c "import pyotp" 2>/dev/null; then
   info "Installing pyotp..."
   pip3 install pyotp --break-system-packages --quiet >> "$LOG_FILE" 2>&1 || \
-  pip3 install pyotp --quiet >> "$LOG_FILE" 2>&1 || true
+  pip3 install pyotp --quiet >> "$LOG_FILE" 2>&1 || \
+  sudo pip3 install pyotp --break-system-packages --quiet >> "$LOG_FILE" 2>&1 || true
+  python3 -c "import pyotp" 2>/dev/null && ok "pyotp installed" || warn "pyotp install failed — using openssl fallback"
+else
+  ok "pyotp already available"
 fi
 
 # ── PHASE 1: Validate cluster access ─────────────────────────────────────────
