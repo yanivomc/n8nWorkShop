@@ -4,15 +4,15 @@
   "nodes": [
     {
       "parameters": {
-        "updates": [
-          "message"
-        ],
-        "additionalFields": {}
+        "path": "dashboard-chat",
+        "httpMethod": "POST",
+        "responseMode": "onReceived",
+        "options": {}
       },
       "id": "7e3fb805-d81c-4230-82ca-4720c390a8c1",
-      "name": "Telegram Trigger",
-      "type": "n8n-nodes-base.telegramTrigger",
-      "typeVersion": 1.1,
+      "name": "Dashboard Chat Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
       "position": [
         -2176,
         384
@@ -27,7 +27,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const msg = $input.first().json.message;\nconst text = (msg?.text || '').trim();\nconst chatId = msg?.chat?.id?.toString();\nconst from = msg?.from?.first_name || 'Engineer';\nconst route = (text.startsWith('/approve ') || text.startsWith('/deny ')) ? 'approval' : 'query';\nreturn [{ json: { route, text, chatId, from } }];"
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst text = (body.text || '').trim();\nconst chatId = body.chatId || 'dashboard';\nconst from = body.from || 'student';\nconst route = (text.startsWith('/approve ') || text.startsWith('/deny ')) ? 'approval' : 'query';\nreturn [{ json: { route, text, chatId, from } }];"
       },
       "id": "459ca681-c9a1-4e19-986a-b5fc33c0666b",
       "name": "Route Message",
@@ -126,16 +126,23 @@
     },
     {
       "parameters": {
-        "chatId": "={{ $json.chatId }}",
-        "text": "={{ $json.approvalPrompt }}",
-        "additionalFields": {
-          "parse_mode": "HTML"
+        "method": "POST",
+        "url": "http://clawops-dashboard.clawops.svc.cluster.local:80/api/chat/send",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"role\":\"agent\",\"content\":'={{ $json.approvalPrompt }}',\"meta\":{}}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
         }
       },
       "id": "2566c760-2ee2-4dfc-aca1-4fad884437b3",
       "name": "Send Approval Request",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         -464,
         144
@@ -150,16 +157,23 @@
     },
     {
       "parameters": {
-        "chatId": "={{ $json.chatId }}",
-        "text": "={{ $json.message }}",
-        "additionalFields": {
-          "parse_mode": "HTML"
+        "method": "POST",
+        "url": "http://clawops-dashboard.clawops.svc.cluster.local:80/api/chat/send",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"role\":\"agent\",\"content\":'={{ $json.message }}',\"meta\":{}}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
         }
       },
       "id": "c2dacdda-9c97-4a7c-bc57-17fdc843fddd",
       "name": "Send Answer",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         -464,
         336
@@ -205,16 +219,23 @@
     },
     {
       "parameters": {
-        "chatId": "={{ $('Validate Approval').first().json.chatId }}",
-        "text": "=\u2705 <b>Executed by {{ $('Validate Approval').first().json.approvedBy }}</b>:\n<code>kubectl {{ $('Execute Write').first().json.command?.replace(/^kubectl\\s+/i,'') || $('Validate Approval').first().json.command || '' }}</code>\n\n{{ $('Execute Write').first().json.output || $json.output || '' }}\n\n\ud83d\udd50 {{ new Date().toUTCString() }}\n\nThis message was sent automatically with n8n",
-        "additionalFields": {
-          "parse_mode": "HTML"
+        "method": "POST",
+        "url": "http://clawops-dashboard.clawops.svc.cluster.local:80/api/chat/send",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"role\":\"agent\",\"content\":\"=\u2705 <b>Executed by {{ $('Validate Approval').first().json.approvedBy }}</b>:\\n<code>kubectl {{ $('Execute Write').first().json.command?.replace(/^kubectl\\\\s+/i,'') || $('Validate Approval').first().json.command || '' }}</code>\\n\\n{{ $('Execute Write').first().json.output || $json.output || '' }}\\n\\n\ud83d\udd50 {{ new Date().toUTCString() }}\\n\\nThis message was sent automatically with n8n\",\"meta\":{}}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
         }
       },
       "id": "fde54d79-35cf-4302-b526-4b22004d7d50",
       "name": "Send Execution Result",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         -688,
         528
@@ -229,16 +250,23 @@
     },
     {
       "parameters": {
-        "chatId": "={{ $json.chatId }}",
-        "text": "={{ $json.message }}",
-        "additionalFields": {
-          "parse_mode": "HTML"
+        "method": "POST",
+        "url": "http://clawops-dashboard.clawops.svc.cluster.local:80/api/chat/send",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"role\":\"agent\",\"content\":'={{ $json.message }}',\"meta\":{}}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
         }
       },
       "id": "575b0a6b-5746-44a1-a181-7df34560cad2",
       "name": "Send Denial",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         -2176,
         752
@@ -492,16 +520,23 @@
     },
     {
       "parameters": {
-        "chatId": "={{ $json.chatId }}",
-        "text": "={{ $json.message }}",
-        "additionalFields": {
-          "parse_mode": "HTML"
+        "method": "POST",
+        "url": "http://clawops-dashboard.clawops.svc.cluster.local:80/api/chat/send",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"role\":\"agent\",\"content\":'={{ $json.message }}',\"meta\":{}}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
         }
       },
       "id": "send-blocked-node",
       "name": "Send Blocked Message",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         -492,
         448
@@ -515,17 +550,6 @@
     }
   ],
   "connections": {
-    "Telegram Trigger": {
-      "main": [
-        [
-          {
-            "node": "Route Message",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Route Message": {
       "main": [
         [
@@ -753,6 +777,17 @@
         [
           {
             "node": "Execute Write",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dashboard Chat Trigger": {
+      "main": [
+        [
+          {
+            "node": "Route Message",
             "type": "main",
             "index": 0
           }

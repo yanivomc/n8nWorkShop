@@ -177,17 +177,23 @@
     },
     {
       "parameters": {
-        "chatId": "TELEGRAM_CHAT_ID_CHANGEME",
-        "text": "={{ $json.message }}",
-        "additionalFields": {
-          "disable_web_page_preview": true,
-          "parse_mode": "HTML"
+        "method": "POST",
+        "url": "http://clawops-dashboard.clawops.svc.cluster.local:80/api/chat/send",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  role: \"agent\",\n  content: $('Format Telegram Message').first().json.message,\n  meta: {\n    key: $('Store Incident').first().json.key,\n    alertname: $('PromQL Enrichment + Confidence').first().json.alertname,\n    severity: $('PromQL Enrichment + Confidence').first().json.severity\n  }\n}) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
         }
       },
       "id": "603f0a1d-e19a-406f-bc61-36a40bc630b9",
-      "name": "Send to Telegram",
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
+      "name": "Send to Dashboard Chat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         -5264,
         -944

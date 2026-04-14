@@ -13,6 +13,8 @@ data:
   MCP_URL: "http://INJECT_INGRESS_LB/mcp"
   # Internal service URL for dashboard API proxying
   DASHBOARD_BASE_PATH: "/dashboard"
+  N8N_INTERNAL_URL: "http://n8n.clawops.svc.cluster.local:5678"
+  S4_WEBHOOK_PATH: "/webhook/dashboard-chat"
   MASTER_IP: "INJECT_MASTER_IP"
   MASTER_TERMINAL_PORT: "5000"
   MASTER_VSCODE_PORT: "5001"
