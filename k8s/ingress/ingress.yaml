@@ -70,22 +70,19 @@ spec:
                 port:
                   number: 8000
 ---
-# Prometheus at /prometheus — needs root-path set in prometheus itself
+# Prometheus — NO rewrite (routePrefix=/prometheus handles it internally)
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: monitoring-ingress-prometheus
   namespace: monitoring
-  annotations:
-    nginx.ingress.kubernetes.io/use-regex: "true"
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
 spec:
   ingressClassName: nginx
   rules:
     - http:
         paths:
-          - path: /prometheus(/|$)(.*)
-            pathType: ImplementationSpecific
+          - path: /prometheus
+            pathType: Prefix
             backend:
               service:
                 name: monitoring-kube-prometheus-prometheus

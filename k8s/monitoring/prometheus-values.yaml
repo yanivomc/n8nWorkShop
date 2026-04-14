@@ -27,10 +27,11 @@ grafana:
   enabled: true
   adminUser: admin
   adminPassword: workshop123
+  # Use env vars — more reliable than grafana.ini for subpath
+  env:
+    GF_SERVER_ROOT_URL: "http://INJECT_INGRESS_LB/grafana"
+    GF_SERVER_SERVE_FROM_SUB_PATH: "true"
   grafana.ini:
-    server:
-      root_url: "%(protocol)s://%(domain)s/grafana"
-      serve_from_sub_path: true
     security:
       allow_embedding: true
   service:
@@ -68,6 +69,8 @@ grafana:
 # ── Alertmanager ───────────────────────────────────────────────────────
 alertmanager:
   alertmanagerSpec:
+    routePrefix: /
+    externalUrl: http://INJECT_INGRESS_LB/alertmanager
     resources:
       requests:
         memory: 64Mi
@@ -122,7 +125,7 @@ additionalPrometheusRulesMap:
               workshop: "true"
             annotations:
               summary: "Pod {{ $labels.pod }} OOMKilled"
-              description: "Container {{ $labels.container }} in {{ $labels.namespace }}/{{ $labels.pod }} was killed — memory limit exceeded"
+              description: "Container {{ $labels.container }} in {{ $labels.namespace }}/{{ $labels.pod }} was OOMKilled"
           - alert: PodNotReady
             expr: kube_pod_status_ready{condition="true"} == 0
             for: 2m
