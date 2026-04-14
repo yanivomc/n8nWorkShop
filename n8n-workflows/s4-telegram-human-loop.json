@@ -168,7 +168,7 @@
             },
             {
               "name": "content",
-              "value": "={{ String($json.message || $json.output || '...') }}"
+              "value": "={{ $('Check Write Needed').first().json.message }}"
             }
           ]
         },
