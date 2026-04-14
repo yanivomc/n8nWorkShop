@@ -164,13 +164,13 @@ hdr "Phase 5 — Workshop services"
 # Namespace
 kubectl apply -f "$WORKSHOP_DIR/namespace.yaml"
 kubectl apply -f "$CLAWOPS_DIR/namespace.yaml" >> "$LOG_FILE" 2>&1
-ok "Namespace: workshop"
+ok "Namespaces: workshop + clawops"
 
 # kubeconfig secret for MCP
 kubectl create secret generic workshop-kubeconfig \
   --from-file=config="$KUBECONFIG_PATH" \
-  -n workshop --dry-run=client -o yaml | kubectl apply -f - >> "$LOG_FILE" 2>&1
-ok "kubeconfig secret"
+  -n clawops --dry-run=client -o yaml | kubectl apply -f - >> "$LOG_FILE" 2>&1
+ok "kubeconfig secret (clawops)"
 
 # TOTP + write token — auto-generated, no student input needed
 TOTP_SECRET=$(python3 -c "import pyotp; print(pyotp.random_base32())" 2>/dev/null || \
@@ -182,6 +182,11 @@ kubectl create secret generic mcp-secrets \
   --from-literal=WRITE_APPROVAL_TOKEN="$WRITE_TOKEN" \
   -n clawops --dry-run=client -o yaml | kubectl apply -f - >> "$LOG_FILE" 2>&1
 ok "MCP secrets (TOTP auto-generated)"
+
+# Apply PVCs first (needed before deployments)
+kubectl apply -f "$CLAWOPS_DIR/n8n/pvc.yaml" >> "$LOG_FILE" 2>&1
+kubectl apply -f "$CLAWOPS_DIR/mcp-server/pvc.yaml" >> "$LOG_FILE" 2>&1
+ok "PVCs created"
 
 # n8n
 sed "s|INJECT_N8N_HOST|$INGRESS_LB|g; \
