@@ -695,7 +695,7 @@
       "main": [
         [
           {
-            "node": "Needs Approval?",
+            "node": "Store Chat Incident",
             "type": "main",
             "index": 0
           }
@@ -823,6 +823,17 @@
         [
           {
             "node": "Send Execution Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Chat Incident": {
+      "main": [
+        [
+          {
+            "node": "Needs Approval?",
             "type": "main",
             "index": 0
           }
