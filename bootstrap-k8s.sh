@@ -160,6 +160,20 @@ else
 fi
 
 # ── PHASE 5: Deploy workshop services ────────────────────────────────────────
+# ── Detect master node public IP ─────────────────────────────────────────────
+if [[ -z "$MASTER_IP" ]]; then
+  MASTER_IP=$(curl -sf --max-time 3 http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null)
+fi
+if [[ -z "$MASTER_IP" ]]; then
+  MASTER_IP=$(curl -sf --max-time 3 https://checkip.amazonaws.com 2>/dev/null | tr -d '\n')
+fi
+if [[ -n "$MASTER_IP" ]]; then
+  ok "Master IP: $MASTER_IP"
+else
+  warn "Could not auto-detect MASTER_IP — Terminal/VSCode tabs will not work"
+  warn "Set it manually: export MASTER_IP=<your-ec2-public-ip> && bash bootstrap-k8s.sh"
+fi
+
 hdr "Phase 5 — Workshop services"
 
 # Namespace
@@ -216,7 +230,7 @@ sed "s|INJECT_PROMETHEUS_URL|${PROMETHEUS_URL:-}|g; \
      s|INJECT_GRAFANA_URL|${GRAFANA_URL:-}|g; \
      s|INJECT_ALERTMANAGER_URL|${ALERTMANAGER_URL:-}|g; \
      s|INJECT_INGRESS_LB|${INGRESS_LB}|g; \
-     s|INJECT_MASTER_IP|${MASTER_IP:-$(curl -sf --max-time 2 http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null)}|g" \
+     s|INJECT_MASTER_IP|${MASTER_IP}|g" \
   "$CLAWOPS_DIR/dashboard/configmap.yaml" | kubectl apply -f - >> "$LOG_FILE" 2>&1
 kubectl apply -f "$CLAWOPS_DIR/dashboard/deployment.yaml" >> "$LOG_FILE" 2>&1
 ok "Dashboard"
