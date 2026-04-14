@@ -110,7 +110,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const output = $input.first().json.output || '';\nconst chatId = $('Route Message').first().json.chatId;\nconst match = output.match(/SRE_ACTION:\\s*(.+)/);\nif (match) {\n  const cmd = match[1].trim().replace(/^kubectl\\s+/i, '');\n  const key = Math.random().toString(36).substring(2,6);\n  const store = $getWorkflowStaticData('global');\n  if (!store.pending) store.pending = {};\n  store.pending[chatId] = { command: cmd, key };\n  return [{ json: {\n    needsApproval: true,\n    chatId,\n    key,\n    command: cmd,\n    approvalPrompt: '\u26a0\ufe0f SRE Action suggested:\\nkubectl ' + cmd + '\\n\\n\ud83d\udd10 Enter your 6-digit Authenticator code:\\n\u2705 /approve <totp> ' + key + '\\n\u274c /deny'\n  }}];\n}\nreturn [{ json: { needsApproval: false, chatId, message: output } }];"
+        "jsCode": "const output = $input.first().json.output || '';\nconst chatId = $('Route Message').first().json.chatId;\nconst match = output.match(/SRE_ACTION:\\s*(.+)/);\nif (match) {\n  const cmd = match[1].trim().replace(/^kubectl\\s+/i, '');\n  return [{ json: { needsApproval: true, chatId, command: cmd } }];\n}\nreturn [{ json: { needsApproval: false, chatId, message: output } }];"
       },
       "id": "80a057ac-eb04-40f7-9352-3c52ab5f506a",
       "name": "Check Write Needed",
@@ -134,7 +134,7 @@
             },
             {
               "name": "content",
-              "value": "={{ $json.approvalPrompt }}"
+              "value": "={{ '\u26a0\ufe0f SRE Action suggested:\\nkubectl ' + $('Check Write Needed').first().json.command + '\\n\\n\ud83d\udd10 Enter your 6-digit Authenticator code:\\n\u2705 /approve <totp> ' + $json.key + '\\n\u274c /deny' }}"
             }
           ]
         },
@@ -564,14 +564,14 @@
         "url": "http://mcp-server.clawops.svc.cluster.local:8000/incidents",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ alertname: 'SRE Action', namespace: 'workshop', pod: 'n/a', command: 'kubectl ' + $json.approvalPrompt.match(/kubectl (.+)\\n/)[1], key: $json.key, severity: 'warning' }) }}",
         "options": {
           "response": {
             "response": {
               "neverError": true
             }
           }
-        }
+        },
+        "jsonBody": "={{ JSON.stringify({ alertname: \"Chat SRE Action\", namespace: \"workshop\", pod: \"n/a\", command: \"kubectl \" + $(\"Check Write Needed\").first().json.command }) }}"
       },
       "id": "store-chat-incident-001",
       "name": "Store Chat Incident",
