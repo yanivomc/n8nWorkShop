@@ -61,7 +61,8 @@ spec:
   selector:
     app: target-app
   ports:
-    - port: 8080
+    - name: http-metrics
+      port: 8080
       targetPort: 8080
   type: ClusterIP
 ---
@@ -77,5 +78,5 @@ spec:
     matchLabels:
       app: target-app
   endpoints:
-    - port: "8080"
+    - port: http-metrics
       interval: 15s
