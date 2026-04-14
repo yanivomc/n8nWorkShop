@@ -109,12 +109,26 @@ detect_master_ip() {
 
 apply_configmaps() {
   info "Applying configmaps with fresh values..."
-  sed "s|INJECT_N8N_HOST|${INGRESS_LB}|g;        s|INJECT_N8N_PASSWORD|changeme123|g;        s|INJECT_PROMETHEUS_URL|${PROMETHEUS_URL:-http://prometheus-pending}|g"     "$CLAWOPS_DIR/n8n/configmap.yaml" | kubectl apply -f - >> "$LOG_FILE" 2>&1
+  # Internal Prometheus ClusterIP for n8n + mcp (backend access)
+  PROM_INTERNAL=$(kubectl get svc monitoring-kube-prometheus-prometheus -n monitoring \
+    -o jsonpath='http://{.spec.clusterIP}:9090' 2>/dev/null || echo "http://prometheus-pending")
 
-  sed "s|INJECT_PROMETHEUS_URL|${PROMETHEUS_URL:-http://prometheus-pending}|g"     "$CLAWOPS_DIR/mcp-server/configmap.yaml" | kubectl apply -f - >> "$LOG_FILE" 2>&1
+  sed "s|INJECT_N8N_HOST|${INGRESS_LB}|g; \
+       s|INJECT_N8N_PASSWORD|changeme123|g; \
+       s|INJECT_PROMETHEUS_URL|${PROM_INTERNAL}|g" \
+    "$CLAWOPS_DIR/n8n/configmap.yaml" | kubectl apply -f - >> "$LOG_FILE" 2>&1
 
-  sed "s|INJECT_PROMETHEUS_URL|${PROMETHEUS_URL:-}|g;        s|INJECT_GRAFANA_URL|${GRAFANA_URL:-}|g;        s|INJECT_ALERTMANAGER_URL|${ALERTMANAGER_URL:-}|g;        s|INJECT_INGRESS_LB|${INGRESS_LB}|g;        s|INJECT_MASTER_IP|${MASTER_IP}|g"     "$CLAWOPS_DIR/dashboard/configmap.yaml" | kubectl apply -f - >> "$LOG_FILE" 2>&1
-  ok "Configmaps applied"
+  sed "s|INJECT_PROMETHEUS_URL|${PROM_INTERNAL}|g" \
+    "$CLAWOPS_DIR/mcp-server/configmap.yaml" | kubectl apply -f - >> "$LOG_FILE" 2>&1
+
+  # Dashboard uses INGRESS paths — never ClusterIP
+  sed "s|INJECT_PROMETHEUS_URL|http://${INGRESS_LB}/prometheus|g; \
+       s|INJECT_GRAFANA_URL|http://${INGRESS_LB}/grafana|g; \
+       s|INJECT_ALERTMANAGER_URL|http://${INGRESS_LB}/alertmanager|g; \
+       s|INJECT_INGRESS_LB|${INGRESS_LB}|g; \
+       s|INJECT_MASTER_IP|${MASTER_IP}|g" \
+    "$CLAWOPS_DIR/dashboard/configmap.yaml" | kubectl apply -f - >> "$LOG_FILE" 2>&1
+  ok "Configmaps applied (dashboard uses ingress paths)"
 }
 
 restart_pods() {
