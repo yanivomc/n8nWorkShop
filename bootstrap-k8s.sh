@@ -111,8 +111,9 @@ ok "Ingress LB: $INGRESS_LB"
 hdr "Phase 4 — Monitoring stack"
 
 if helm status monitoring -n monitoring 2>/dev/null | grep -q "deployed"; then
-  ok "Monitoring already installed"
-else
+  info "Monitoring already installed — upgrading to apply latest config (Alertmanager URL)..."
+fi
+if true; then  # always upgrade
   info "Installing kube-prometheus-stack (2-3 min)..."
   # Alertmanager → n8n via internal K8s DNS — never needs IP update!
   sed "s|EC2_PUBLIC_IP_PLACEHOLDER|n8n.clawops.svc.cluster.local|g" \
@@ -315,6 +316,29 @@ echo ""
 echo -e "${CYAN}  Student setup (2 min):${NC}"
 echo -e "  1. Open http://${INGRESS_LB}/n8n → Credentials → add Gemini API key"
 echo -e "  2. Import workflows from /n8n-workflows/"
+
+# ── Auto-import n8n workflows ─────────────────────────────────────────────────
+hdr "Bonus — Auto-import n8n workflows"
+N8N_URL="http://localhost:5678"
+# Wait for n8n to be reachable via port-forward or ClusterIP
+N8N_IP=$(kubectl get svc n8n -n clawops -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
+if [[ -n "$N8N_IP" ]]; then
+  N8N_URL="http://${N8N_IP}:5678"
+fi
+N8N_KEY=$(kubectl get configmap n8n-config -n clawops   -o jsonpath='{.data.N8N_API_KEY}' 2>/dev/null || echo "")
+if [[ -z "$N8N_KEY" ]]; then
+  warn "N8N_API_KEY not in ConfigMap — skip workflow import. Set key in n8n UI then re-run: bash student-env/setup.sh"
+else
+  for wf in s2-ai-agent-mcp s4-telegram-human-loop s5-alert-intelligence; do
+    python3 -c "
+import json
+with open('n8n-workflows/${wf}.json') as f: d=json.load(f)
+d['settings']={'executionOrder':'v1','saveManualExecutions':True,'saveDataErrorExecution':'all','saveDataSuccessExecution':'all'}
+with open('/tmp/${wf}.json','w') as f: json.dump(d,f)" 2>/dev/null
+    result=$(curl -sf -X POST "${N8N_URL}/api/v1/workflows"       -H "X-N8N-API-KEY: ${N8N_KEY}" -H "Content-Type: application/json"       -d @/tmp/${wf}.json 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('id','ERR'))" 2>/dev/null)
+    [[ "$result" != "ERR" ]] && ok "Imported: $wf (id: $result)" || warn "Could not import $wf"
+  done
+fi
 echo -e "  3. Open http://${INGRESS_LB}/ → ready ✅"
 echo ""
 warn "DNS propagation for LB hostname can take 1-2 min — if URLs don't load yet, wait and retry"
