@@ -419,8 +419,10 @@ ok "kubeconfig secret (clawops)"
 # Reuse existing TOTP if cluster already has one — new cluster = new key
 TOTP_SECRET=$(kubectl get secret mcp-secrets -n clawops   -o jsonpath='{.data.TOTP_SECRET}' 2>/dev/null | base64 -d 2>/dev/null || echo "")
 if [[ -z "$TOTP_SECRET" ]]; then
-  TOTP_SECRET=$(python3 -c "import pyotp; print(pyotp.random_base32())" 2>/dev/null || \
-                openssl rand -base64 20 | tr -d '+=/' | cut -c1-32 | tr '[:lower:]' '[:upper:]')
+  TOTP_SECRET=$(kubectl exec -n clawops deployment/mcp-server -- \
+    python3 -c "import pyotp; print(pyotp.random_base32())" 2>/dev/null || \
+    python3 -c "import pyotp; print(pyotp.random_base32())" 2>/dev/null || \
+    openssl rand -base64 32 | tr -dc 'A-Z2-7' | head -c 32)
   info "Generated new TOTP secret"
 else
   ok "Reusing existing TOTP secret from cluster"
