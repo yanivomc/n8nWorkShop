@@ -134,7 +134,7 @@
             },
             {
               "name": "content",
-              "value": "={{ '\u26a0\ufe0f SRE Action suggested:\\nkubectl ' + $('Check Write Needed').first().json.command + '\\n\\n\ud83d\udd10 Enter your 6-digit Authenticator code:\\n\u2705 /approve <totp> ' + $json.key + '\\n\u274c /deny' }}"
+              "value": "={{ '\u26a0\ufe0f SRE Action suggested:\\nkubectl ' + $('Check Write Needed').first().json.command + '\\n\\n\ud83d\udd10 Enter your 6-digit Authenticator code:\\n\u2705 /approve <totp> ' + $('Store Chat Incident').first().json.key + '\\n\u274c /deny' }}"
             }
           ]
         },
@@ -331,7 +331,7 @@
           "conditions": [
             {
               "id": "cond2",
-              "leftValue": "={{ $json.needsApproval }}",
+              "leftValue": "={{ $('Check Write Needed').first().json.needsApproval }}",
               "rightValue": true,
               "operator": {
                 "type": "boolean",
