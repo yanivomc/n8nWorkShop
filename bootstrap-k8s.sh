@@ -139,9 +139,32 @@ import_workflows() {
   load_ingress_lb
   N8N_IP=$(kubectl get svc n8n -n clawops -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
   N8N_URL="http://${N8N_IP}:5678"
-  echo -n "  Enter n8n API key: "
-  read N8N_KEY
-  [[ -z "$N8N_KEY" ]] && { warn "No key — skipping"; return; }
+
+  # Try saved key first
+  SAVED_KEY=$(kubectl get configmap n8n-config -n clawops     -o jsonpath='{.data.N8N_API_KEY}' 2>/dev/null || echo "")
+
+  if [[ -n "$SAVED_KEY" ]]; then
+    echo -e "  Found saved API key: ${SAVED_KEY:0:20}..."
+    echo -n "  Use it? [Y/n]: "
+    read use_saved
+    [[ "${use_saved,,}" == "n" ]] && SAVED_KEY=""
+  fi
+
+  if [[ -z "$SAVED_KEY" ]]; then
+    echo ""
+    echo -e "  ${CYAN}No API key found. Generate one in n8n:${NC}"
+    echo -e "  1. Open http://${INGRESS_LB}/"
+    echo -e "  2. Go to Settings → API → Create API Key"
+    echo -e "  3. Copy and paste it here"
+    echo ""
+    echo -n "  Paste your n8n API key: "
+    read -r SAVED_KEY
+    [[ -z "$SAVED_KEY" ]] && { warn "No key provided — skipping"; return; }
+    # Save it to configmap for next time
+    kubectl patch configmap n8n-config -n clawops       --type merge -p "{"data":{"N8N_API_KEY":"${SAVED_KEY}"}}" >> "$LOG_FILE" 2>&1 &&       ok "API key saved to configmap for future runs"
+  fi
+
+  N8N_KEY="$SAVED_KEY"
   for wf in s2-ai-agent-mcp s4-telegram-human-loop s5-alert-intelligence; do
     python3 -c "
 import json
