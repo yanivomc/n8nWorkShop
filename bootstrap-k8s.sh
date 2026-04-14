@@ -397,9 +397,9 @@ kubectl apply -f "$CLAWOPS_DIR/mcp-server/service.yaml" >> "$LOG_FILE" 2>&1
 ok "MCP server"
 
 # Dashboard
-sed "s|INJECT_PROMETHEUS_URL|${PROMETHEUS_URL:-}|g; \
-     s|INJECT_GRAFANA_URL|${GRAFANA_URL:-}|g; \
-     s|INJECT_ALERTMANAGER_URL|${ALERTMANAGER_URL:-}|g; \
+sed "s|INJECT_PROMETHEUS_URL|http://${INGRESS_LB}/prometheus|g; \
+     s|INJECT_GRAFANA_URL|http://${INGRESS_LB}/grafana|g; \
+     s|INJECT_ALERTMANAGER_URL|http://${INGRESS_LB}/alertmanager|g; \
      s|INJECT_INGRESS_LB|${INGRESS_LB}|g; \
      s|INJECT_MASTER_IP|${MASTER_IP}|g" \
   "$CLAWOPS_DIR/dashboard/configmap.yaml" | kubectl apply -f - >> "$LOG_FILE" 2>&1
