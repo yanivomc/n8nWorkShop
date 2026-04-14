@@ -184,6 +184,8 @@ import_workflows() {
 import json
 with open('n8n-workflows/${wf}.json') as f: d=json.load(f)
 d['settings']={'executionOrder':'v1','saveManualExecutions':True,'saveDataErrorExecution':'all','saveDataSuccessExecution':'all'}
+d.pop('id', None)
+d.pop('versionId', None)
 with open('/tmp/${wf}.json','w') as f: json.dump(d,f)" 2>/dev/null
     result=$(curl -sf -X POST "${N8N_URL}/api/v1/workflows"       -H "X-N8N-API-KEY: ${N8N_KEY}" -H "Content-Type: application/json"       -d @/tmp/${wf}.json 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('id','ERR'))" 2>/dev/null)
     [[ -n "$result" && "$result" != "ERR" ]] && ok "Imported $wf (id: $result)" || warn "Failed: $wf"
@@ -542,6 +544,8 @@ else
 import json
 with open('n8n-workflows/${wf}.json') as f: d=json.load(f)
 d['settings']={'executionOrder':'v1','saveManualExecutions':True,'saveDataErrorExecution':'all','saveDataSuccessExecution':'all'}
+d.pop('id', None)
+d.pop('versionId', None)
 with open('/tmp/${wf}.json','w') as f: json.dump(d,f)" 2>/dev/null
     result=$(curl -sf -X POST "${N8N_URL}/api/v1/workflows"       -H "X-N8N-API-KEY: ${N8N_KEY}" -H "Content-Type: application/json"       -d @/tmp/${wf}.json 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('id','ERR'))" 2>/dev/null)
     [[ "$result" != "ERR" ]] && ok "Imported: $wf (id: $result)" || warn "Could not import $wf"
