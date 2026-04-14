@@ -148,6 +148,9 @@ async def config_js():
   n8n:      "{os.getenv('N8N_URL', 'http://localhost:5678')}",
   mcp:      "{os.getenv('MCP_URL', 'http://localhost:8000')}",
   basePath: "{base_path}",
+  masterIp: "{os.getenv('MASTER_IP', '')}",
+  masterTerminalPort: "{os.getenv('MASTER_TERMINAL_PORT', '5000')}",
+  masterVscodePort: "{os.getenv('MASTER_VSCODE_PORT', '5001')}",
 }};"""
     return Response(content=js, media_type="application/javascript")
 

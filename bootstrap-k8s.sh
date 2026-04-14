@@ -210,7 +210,8 @@ ok "MCP server"
 sed "s|INJECT_PROMETHEUS_URL|${PROMETHEUS_URL:-}|g; \
      s|INJECT_GRAFANA_URL|${GRAFANA_URL:-}|g; \
      s|INJECT_ALERTMANAGER_URL|${ALERTMANAGER_URL:-}|g; \
-     s|INJECT_INGRESS_LB|${INGRESS_LB}|g" \
+     s|INJECT_INGRESS_LB|${INGRESS_LB}|g; \
+     s|INJECT_MASTER_IP|${MASTER_IP:-$(curl -sf --max-time 2 http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null)}|g" \
   "$CLAWOPS_DIR/dashboard/configmap.yaml" | kubectl apply -f - >> "$LOG_FILE" 2>&1
 kubectl apply -f "$CLAWOPS_DIR/dashboard/deployment.yaml" >> "$LOG_FILE" 2>&1
 ok "Dashboard"
