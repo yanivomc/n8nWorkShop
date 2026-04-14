@@ -180,8 +180,22 @@
         "method": "POST",
         "url": "http://clawops-dashboard.clawops.svc.cluster.local:80/api/chat/send",
         "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  role: \"agent\",\n  content: $('Format Telegram Message').first().json.message,\n  meta: {\n    key: $('Store Incident').first().json.key,\n    alertname: $('PromQL Enrichment + Confidence').first().json.alertname,\n    severity: $('PromQL Enrichment + Confidence').first().json.severity\n  }\n}) }}",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "role",
+              "value": "agent"
+            },
+            {
+              "name": "content",
+              "value": "={{ $('Store Incident').first().json.alertname + ' alert detected!\\n\\n' + $('AI Agent (Gemini)').first().json.output + '\\n\\n\ud83d\udd10 To approve: /approve <totp> ' + $('Store Incident').first().json.key }}"
+            },
+            {
+              "name": "meta",
+              "value": "={{ JSON.stringify({key: $('Store Incident').first().json.key, alertname: $('Store Incident').first().json.alertname}) }}"
+            }
+          ]
+        },
         "options": {
           "response": {
             "response": {
@@ -418,17 +432,6 @@
         ]
       ]
     },
-    "Format Telegram Message": {
-      "main": [
-        [
-          {
-            "node": "Send to Telegram",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Gemini Chat Model": {
       "ai_languageModel": [
         [
@@ -455,7 +458,7 @@
       "main": [
         [
           {
-            "node": "Format Telegram Message",
+            "node": "Send to Dashboard Chat",
             "type": "main",
             "index": 0
           }
