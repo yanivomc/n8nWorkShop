@@ -26,7 +26,7 @@ spec:
             - containerPort: 8080
           env:
             - name: DASHBOARD_URL
-              value: "http://clawops-dashboard.workshop.svc.cluster.local:80"
+              value: "http://clawops-dashboard.clawops.svc.cluster.local:80"
             - name: POD_NAME
               valueFrom:
                 fieldRef:

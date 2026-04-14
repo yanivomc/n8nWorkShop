@@ -7,6 +7,7 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSHOP_DIR="$SCRIPT_DIR/k8s/workshop"
+CLAWOPS_DIR="$SCRIPT_DIR/k8s/clawops"
 INGRESS_DIR="$SCRIPT_DIR/k8s/ingress"
 MONITORING_DIR="$SCRIPT_DIR/k8s/monitoring"
 KUBECONFIG_PATH="${KUBECONFIG:-$HOME/.kube/config}"
@@ -161,7 +162,8 @@ fi
 hdr "Phase 5 — Workshop services"
 
 # Namespace
-kubectl apply -f "$WORKSHOP_DIR/namespace.yaml" >> "$LOG_FILE" 2>&1
+kubectl apply -f "$WORKSHOP_DIR/namespace.yaml"
+kubectl apply -f "$CLAWOPS_DIR/namespace.yaml" >> "$LOG_FILE" 2>&1
 ok "Namespace: workshop"
 
 # kubeconfig secret for MCP
@@ -178,25 +180,25 @@ WRITE_TOKEN=$(openssl rand -hex 32)
 kubectl create secret generic mcp-secrets \
   --from-literal=TOTP_SECRET="$TOTP_SECRET" \
   --from-literal=WRITE_APPROVAL_TOKEN="$WRITE_TOKEN" \
-  -n workshop --dry-run=client -o yaml | kubectl apply -f - >> "$LOG_FILE" 2>&1
+  -n clawops --dry-run=client -o yaml | kubectl apply -f - >> "$LOG_FILE" 2>&1
 ok "MCP secrets (TOTP auto-generated)"
 
 # n8n
 sed "s|INJECT_N8N_HOST|$INGRESS_LB|g; \
      s|INJECT_N8N_PASSWORD|changeme123|g; \
      s|INJECT_PROMETHEUS_URL|${PROMETHEUS_URL:-http://prometheus-pending}|g" \
-  "$WORKSHOP_DIR/n8n/configmap.yaml" | kubectl apply -f - >> "$LOG_FILE" 2>&1
-kubectl apply -f "$WORKSHOP_DIR/n8n/pvc.yaml" >> "$LOG_FILE" 2>&1
-kubectl apply -f "$WORKSHOP_DIR/n8n/deployment.yaml" >> "$LOG_FILE" 2>&1
-kubectl apply -f "$WORKSHOP_DIR/n8n/service.yaml" >> "$LOG_FILE" 2>&1
+  "$CLAWOPS_DIR/n8n/configmap.yaml" | kubectl apply -f - >> "$LOG_FILE" 2>&1
+kubectl apply -f "$CLAWOPS_DIR/n8n/pvc.yaml" >> "$LOG_FILE" 2>&1
+kubectl apply -f "$CLAWOPS_DIR/n8n/deployment.yaml" >> "$LOG_FILE" 2>&1
+kubectl apply -f "$CLAWOPS_DIR/n8n/service.yaml" >> "$LOG_FILE" 2>&1
 ok "n8n"
 
 # MCP server
 sed "s|INJECT_PROMETHEUS_URL|${PROMETHEUS_URL:-http://prometheus-pending}|g" \
-  "$WORKSHOP_DIR/mcp-server/configmap.yaml" | kubectl apply -f - >> "$LOG_FILE" 2>&1
-kubectl apply -f "$WORKSHOP_DIR/mcp-server/pvc.yaml" >> "$LOG_FILE" 2>&1
-kubectl apply -f "$WORKSHOP_DIR/mcp-server/deployment.yaml" >> "$LOG_FILE" 2>&1
-kubectl apply -f "$WORKSHOP_DIR/mcp-server/service.yaml" >> "$LOG_FILE" 2>&1
+  "$CLAWOPS_DIR/mcp-server/configmap.yaml" | kubectl apply -f - >> "$LOG_FILE" 2>&1
+kubectl apply -f "$CLAWOPS_DIR/mcp-server/pvc.yaml" >> "$LOG_FILE" 2>&1
+kubectl apply -f "$CLAWOPS_DIR/mcp-server/deployment.yaml" >> "$LOG_FILE" 2>&1
+kubectl apply -f "$CLAWOPS_DIR/mcp-server/service.yaml" >> "$LOG_FILE" 2>&1
 ok "MCP server"
 
 # Dashboard
@@ -204,8 +206,8 @@ sed "s|INJECT_PROMETHEUS_URL|${PROMETHEUS_URL:-}|g; \
      s|INJECT_GRAFANA_URL|${GRAFANA_URL:-}|g; \
      s|INJECT_ALERTMANAGER_URL|${ALERTMANAGER_URL:-}|g; \
      s|INJECT_INGRESS_LB|${INGRESS_LB}|g" \
-  "$WORKSHOP_DIR/dashboard/configmap.yaml" | kubectl apply -f - >> "$LOG_FILE" 2>&1
-kubectl apply -f "$WORKSHOP_DIR/dashboard/deployment.yaml" >> "$LOG_FILE" 2>&1
+  "$CLAWOPS_DIR/dashboard/configmap.yaml" | kubectl apply -f - >> "$LOG_FILE" 2>&1
+kubectl apply -f "$CLAWOPS_DIR/dashboard/deployment.yaml" >> "$LOG_FILE" 2>&1
 ok "Dashboard"
 
 # Target app
@@ -216,17 +218,18 @@ ok "target-app"
 hdr "Phase 6 — Ingress rules"
 # Delete old single ingress if exists (avoid duplicate path conflicts)
 kubectl delete ingress workshop-ingress -n workshop 2>/dev/null || true
+kubectl delete ingress workshop-ingress -n clawops 2>/dev/null || true
 kubectl apply -f "$INGRESS_DIR/ingress.yaml" >> "$LOG_FILE" 2>&1
 ok "Ingress rules applied"
 
 # ── PHASE 7: Wait for pods ────────────────────────────────────────────────────
 hdr "Phase 7 — Waiting for pods"
 info "Waiting for n8n (up to 2 min)..."
-kubectl rollout status deployment/n8n -n workshop --timeout=120s >> "$LOG_FILE" 2>&1 \
+kubectl rollout status deployment/n8n -n clawops --timeout=120s >> "$LOG_FILE" 2>&1 \
   && ok "n8n ready" || warn "n8n not ready yet — check: kubectl get pods -n workshop"
-kubectl rollout status deployment/mcp-server -n workshop --timeout=120s >> "$LOG_FILE" 2>&1 \
+kubectl rollout status deployment/mcp-server -n clawops --timeout=120s >> "$LOG_FILE" 2>&1 \
   && ok "mcp-server ready" || warn "mcp-server not ready yet"
-kubectl rollout status deployment/clawops-dashboard -n workshop --timeout=60s >> "$LOG_FILE" 2>&1 \
+kubectl rollout status deployment/clawops-dashboard -n clawops --timeout=60s >> "$LOG_FILE" 2>&1 \
   && ok "dashboard ready" || warn "dashboard not ready yet"
 kubectl rollout status deployment/target-app -n workshop --timeout=60s >> "$LOG_FILE" 2>&1 \
   && ok "target-app ready" || warn "target-app not ready yet"
@@ -248,17 +251,17 @@ check() {
 
 # Pod checks
 check "n8n pod running" \
-  "kubectl get pods -n workshop -l app=n8n --field-selector=status.phase=Running | grep -q n8n"
+  "kubectl get pods -n clawops -l app=n8n --field-selector=status.phase=Running | grep -q n8n"
 check "mcp-server pod running" \
-  "kubectl get pods -n workshop -l app=mcp-server --field-selector=status.phase=Running | grep -q mcp"
+  "kubectl get pods -n clawops -l app=mcp-server --field-selector=status.phase=Running | grep -q mcp"
 check "dashboard pod running" \
-  "kubectl get pods -n workshop -l app=clawops-dashboard --field-selector=status.phase=Running | grep -q clawops"
+  "kubectl get pods -n clawops -l app=clawops-dashboard --field-selector=status.phase=Running | grep -q clawops"
 check "target-app pod running" \
   "kubectl get pods -n workshop -l app=target-app --field-selector=status.phase=Running | grep -q target"
 
 # Internal connectivity (from within cluster via kubectl exec)
-N8N_POD=$(kubectl get pods -n workshop -l app=n8n -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-MCP_POD=$(kubectl get pods -n workshop -l app=mcp-server -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+N8N_POD=$(kubectl get pods -n clawops -l app=n8n -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+MCP_POD=$(kubectl get pods -n clawops -l app=mcp-server -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
 
 if [[ -n "$N8N_POD" ]]; then
   check "n8n healthz endpoint" \

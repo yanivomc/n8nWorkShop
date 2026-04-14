@@ -3,7 +3,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: workshop-ingress-n8n
-  namespace: workshop
+  namespace: clawops
   annotations:
     nginx.ingress.kubernetes.io/proxy-body-size: "50m"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
@@ -27,7 +27,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: workshop-ingress-dashboard
-  namespace: workshop
+  namespace: clawops
   annotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/rewrite-target: /$2
@@ -51,7 +51,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: workshop-ingress-mcp
-  namespace: workshop
+  namespace: clawops
   annotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/rewrite-target: /$2

@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: clawops-dashboard
-  namespace: workshop
+  namespace: clawops
   labels:
     app: clawops-dashboard
 spec:
@@ -42,7 +42,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: clawops-dashboard
-  namespace: workshop
+  namespace: clawops
 spec:
   selector:
     app: clawops-dashboard
