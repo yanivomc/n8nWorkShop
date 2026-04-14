@@ -130,7 +130,7 @@
         "url": "http://clawops-dashboard.clawops.svc.cluster.local:80/api/chat/send",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\"role\":\"agent\",\"content\":'={{ $json.approvalPrompt }}',\"meta\":{}}",
+        "jsonBody": "={{ JSON.stringify({role:'agent', content: $json.approvalPrompt, meta: {}}) }}",
         "options": {
           "response": {
             "response": {
@@ -161,7 +161,7 @@
         "url": "http://clawops-dashboard.clawops.svc.cluster.local:80/api/chat/send",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\"role\":\"agent\",\"content\":'={{ $json.message }}',\"meta\":{}}",
+        "jsonBody": "={{ JSON.stringify({role:'agent', content: $json.message, meta: {}}) }}",
         "options": {
           "response": {
             "response": {
@@ -223,7 +223,7 @@
         "url": "http://clawops-dashboard.clawops.svc.cluster.local:80/api/chat/send",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\"role\":\"agent\",\"content\":\"=\u2705 <b>Executed by {{ $('Validate Approval').first().json.approvedBy }}</b>:\\n<code>kubectl {{ $('Execute Write').first().json.command?.replace(/^kubectl\\\\s+/i,'') || $('Validate Approval').first().json.command || '' }}</code>\\n\\n{{ $('Execute Write').first().json.output || $json.output || '' }}\\n\\n\ud83d\udd50 {{ new Date().toUTCString() }}\\n\\nThis message was sent automatically with n8n\",\"meta\":{}}",
+        "jsonBody": "={{ JSON.stringify({\n  role: 'agent',\n  content: '\u2705 Executed by ' + $('Validate Approval').first().json.approvedBy + ':\\n' + ($('Execute Write').first().json.command || 'unknown'),\n  meta: {}\n}) }}",
         "options": {
           "response": {
             "response": {
@@ -254,7 +254,7 @@
         "url": "http://clawops-dashboard.clawops.svc.cluster.local:80/api/chat/send",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\"role\":\"agent\",\"content\":'={{ $json.message }}',\"meta\":{}}",
+        "jsonBody": "={{ JSON.stringify({role:'agent', content: $json.message, meta: {}}) }}",
         "options": {
           "response": {
             "response": {
@@ -524,7 +524,7 @@
         "url": "http://clawops-dashboard.clawops.svc.cluster.local:80/api/chat/send",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\"role\":\"agent\",\"content\":'={{ $json.message }}',\"meta\":{}}",
+        "jsonBody": "={{ JSON.stringify({role:'agent', content: $json.message, meta: {}}) }}",
         "options": {
           "response": {
             "response": {
