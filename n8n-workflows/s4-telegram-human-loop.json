@@ -110,7 +110,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst output = input.output || input.message || input.error || '';\nconst chatId = $('Route Message').first().json.chatId;\nconst match = output.match(/SRE_ACTION:\\s*(.+)/);\nif (match) {\n  const cmd = match[1].trim().replace(/^kubectl\\s+/i, '');\n  return [{ json: { needsApproval: true, chatId, command: cmd } }];\n}\nreturn [{ json: { needsApproval: false, chatId, message: output || 'Agent returned no output' } }];"
+        "jsCode": "const output = $input.first().json.output || '';\nconst chatId = $('Route Message').first().json.chatId;\nconst match = output.match(/SRE_ACTION:\\s*(.+)/);\nif (match) {\n  const cmd = match[1].trim().replace(/^kubectl\\s+/i, '');\n  return [{ json: { needsApproval: true, chatId, command: cmd } }];\n}\nreturn [{ json: { needsApproval: false, chatId, message: output } }];"
       },
       "id": "80a057ac-eb04-40f7-9352-3c52ab5f506a",
       "name": "Check Write Needed",
@@ -168,7 +168,7 @@
             },
             {
               "name": "content",
-              "value": "={{ $json.message ? $json.message : ($json.output ? $json.output : 'No response') }}"
+              "value": "={{ $json.message }}"
             }
           ]
         },
