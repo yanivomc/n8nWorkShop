@@ -129,14 +129,29 @@
         "method": "POST",
         "url": "http://clawops-dashboard.clawops.svc.cluster.local:80/api/chat/send",
         "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({role:'agent', content: $json.approvalPrompt, meta: {}}) }}",
+        "specifyBody": "keypairs",
         "options": {
           "response": {
             "response": {
               "neverError": true
             }
           }
+        },
+        "parametersBody": {
+          "values": [
+            {
+              "name": "role",
+              "value": "agent"
+            },
+            {
+              "name": "content",
+              "value": "={{ $json.approvalPrompt }}"
+            },
+            {
+              "name": "meta",
+              "value": "={{{}}}"
+            }
+          ]
         }
       },
       "id": "2566c760-2ee2-4dfc-aca1-4fad884437b3",
@@ -160,14 +175,29 @@
         "method": "POST",
         "url": "http://clawops-dashboard.clawops.svc.cluster.local:80/api/chat/send",
         "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({role:'agent', content: $json.message, meta: {}}) }}",
+        "specifyBody": "keypairs",
         "options": {
           "response": {
             "response": {
               "neverError": true
             }
           }
+        },
+        "parametersBody": {
+          "values": [
+            {
+              "name": "role",
+              "value": "agent"
+            },
+            {
+              "name": "content",
+              "value": "={{ $json.message }}"
+            },
+            {
+              "name": "meta",
+              "value": "={{{}}}"
+            }
+          ]
         }
       },
       "id": "c2dacdda-9c97-4a7c-bc57-17fdc843fddd",
@@ -222,14 +252,29 @@
         "method": "POST",
         "url": "http://clawops-dashboard.clawops.svc.cluster.local:80/api/chat/send",
         "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  role: 'agent',\n  content: '\u2705 Executed by ' + $('Validate Approval').first().json.approvedBy + ':\\n' + ($('Execute Write').first().json.command || 'unknown'),\n  meta: {}\n}) }}",
+        "specifyBody": "keypairs",
         "options": {
           "response": {
             "response": {
               "neverError": true
             }
           }
+        },
+        "parametersBody": {
+          "values": [
+            {
+              "name": "role",
+              "value": "agent"
+            },
+            {
+              "name": "content",
+              "value": "={{ '\u2705 Executed: kubectl ' + ($('Execute Write').first().json.command || 'unknown') }}"
+            },
+            {
+              "name": "meta",
+              "value": "={{{}}}"
+            }
+          ]
         }
       },
       "id": "fde54d79-35cf-4302-b526-4b22004d7d50",
@@ -253,14 +298,29 @@
         "method": "POST",
         "url": "http://clawops-dashboard.clawops.svc.cluster.local:80/api/chat/send",
         "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({role:'agent', content: $json.message, meta: {}}) }}",
+        "specifyBody": "keypairs",
         "options": {
           "response": {
             "response": {
               "neverError": true
             }
           }
+        },
+        "parametersBody": {
+          "values": [
+            {
+              "name": "role",
+              "value": "agent"
+            },
+            {
+              "name": "content",
+              "value": "={{ $json.message }}"
+            },
+            {
+              "name": "meta",
+              "value": "={{{}}}"
+            }
+          ]
         }
       },
       "id": "575b0a6b-5746-44a1-a181-7df34560cad2",
@@ -523,14 +583,29 @@
         "method": "POST",
         "url": "http://clawops-dashboard.clawops.svc.cluster.local:80/api/chat/send",
         "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({role:'agent', content: $json.message, meta: {}}) }}",
+        "specifyBody": "keypairs",
         "options": {
           "response": {
             "response": {
               "neverError": true
             }
           }
+        },
+        "parametersBody": {
+          "values": [
+            {
+              "name": "role",
+              "value": "agent"
+            },
+            {
+              "name": "content",
+              "value": "={{ $json.message }}"
+            },
+            {
+              "name": "meta",
+              "value": "={{{}}}"
+            }
+          ]
         }
       },
       "id": "send-blocked-node",
