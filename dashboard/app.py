@@ -144,6 +144,7 @@ async def config_js():
   grafana: "{os.getenv('GRAFANA_URL', 'http://localhost:3000')}",
   am:      "{os.getenv('ALERTMANAGER_URL', 'http://localhost:9093')}",
   n8n:     "{os.getenv('N8N_URL', 'http://localhost:5678')}",
+  mcp:     "{os.getenv('MCP_URL', 'http://localhost:8000')}",
 }};"""
     return Response(content=js, media_type="application/javascript")
 

@@ -131,7 +131,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 @keyframes slideIn{from{opacity:0;transform:translateX(20px);}to{opacity:1;}}
 @keyframes fadeOut{to{opacity:0;transform:translateX(20px);}}
 </style>
-<script src="/config.js" onerror="console.log('No config.js — using defaults')"></script>
+<script src="config.js" onerror="console.log('No config.js — using defaults')"></script>
 </head>
 <body>
 <header>
@@ -313,7 +313,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 <div class="toast-container" id="toasts"></div>
 
 <script>
-const DEFS={prom:'http://localhost:9090',grafana:'http://localhost:3000',am:'http://localhost:9093',n8n:'http://localhost:5678'};
+const DEFS={prom:'http://localhost:9090',grafana:'http://localhost:3000',am:'http://localhost:9093',n8n:'http://localhost:5678',mcp:'http://localhost:8000'};
 function loadCfg(){
   try{
     const s=JSON.parse(localStorage.getItem('clawops-cfg')||'{}');
