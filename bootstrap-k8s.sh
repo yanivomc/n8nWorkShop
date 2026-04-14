@@ -37,7 +37,8 @@ show_menu() {
   echo -e "  ${CYAN}3)${NC} Update ingress     (re-apply ingress rules)"
   echo -e "  ${CYAN}4)${NC} Import workflows   (push S2/S4/S5 to n8n)"
   echo -e "  ${CYAN}5)${NC} Show TOTP / QR code  (instructor — scan with Authy)"
-  echo -e "  ${RED}6)${NC} Delete ALL         (wipe everything — fresh start)"
+  echo -e "  ${CYAN}6)${NC} Validate           (run health checks)"
+  echo -e "  ${RED}7)${NC} Delete ALL         (wipe everything — fresh start)"
   echo -e "  ${CYAN}q)${NC} Quit"
   echo ""
   echo -n "  Choice [1]: "
@@ -142,16 +143,25 @@ restart_pods() {
 
 show_totp() {
   hdr "TOTP Secret"
-  TOTP_SECRET=$(kubectl get secret mcp-secrets -n clawops     -o jsonpath='{.data.TOTP_SECRET}' 2>/dev/null | base64 -d 2>/dev/null || echo "")
+  TOTP_SECRET=$(kubectl get secret mcp-secrets -n clawops \
+    -o jsonpath='{.data.TOTP_SECRET}' 2>/dev/null | base64 -d 2>/dev/null || echo "")
   if [[ -z "$TOTP_SECRET" ]]; then
-    warn "No TOTP secret found — run full bootstrap first"
-    return
+    info "No secret found — generating new one..."
+    TOTP_SECRET=$(python3 -c "import pyotp; print(pyotp.random_base32())" 2>/dev/null || \
+                  openssl rand -base64 20 | tr -d '+=/' | cut -c1-32 | tr '[:lower:]' '[:upper:]')
+    WRITE_TOKEN=$(openssl rand -hex 32)
+    kubectl create namespace clawops 2>/dev/null || true
+    kubectl create secret generic mcp-secrets \
+      --from-literal=TOTP_SECRET="$TOTP_SECRET" \
+      --from-literal=WRITE_APPROVAL_TOKEN="$WRITE_TOKEN" \
+      -n clawops --dry-run=client -o yaml | kubectl apply -f - >> "$LOG_FILE" 2>&1
+    ok "Generated and saved new TOTP secret"
   fi
   echo ""
   echo -e "  ${BOLD}TOTP_SECRET=${TOTP_SECRET}${NC}"
   echo -e "  📱  QR: https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=otpauth%3A%2F%2Ftotp%2FClawOps%2520Workshop%3Fsecret%3D${TOTP_SECRET}%26issuer%3Dn8nWorkshop"
   echo ""
-  ok "Open the QR URL in your browser to scan with Authy / Google Authenticator"
+  ok "Open QR in browser → scan with Authy / Google Authenticator"
 }
 
 update_ingress() {
@@ -214,7 +224,22 @@ case $CHOICE in
   3) load_ingress_lb; update_ingress; exit 0 ;;
   4) import_workflows; exit 0 ;;
   5) show_totp; exit 0 ;;
-  6) delete_all; exit 0 ;;
+  6) load_ingress_lb
+     N8N_IP=$(kubectl get svc n8n -n clawops -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
+     MCP_IP=$(kubectl get svc mcp-server -n clawops -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
+     PASS=0; FAIL=0
+     check() { local label="$1"; shift; if eval "$@" >> "$LOG_FILE" 2>&1; then ok "$label"; ((PASS++)); else warn "FAIL: $label"; ((FAIL++)); fi }
+     check "n8n pod running" "kubectl get pods -n clawops -l app=n8n --field-selector=status.phase=Running | grep -q n8n"
+     check "mcp-server pod running" "kubectl get pods -n clawops -l app=mcp-server --field-selector=status.phase=Running | grep -q mcp"
+     check "dashboard pod running" "kubectl get pods -n clawops -l app=clawops-dashboard --field-selector=status.phase=Running | grep -q clawops"
+     check "target-app pod running" "kubectl get pods -n workshop -l app=target-app --field-selector=status.phase=Running | grep -q target"
+     [[ -n "$N8N_IP" ]] && check "n8n healthz" "curl -sf --max-time 5 http://${N8N_IP}:5678/healthz -o /dev/null"
+     [[ -n "$MCP_IP" ]] && check "mcp-server health" "curl -sf --max-time 5 http://${MCP_IP}:8000/health -o /dev/null"
+     check "ingress LB reachable" "curl -sf --max-time 10 http://${INGRESS_LB}/ -o /dev/null"
+     check "dashboard accessible" "curl -sfL --max-time 10 http://${INGRESS_LB}/dashboard/ | grep -qi clawops"
+     echo -e "\n  Tests: ${GREEN}${PASS} passed${NC}  ${FAIL} failed"
+     exit 0 ;;
+  7) delete_all; exit 0 ;;
   q|Q) exit 0 ;;
   *) warn "Invalid — running full bootstrap" ;;
 esac
