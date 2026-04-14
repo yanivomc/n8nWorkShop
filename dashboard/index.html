@@ -313,6 +313,8 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 <div class="toast-container" id="toasts"></div>
 
 <script>
+// API base — works whether served at / or /dashboard/
+const API_BASE = window.location.pathname.replace(/\/[^/]*$/, '') || '';
 const DEFS={prom:'http://localhost:9090',grafana:'http://localhost:3000',am:'http://localhost:9093',n8n:'http://localhost:5678',mcp:'http://localhost:8000'};
 function loadCfg(){
   try{
@@ -465,7 +467,7 @@ async function pollInstances(){
 
 async function pollRegistered(){
   try{
-    const r=await fetchJ('/api/instances');
+    const r=await fetchJ(API_BASE+'/api/instances');
     if(!r.instances)return;
     const liveIds=new Set();
     r.instances.forEach(inst=>{
@@ -535,7 +537,7 @@ let selectedIncident = null;
 async function clearIncidents(){
   if(!confirm('Delete all incidents?')) return;
   try{
-    await fetch('/api/incidents', {method:'DELETE'});
+    await fetch(API_BASE+'/api/incidents', {method:'DELETE'});
     document.getElementById('incidents-list').innerHTML='<div style="color:var(--dim);padding:4px">No incidents yet</div>';
     document.getElementById('incident-detail').style.display='none';
     log('ok','All incidents cleared');
@@ -544,7 +546,7 @@ async function clearIncidents(){
 
 async function loadIncidents(){
   try{
-    const r=await fetchJ('/api/incidents?limit=20');
+    const r=await fetchJ(API_BASE+'/api/incidents?limit=20');
     const el=document.getElementById('incidents-list');
     if(!r.incidents||!r.incidents.length){el.innerHTML='<div style="color:var(--muted);padding:4px">No incidents yet</div>';return;}
     el.innerHTML=r.incidents.map(i=>`
