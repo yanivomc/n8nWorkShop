@@ -314,7 +314,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 
 <script>
 // API base — works whether served at / or /dashboard/
-const API_BASE = window.location.pathname.replace(/\/[^/]*$/, '') || '';
+const API_BASE = (window.CLAWOPS_CONFIG && window.CLAWOPS_CONFIG.basePath) || window.location.pathname.replace(/\/[^/]*$/, '') || '';
 const DEFS={prom:'http://localhost:9090',grafana:'http://localhost:3000',am:'http://localhost:9093',n8n:'http://localhost:5678',mcp:'http://localhost:8000'};
 function loadCfg(){
   try{

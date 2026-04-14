@@ -12,4 +12,5 @@ data:
   N8N_URL: "http://INJECT_INGRESS_LB/"
   MCP_URL: "http://INJECT_INGRESS_LB/mcp"
   # Internal service URL for dashboard API proxying
+  DASHBOARD_BASE_PATH: "/dashboard"
   MCP_INTERNAL_URL: "http://mcp-server.workshop.svc.cluster.local:8000"

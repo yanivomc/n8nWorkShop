@@ -140,12 +140,14 @@ async def health():
 
 @app.get("/config.js")
 async def config_js():
+    base_path = os.getenv('DASHBOARD_BASE_PATH', '').rstrip('/')
     js = f"""window.CLAWOPS_CONFIG = {{
-  prom:    "{os.getenv('PROMETHEUS_URL', 'http://localhost:9090')}",
-  grafana: "{os.getenv('GRAFANA_URL', 'http://localhost:3000')}",
-  am:      "{os.getenv('ALERTMANAGER_URL', 'http://localhost:9093')}",
-  n8n:     "{os.getenv('N8N_URL', 'http://localhost:5678')}",
-  mcp:     "{os.getenv('MCP_URL', 'http://localhost:8000')}",
+  prom:     "{os.getenv('PROMETHEUS_URL', 'http://localhost:9090')}",
+  grafana:  "{os.getenv('GRAFANA_URL', 'http://localhost:3000')}",
+  am:       "{os.getenv('ALERTMANAGER_URL', 'http://localhost:9093')}",
+  n8n:      "{os.getenv('N8N_URL', 'http://localhost:5678')}",
+  mcp:      "{os.getenv('MCP_URL', 'http://localhost:8000')}",
+  basePath: "{base_path}",
 }};"""
     return Response(content=js, media_type="application/javascript")
 
