@@ -149,11 +149,8 @@ show_totp() {
     return
   fi
   echo ""
-  TOTP_UPPER=$(echo "$TOTP_SECRET" | tr '[:lower:]' '[:upper:]')
-  OTP_URL="otpauth://totp/ClawOps%20Workshop?secret=${TOTP_UPPER}&issuer=ClawOps"
-  QR_URL="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${OTP_URL}'))")"
-  echo -e "  ${BOLD}TOTP_SECRET=${TOTP_UPPER}${NC}"
-  echo -e "  📱  QR: ${QR_URL}"
+  echo -e "  ${BOLD}TOTP_SECRET=${TOTP_SECRET}${NC}"
+  echo -e "  📱  QR: https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=otpauth%3A%2F%2Ftotp%2FClawOps%2520Workshop%3Fsecret%3D${TOTP_SECRET}%26issuer%3Dn8nWorkshop"
   echo ""
   ok "Open the QR URL in your browser to scan with Authy / Google Authenticator"
 }
@@ -546,11 +543,8 @@ echo -e "  📊  Grafana:      http://${INGRESS_LB}/grafana  (admin/workshop123)
 echo -e "  🔔  Alertmanager: ${ALERTMANAGER_URL:-pending}"
 echo ""
 echo -e "${YELLOW}  📋  INSTRUCTOR — TOTP secret (add to Authy for live demos):${NC}"
-TOTP_UPPER=$(echo "$TOTP_SECRET" | tr '[:lower:]' '[:upper:]')
-OTP_URL="otpauth://totp/ClawOps%20Workshop?secret=${TOTP_UPPER}&issuer=ClawOps"
-QR_URL="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${OTP_URL}'))")"
-echo -e "  TOTP_SECRET=${TOTP_UPPER}"
-echo -e "  📱  QR: ${QR_URL}"
+echo -e "  TOTP_SECRET=${TOTP_SECRET}"
+echo -e "  📱  QR: https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=otpauth%3A%2F%2Ftotp%2FClawOps%2520Workshop%3Fsecret%3D${TOTP_SECRET}%26issuer%3Dn8nWorkshop"
 echo ""
 echo -e "${CYAN}  Student setup (2 min):${NC}"
 echo -e "  1. Open http://${INGRESS_LB}/n8n → Credentials → add Gemini API key"
