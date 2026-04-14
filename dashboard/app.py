@@ -1,7 +1,7 @@
 import os, time, logging, sys, asyncio
 import httpx
 from fastapi import FastAPI
-from fastapi.responses import RedirectResponse, Request
+from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, Response
