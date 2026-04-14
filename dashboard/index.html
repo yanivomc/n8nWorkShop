@@ -479,7 +479,7 @@ async function trigger(type){
     if(btn)btn.classList.add('running');
     if(st)st.textContent='... sending';
     // All chaos calls go through dashboard backend (which calls target-app internally)
-    const base='/api/chaos/'+encodeURIComponent(selectedId)+'/action';
+    const base=API_BASE+'/api/chaos/'+encodeURIComponent(selectedId)+'/action';
     let res;
     if(type==='cpu')res=await fetchJ(base+'/cpu','POST',{cores:1,duration_seconds:60});
     else if(type==='cpu-sustained')res=await fetchJ(base+'/cpu','POST',{cores:2,duration_seconds:300});
