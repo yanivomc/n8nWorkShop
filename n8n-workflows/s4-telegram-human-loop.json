@@ -168,7 +168,7 @@
             },
             {
               "name": "content",
-              "value": "={{ $json.message || $json.output || $json.error || 'No response from agent' }}"
+              "value": "={{ $json.message ? $json.message : ($json.output ? $json.output : 'No response') }}"
             }
           ]
         },
