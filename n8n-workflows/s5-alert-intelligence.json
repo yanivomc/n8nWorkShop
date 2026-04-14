@@ -188,11 +188,11 @@
             },
             {
               "name": "content",
-              "value": "={{ $('Store Incident').first().json.alertname + ' alert detected!\\n\\n' + $('AI Agent (Gemini)').first().json.output + '\\n\\n\ud83d\udd10 To approve: /approve <totp> ' + $('Store Incident').first().json.key }}"
+              "value": "={{ $('Store Incident').first().json.alertname + ' detected!\\n\\n' + $('AI Agent (Gemini)').first().json.output + '\\n\\n\ud83d\udd10 To approve: /approve <totp> ' + $('Store Incident').first().json.key }}"
             },
             {
               "name": "meta",
-              "value": "={{ JSON.stringify({key: $('Store Incident').first().json.key, alertname: $('Store Incident').first().json.alertname}) }}"
+              "value": "={{ $('Store Incident').first().json.key }}"
             }
           ]
         },

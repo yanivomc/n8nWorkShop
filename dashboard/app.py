@@ -183,6 +183,21 @@ class ChatMsg(BaseModel):
     content: str
     meta: dict = {}  # optional: alertname, key, severity etc
 
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate
+
+    model_config = {"arbitrary_types_allowed": True}
+
+    def __init__(self, **data):
+        if isinstance(data.get("meta"), str):
+            import json as _json
+            try:
+                data["meta"] = _json.loads(data["meta"])
+            except Exception:
+                data["meta"] = {}
+        super().__init__(**data)
+
 @app.post("/api/chat/send")
 async def chat_send(msg: ChatMsg):
     """n8n → dashboard: post a message (incident alert, execution result)."""
