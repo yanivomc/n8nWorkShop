@@ -221,6 +221,13 @@ sed "s|INJECT_PROMETHEUS_URL|${PROMETHEUS_URL:-}|g; \
 kubectl apply -f "$CLAWOPS_DIR/dashboard/deployment.yaml" >> "$LOG_FILE" 2>&1
 ok "Dashboard"
 
+# Restart all clawops deployments to pick up any configmap changes
+info "Restarting deployments to apply latest configmaps..."
+kubectl rollout restart deployment/n8n -n clawops >> "$LOG_FILE" 2>&1 || true
+kubectl rollout restart deployment/mcp-server -n clawops >> "$LOG_FILE" 2>&1 || true
+kubectl rollout restart deployment/clawops-dashboard -n clawops >> "$LOG_FILE" 2>&1 || true
+ok "Deployments restarted (configmaps refreshed)"
+
 # Target app
 kubectl apply -f "$WORKSHOP_DIR/target-app/deployment.yaml" >> "$LOG_FILE" 2>&1
 ok "target-app"
