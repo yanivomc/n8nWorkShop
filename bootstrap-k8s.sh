@@ -214,19 +214,11 @@ case $CHOICE in
   2) update_configs; exit 0 ;;
   3) load_ingress_lb; update_ingress; exit 0 ;;
   4) import_workflows; exit 0 ;;
-  5) load_ingress_lb
-     N8N_IP=$(kubectl get svc n8n -n clawops -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
-     MCP_IP=$(kubectl get svc mcp-server -n clawops -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
-     source <(grep -v '^#' "$0" | grep "^check\|^PASS\|^FAIL")
-     # Just run validation block
-     bash "$0" --validate-only 2>/dev/null || true
-     exit 0 ;;
+  5) show_totp; exit 0 ;;
   6) delete_all; exit 0 ;;
-  7) show_totp; exit 0 ;;
   q|Q) exit 0 ;;
   *) warn "Invalid — running full bootstrap" ;;
 esac
-
 
 
 # ── PHASE 0: Install dependencies ────────────────────────────────────────────
