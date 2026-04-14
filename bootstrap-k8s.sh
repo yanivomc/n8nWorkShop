@@ -310,7 +310,7 @@ check "ingress LB reachable" \
 
 # Ingress routing
 check "ingress routes to dashboard" \
-  "curl -sf --max-time 10 http://${INGRESS_LB}/ | grep -qi clawops"
+  "curl -sfL --max-time 10 http://${INGRESS_LB}/dashboard/ | grep -qi clawops"
 check "ingress routes to n8n" \
   "curl -sf --max-time 10 -L http://${INGRESS_LB}/n8n/ -o /dev/null"
 
