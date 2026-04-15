@@ -218,7 +218,12 @@ with open('/tmp/${wf}.json','w') as f: json.dump(d,f)" 2>/dev/null
 }
 
 # ── Entry point ───────────────────────────────────────────────────────────────
-show_menu
+# Allow non-interactive: ./bootstrap-k8s.sh run
+if [[ "${1}" == "run" ]]; then
+  CHOICE=1
+else
+  show_menu
+fi
 case $CHOICE in
   1) : ;; # fall through to full bootstrap below
   2) update_configs; exit 0 ;;
