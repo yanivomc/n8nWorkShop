@@ -1,304 +1,298 @@
 # CLAUDE.md — ClawOps Workshop AI Context
 
-This file gives AI assistants (Claude, Cursor, Copilot, etc.) full context about this project so you can help students build, extend, debug, and learn without needing lengthy explanations.
+This file gives AI assistants full context about this project so you can help without lengthy explanations.
 
 ---
 
 ## What This Project Is
 
-**ClawOps** is an 8-hour hands-on DevOps workshop teaching AI-assisted incident command. Students learn how to wire together Kubernetes, Prometheus, n8n, and an AI agent (Gemini) so that when something breaks in production, the system detects it, investigates it, and asks a human to approve the fix — all through Telegram.
+**ClawOps** is an 8-hour hands-on DevOps workshop teaching AI-assisted incident command. Students operate a real Kubernetes cluster, trigger chaos scenarios, watch AI agents investigate them, and approve fixes via a TOTP-gated approval gate — all through a custom dashboard chat interface.
 
-**Target audience:** DevOps/SRE engineers at Radware. Intermediate K8s knowledge assumed.
-
-**Core thesis:** "You don't build incident response workflows manually anymore — you describe what you want and AI helps you build it. But you still own the architecture and the approval gate."
+**Core thesis:** "You don't build incident response workflows manually anymore — AI helps you build and operate them. But you still own the architecture and the approval gate."
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│  K8s Cluster (kops, AWS, 2 nodes)                   │
-│  Namespace: workshop                                 │
-│                                                      │
-│  clawops-dashboard (FastAPI, LB:80)                 │
-│    /api/register   ← target-app registers here      │
-│    /api/instances  ← browser polls this             │
-│    /api/chaos/{id}/action/{scenario} ← proxy        │
-│    /config.js      ← env-injected URLs              │
-│                                                      │
-│  target-app (FastAPI, NodePort:30080)                │
-│    /chaos/cpu  /chaos/memory  /chaos/crash           │
-│    /chaos/error-loop  /chaos/all  /chaos/status      │
-│    /metrics  (Prometheus format)                     │
-│    → registers to dashboard on startup               │
-│    → background loop reconnects if dashboard dies    │
-│                                                      │
-│  Prometheus + Grafana + Alertmanager (AWS LBs)      │
-│    Alert rules: TargetAppCPUStress,                  │
-│                 TargetAppMemoryLeak,                 │
-│                 TargetAppCrashLooping, etc.          │
-│    Only workshop="true" alerts → Alertmanager → n8n │
-└─────────────────────────────────────────────────────┘
-         ↓ alerts (workshop=true only)
-┌─────────────────────────────────────────────────────┐
-│  n8n (Docker on EC2, port 5678)                     │
-│                                                      │
-│  S2: Manual Trigger → AI Agent (Gemini) → MCP       │
-│  S3: Alert Webhook → LLM Parser → AI Agent → TG     │
-│  S4: Telegram Bot → K8s Assistant → TOTP Gate       │
-│  S5: Alert Intelligence (enrich before act) — TODO  │
-└─────────────────────────────────────────────────────┘
-         ↓ HTTP calls
-┌─────────────────────────────────────────────────────┐
-│  MCP Server (Docker, EC2:8000)                      │
-│  /tools/kubectl-read  → free                        │
-│  /tools/promql        → free                        │
-│  /tools/kubectl-write → TOTP 2FA gated              │
-│  /discovery           → lists target-app pods       │
-└─────────────────────────────────────────────────────┘
-         ↓
-Telegram Bot (on-call engineer interface)
+K8s Cluster (kops, AWS, 2 nodes)
+  clawops namespace:
+    n8n (port 5678) — workflow automation, AI agent, S4+S5 workflows
+    mcp-server (port 8000) — kubectl + promql tools + SQLite incident store
+    clawops-dashboard (port 80) — incident command UI + SSE real-time chat
+
+  workshop namespace:
+    target-app (port 8080) — chaos scenarios + Prometheus metrics
+    linux-mcp-server (port 8001) — safe Linux diagnostic commands
+
+  monitoring namespace:
+    Prometheus, Grafana, Alertmanager — all ClusterIP
+    Accessed via ingress: /prometheus, /grafana, /alertmanager/
+
+  ingress-nginx:
+    ONE nginx LB for everything
+    / → n8n
+    /dashboard/ → clawops-dashboard
+    /mcp/ → mcp-server
+    /prometheus → prometheus (no rewrite)
+    /grafana → grafana (no rewrite)
+    /alertmanager/ → alertmanager
 ```
 
 ---
 
-## Tech Stack
+## Bootstrap
 
-| Layer | Technology |
-|-------|-----------|
-| Orchestration | Kubernetes (kops on AWS) |
-| Workflow automation | n8n (self-hosted) |
-| AI | Gemini 2.5-flash via n8n LangChain nodes |
-| Monitoring | kube-prometheus-stack (Prometheus + Grafana + Alertmanager) |
-| Notifications | Telegram Bot API |
-| MCP Server | FastAPI + pyotp + kubectl |
-| Dashboard | FastAPI (serves static HTML + REST API) |
-| Target App | FastAPI (chaos scenarios + Prometheus metrics) |
-| 2FA | TOTP (pyotp, Google Authenticator compatible) |
-| Infra as code | Helm, kubectl, kops |
+```bash
+./bootstrap-k8s.sh run     # non-interactive full bootstrap
+./bootstrap-k8s.sh         # interactive menu (7 options)
+```
+
+Menu options:
+- 1 = full bootstrap (install everything)
+- 2 = update configs (re-apply configmaps + restart pods)
+- 3 = update ingress
+- 4 = import workflows (prompts API key, saves to configmap)
+- 5 = show TOTP + QR code (generates if missing)
+- 6 = validate health checks
+- 7 = delete ALL resources
 
 ---
 
 ## Repository Structure
 
 ```
-n8nWorkShop/
-├── student-env/
-│   ├── setup.sh              # 12-option setup menu (students run this)
-│   ├── docker-compose.yml    # n8n + MCP server
-│   └── .env.example
-├── mcp-server/
-│   └── server.py             # FastAPI MCP — kubectl-read, promql, kubectl-write
-├── target-app/
-│   ├── main.py               # FastAPI entrypoint + background registration loop
-│   ├── config.py             # logging + env vars
-│   ├── routes/
-│   │   ├── chaos.py          # /chaos/* endpoints
-│   │   ├── health.py         # /health /ready /info
-│   │   └── metrics.py        # /metrics (Prometheus format)
-│   ├── chaos/
-│   │   ├── cpu.py            # thread-based CPU burn
-│   │   ├── memory.py         # incremental memory allocation
-│   │   └── crash.py          # SIGKILL + probe failure
-│   └── k8s/
-│       ├── deployment.yaml   # Deployment + NodePort + LB services
-│       └── servicemonitor.yaml
-├── dashboard/
-│   ├── app.py                # FastAPI: /api/register /api/instances /api/chaos proxy
-│   ├── index.html            # Dashboard UI (vanilla JS, no framework)
-│   ├── requirements.txt
-│   ├── Dockerfile
-│   └── k8s/
-│       └── dashboard.yaml    # Deployment + LB + ClusterIP services + ConfigMap
-├── k8s/
-│   ├── monitoring/
-│   │   ├── prometheus-values.yaml  # Helm values — LBs, alerting, rules
-│   │   └── target-app-alerts.yaml  # PrometheusRule for chaos scenarios
-│   └── scenarios/
-│       ├── 01-crashloop/     # CrashLoopBackOff scenario
-│       ├── 02-oom-kill/      # OOM kill scenario
-│       ├── 03-pending-pods/
-│       ├── 04-failed-deployment/
-│       ├── 05-flapping-alert/
-│       └── force-alert.sh    # Send fake Alertmanager payloads
-├── n8n-workflows/
-│   ├── s2-ai-agent-mcp.json
-│   ├── s3-alert-webhook-telegram.json
-│   └── s4-telegram-human-loop.json
-├── labs/
-│   ├── lab-01-n8n-setup.md
-│   └── lab-02-ai-agent-mcp.md
-└── docs/
-    ├── README.md             # TOC + architecture + session status
-    ├── setup-guide.md        # Full setup walkthrough
-    ├── mcp-server.md         # MCP endpoints, TOTP, audit logging
-    ├── workflow-s3.md        # S3 nodes explained
-    └── workflow-s4.md        # S4 TOTP flow explained
+bootstrap-k8s.sh              # The one script to rule them all
+k8s/
+  clawops/                    # n8n, mcp-server, dashboard manifests
+    mcp-server/rbac.yaml      # ServiceAccount for in-cluster K8s auth
+  workshop/
+    target-app/               # Chaos app deployment + ServiceMonitor
+    linux-mcp-server/         # Linux tools MCP deployment
+  ingress/
+    ingress.yaml              # All 6 named ingress resources
+  monitoring/
+    prometheus-values.yaml    # Helm values — ClusterIP, alert rules, subpath config
+mcp-server/server.py          # FastAPI: kubectl-read, promql, kubectl-write, /incidents
+linux-mcp-server/server.py    # FastAPI: linux-read (df, free, ps, etc.)
+target-app/                   # Chaos engineering app
+dashboard/
+  app.py                      # FastAPI: SSE chat, chaos proxy, incidents proxy
+  index.html                  # Dashboard UI (vanilla JS)
+n8n-workflows/
+  s2-ai-agent-mcp.json        # Chat trigger → K8s + PromQL agent
+  s2.5-linux-agent.json       # Chat trigger → K8s + Linux + PromQL agent
+  s4-telegram-human-loop.json # Webhook → AI → TOTP → kubectl-write
+  s5-alert-intelligence.json  # Alert webhook → AI enrich → dashboard chat
+labs/
+  lab-linux-mcp-server.md     # Student lab: build Linux MCP server
+  linux-mcp-agent-prompt.md   # AI prompt students give to their AI
 ```
 
 ---
 
-## Setup (Student Flow)
+## Sessions
 
-```bash
-git clone https://github.com/yanivomc/n8nWorkShop.git
-cd n8nWorkShop/student-env && cp .env.example .env
-./setup.sh
+| # | Session | Trigger | Output |
+|---|---------|---------|--------|
+| S2 | AI Agent + MCP | n8n Chat UI | n8n chat sidebar |
+| S2.5 | Linux + K8s Agent | n8n Chat UI | n8n chat sidebar |
+| S4 | Human Loop | Webhook `/dashboard-chat` | Dashboard chat |
+| S5 | Alert Intelligence | Alertmanager webhook | Dashboard chat |
+
+**S2/S2.5 use n8n's built-in Chat Trigger** — students interact via n8n UI at `http://<LB>/`
+
+**S4/S5 use dashboard chat** — students interact via `http://<LB>/dashboard/` → CHAT tab
+
+---
+
+## Critical Implementation Details
+
+### n8n Code Node Restrictions
+```
+❌ fetch(), $httpRequest(), require('http') — BLOCKED in Code nodes
+✅ Use HTTP Request nodes for all external calls
+✅ Expressions in HTTP Request nodes CAN reference other nodes
 ```
 
-Menu order for a fresh machine:
-1. Configure cluster (IP + kubeconfig)
-2. Configure API keys (Gemini, Telegram, TOTP, ngrok)
-3. Install Prometheus + Grafana
-4. Start stack (n8n + MCP)
-5. Start ngrok (for Telegram Trigger HTTPS)
-6. Deploy Dashboard + Target App to K8s
-7. Stop stack
-8. Validate full setup
-9. Test Telegram bot
-10. Show status
-11. Generate credentials file
-12. Clean K8s workshop resources
-
----
-
-## Sessions Overview
-
-### S2 — AI Agent + MCP (60 min) ✅
-Students connect n8n to Gemini and the MCP server. Ask the AI about cluster state in plain English. The AI calls `kubectl-read` and `promql` tools automatically.
-
-**Key learning:** LLM as a K8s operator — describe what you want, not how to do it.
-
-### S3 — Alert Webhook + AI Triage (60 min) ✅
-Trigger a chaos scenario on the dashboard → Prometheus detects it → Alertmanager sends to n8n → LLM parses the alert → AI Agent investigates → Telegram notification.
-
-**Key learning:** LLM as semantic alert parser (works for any K8s resource, not hardcoded field names).
-
-### S4 — Telegram Human Loop (60 min) ✅
-Conversational K8s assistant via Telegram. When AI suggests a write action, it prompts for TOTP code. Human approves → MCP executes.
-
-**Key learning:** Human-in-the-loop approval gate. AI diagnoses, human approves, MCP executes.
-
-### S5 — Alert Intelligence (60 min) ❌ TODO
-Upgrade S3: don't react to single signals. Enrich first — check duration, correlate CPU + memory + restarts, confidence scoring. Only escalate if multiple signals agree.
-
-**Key learning:** "Never act on a single signal." Correlation before action.
-
-### S6 — Stateful Incident Handling (45 min) ❌ TODO
-Flapping detection, alert suppression, incident deduplication. Don't send 50 Telegrams for the same issue.
-
-### S7 — Controlled Remediation (45 min) ❌ TODO
-Canary restarts, rollback logic, audit trail. Safe write operations with verification.
-
-### S8 — End-to-End Capstone (55 min) ❌ TODO
-Students build a complete incident response workflow from scratch using AI assistance. Full flow: detect → investigate → notify → approve → fix → verify.
-
----
-
-## Lab Pattern (How Labs Work)
-
-Each lab follows: **Trigger → Observe → Modify → Extend**
-
-1. **Trigger** — use the dashboard to fire a chaos scenario
-2. **Observe** — watch it flow through Prometheus → Alertmanager → n8n → Telegram
-3. **Modify** — change the AI prompt, add a condition, adjust a threshold in n8n
-4. **Extend** — describe a new behavior to the AI and let it help you build it
-
-Students do NOT build from scratch. They have a working system and learn by operating and modifying it.
-
----
-
-## Common Tasks for AI Assistants
-
-### "Help me add a new chaos scenario"
-Add a new endpoint to `target-app/routes/chaos.py`, add the chaos logic in `target-app/chaos/`, add a button to `dashboard/index.html`, add a Prometheus alert rule to `k8s/monitoring/prometheus-values.yaml`.
-
-### "Help me modify the S3 AI prompt"
-Open `n8n-workflows/s3-alert-webhook-telegram.json`, find the `AI Agent` node, edit the `systemMessage` field.
-
-### "Help me add a new n8n workflow"
-Export from n8n UI, strip extra fields (see HANDOFF.md import command), commit to `n8n-workflows/`.
-
-### "Help me add a new alert rule"
-Add to `k8s/monitoring/prometheus-values.yaml` under `additionalPrometheusRulesMap.workshop-alerts.groups`. Must include `workshop: "true"` label.
-
-### "Help me debug why an alert isn't firing"
-```bash
-# Check metric exists
-curl -s "<PROM_URL>/api/v1/query?query=<metric_name>" | python3 -m json.tool
-
-# Check rule loaded
-curl -s "<PROM_URL>/api/v1/rules" | python3 -c "import sys,json; d=json.load(sys.stdin); [print(r['name'],r['state']) for g in d['data']['groups'] for r in g['rules'] if '<RuleName>' in r['name']]"
-```
-
-### "Help me rebuild and deploy"
-```bash
-# Dashboard
-cd dashboard && docker build -t yanivomc/clawops-dashboard:latest . && docker push yanivomc/clawops-dashboard:latest
-kubectl rollout restart deployment/clawops-dashboard -n workshop
-
-# Target app
-cd target-app && docker build -t yanivomc/target-app:latest . && docker push yanivomc/target-app:latest
-kubectl rollout restart deployment/target-app -n workshop
-```
-
----
-
-## Key Design Decisions (Teach These)
-
-### LLM as semantic parser, not hardcoded field extractor
+### Workflow Import
+Always strip `id` and `versionId` before importing — n8n rejects duplicates:
 ```python
-# BAD — breaks on schema changes
-namespace = alert["labels"]["namespace"]
-
-# GOOD — LLM reads semantically
-prompt = f"Parse this Alertmanager payload and extract: resource_type, namespace, symptom, recommended_kubectl_commands. Payload: {raw_payload}"
+d.pop('id', None); d.pop('versionId', None)
 ```
 
-### `SRE_ACTION:` keyword avoids Gemini safety refusals
-Gemini refuses "write", "execute", "approve" in command contexts. Neutral `SRE_ACTION:` is treated as structured output, not a command.
+### n8n HTTP Body Format
+For HTTP Request nodes sending to dashboard `/api/chat/send`:
+```json
+bodyParameters: {
+  parameters: [
+    { name: "role", value: "agent" },
+    { name: "content", value: "={{ $json.message }}" }
+  ]
+}
+```
+NOT `jsonBody` with inline expressions — those produce invalid JSON.
 
-### TOTP over static tokens
-Static tokens never expire. TOTP codes expire every 30s — even if intercepted, they're useless.
+### Dashboard Subpath
+- All JS API calls use `API_BASE` computed from `window.CLAWOPS_CONFIG.basePath`
+- `config.js` served at `/dashboard/config.js` (relative, not absolute path)
+- `MCP_URL` in app.py is for browser nav links; `MCP_INTERNAL_URL` is for server-side proxy calls
 
-### Server-side chaos proxy
-Browser → Dashboard API → target-app (internal K8s DNS). Browser never reaches target-app directly, avoids CORS/firewall issues.
+### Monitoring Subpaths
+- Prometheus: `routePrefix: /prometheus` in helm values + Prefix ingress (NO rewrite)
+- Grafana: `GF_SERVER_ROOT_URL` + `GF_SERVER_SERVE_FROM_SUB_PATH` env vars + Prefix ingress (NO rewrite)
+- Alertmanager: `routePrefix: /` + regex ingress with rewrite
 
-### Filter at the router, not the consumer
-Only `workshop="true"` alerts reach n8n. System noise silently swallowed by null-receiver in Alertmanager.
+### TOTP Generation
+**Must use pyotp inside MCP pod** — EC2 K8s master has no pip3:
+```bash
+kubectl exec -n clawops deployment/mcp-server -- python3 -c "import pyotp; print(pyotp.random_base32())"
+```
+After changing secret: `kubectl rollout restart deployment/mcp-server -n clawops`
+
+### MCP In-Cluster Auth
+MCP server uses K8s ServiceAccount (no kubeconfig):
+- ServiceAccount: `mcp-server` in `clawops` namespace
+- ClusterRole: read-all + write to workshop namespace
+- Applied by bootstrap: `kubectl apply -f k8s/clawops/mcp-server/rbac.yaml`
+
+### Execute Write — kubectl prefix
+MCP `/tools/kubectl-write` validates commands against `WRITE_VERBS` list.
+The `command` field must NOT include "kubectl" prefix:
+```
+✅ "rollout restart deployment/target-app -n workshop"
+❌ "kubectl rollout restart deployment/target-app -n workshop"
+```
+Strip it in n8n: `command.replace(/^kubectl\s+/i, '')`
+
+### Incident Key Flow
+1. S5 fires → S4 chat → `POST /incidents` on MCP → MCP auto-generates key
+2. Key shown in chat: `/approve <totp> k42a`
+3. Student approves → `GET /incidents/k42a` → executes → `PATCH /incidents/k42a {status: resolved}`
+
+---
+
+## MCP API Reference
+
+**K8s MCP** `http://mcp-server.clawops.svc.cluster.local:8000`
+
+```
+POST /tools/kubectl-read    { command: "get pods -n workshop" }
+POST /tools/promql          { query: "up" }
+POST /tools/kubectl-write   { command: "rollout restart...", approval_token: "123456", approved_by: "student" }
+POST /incidents             { alertname, namespace, pod, command } → { key, status, created_at }
+GET  /incidents/{key}       → { key, alertname, namespace, pod, command, status, created_at, resolved_at }
+PATCH /incidents/{key}      { status: "resolved" }
+GET  /incidents?limit=20    → [ ...incidents ]
+GET  /health                → { status: "ok" }
+```
+
+**Linux MCP** `http://linux-mcp-server.workshop.svc.cluster.local:8001`
+
+```
+POST /tools/linux-read      { command: "df -h" }
+GET  /health                → { status: "ok" }
+```
+
+---
+
+## Dashboard API Reference
+
+Base: `http://clawops-dashboard.clawops.svc.cluster.local:80`
+
+```
+POST /api/register                     { pod, namespace, url, ... } → registers target-app
+GET  /api/instances                    → { id: { pod, namespace, url, status, ... } }
+POST /api/chaos/{inst_id}/action       { type: "cpu" } → proxied to target-app
+POST /api/chat/send                    { role, content, meta? } → stores + SSE broadcast
+POST /api/chat/message                 { text } → echo to chat + forward to n8n S4
+GET  /api/chat/stream                  SSE endpoint → streams { id, role, content, ts, meta }
+GET  /api/chat/history                 → last 200 messages
+GET  /api/incidents                    → proxied from MCP
+DELETE /api/incidents                  → proxied to MCP
+GET  /config.js                        → window.CLAWOPS_CONFIG = { prom, grafana, am, n8n, mcp, basePath, masterIp, ... }
+GET  /dashboard                        → 301 redirect to /dashboard/
+```
+
+---
+
+## Alert Rules (Prometheus)
+
+All in `k8s/monitoring/prometheus-values.yaml` under `additionalPrometheusRulesMap`.
+**Must include `workshop: "true"` label** — Alertmanager routes only `workshop=true` to n8n.
+
+Key alerts:
+- `TargetAppCPUStress` — `target_chaos_cpu_active == 1`
+- `TargetAppMemoryLeak` — `target_chaos_memory_active == 1`
+- `TargetAppHighErrorRate` — `target_chaos_error_active == 1`
+- `TargetAppHighLatency` — `target_chaos_latency_active == 1`
+- `TargetAppCrashLooping` — restarts > 1 in 5min
+- `PodCrashLooping`, `PodOOMKilled`, `PodNotReady`, `DeploymentReplicasMismatch`
+
+---
+
+## Common Tasks
+
+### Rebuild and redeploy a service
+```bash
+cd dashboard && docker build -t yanivomc/clawops-dashboard:latest . && \
+  docker push yanivomc/clawops-dashboard:latest && \
+  kubectl rollout restart deployment/clawops-dashboard -n clawops
+```
+
+### Re-apply configmaps with fresh values
+```bash
+./bootstrap-k8s.sh  # option 2
+```
+
+### Check what Alertmanager is sending to
+```bash
+kubectl get secret alertmanager-monitoring-kube-prometheus-alertmanager \
+  -n monitoring -o jsonpath='{.data.alertmanager\.yaml}' | base64 -d | grep url
+# Should show: http://n8n.clawops.svc.cluster.local:5678/webhook/prometheus-alert-s5
+```
+
+### Test MCP from EC2
+```bash
+MCP_IP=$(kubectl get svc mcp-server -n clawops -o jsonpath='{.spec.clusterIP}')
+curl -s -X POST http://${MCP_IP}:8000/tools/kubectl-read \
+  -H 'Content-Type: application/json' -d '{"command":"get pods -n workshop"}'
+```
+
+### Test dashboard incidents
+```bash
+DASH_IP=$(kubectl get svc clawops-dashboard -n clawops -o jsonpath='{.spec.clusterIP}')
+curl -s http://${DASH_IP}:80/api/incidents | python3 -m json.tool
+```
+
+### Force S5 test (trigger fake alert)
+```bash
+N8N_IP=$(kubectl get svc n8n -n clawops -o jsonpath='{.spec.clusterIP}')
+curl -s -X POST http://${N8N_IP}:5678/webhook/prometheus-alert-s5 \
+  -H "Content-Type: application/json" \
+  -d '{"alerts":[{"labels":{"alertname":"TargetAppCPUStress","severity":"warning","workshop":"true","namespace":"workshop","pod":"target-app-xxx"},"status":"firing","generatorURL":"http://prometheus/graph"}]}'
+```
+
+---
+
+## Known Issues / Gotchas
+
+- **Dead pods in dashboard** — cleanup after 3 poll failures × 5s = 15s. Wait or restart.
+- **TOTP invalid** — regenerate using MCP pod (has pyotp). Then restart mcp-server.
+- **Config.js showing INJECT_*** — run bootstrap option 2 to re-apply configmaps.
+- **Prometheus redirect loop** — do NOT use nginx rewrite with Prometheus. Use Prefix path only.
+- **Grafana redirect to localhost** — must use `GF_SERVER_ROOT_URL` env var, not `grafana.ini`.
+- **n8n workflow import fails** — strip `id` and `versionId` from JSON.
+- **kubectl-write "Not a write command"** — strip "kubectl" prefix before sending to MCP.
+- **Alertmanager not sending** — check it's pointing to `n8n.clawops.svc.cluster.local` (not old EC2 IP).
 
 ---
 
 ## Docker Images
-- `yanivomc/target-app:latest` — chaos app
-- `yanivomc/clawops-dashboard:latest` — dashboard + API
-- `yanivomc/student-env-mcp-server:latest` — MCP server (built by docker-compose)
 
----
-
-## Environment Variables
-
-### target-app
-| Var | Description |
-|-----|-------------|
-| `DASHBOARD_URL` | ClusterIP URL for registration (set in deployment.yaml) |
-| `SKIP_REGISTRATION` | Set to `true` to disable registration |
-| `POD_NAME` | Injected by K8s downward API |
-| `POD_NAMESPACE` | Injected by K8s downward API |
-
-### dashboard
-| Var | Description |
-|-----|-------------|
-| `PROMETHEUS_URL` | Prometheus LB URL |
-| `GRAFANA_URL` | Grafana LB URL |
-| `ALERTMANAGER_URL` | Alertmanager LB URL |
-| `N8N_URL` | n8n EC2 URL |
-
-### MCP server
-| Var | Description |
-|-----|-------------|
-| `PROMETHEUS_URL` | For PromQL queries |
-| `TOTP_SECRET` | Base32 secret for 2FA |
-| `WRITE_APPROVAL_TOKEN` | Fallback static token |
-| `KUBECONFIG` | Path to kubeconfig |
+| Image | Built from |
+|-------|-----------|
+| `yanivomc/target-app:latest` | `target-app/` |
+| `yanivomc/clawops-dashboard:latest` | `dashboard/` |
+| `yanivomc/mcp-server:latest` | `mcp-server/` |
+| `yanivomc/linux-mcp-server:latest` | `linux-mcp-server/` |
