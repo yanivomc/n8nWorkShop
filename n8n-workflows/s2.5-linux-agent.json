@@ -1,0 +1,132 @@
+{
+  "name": "S2.5 - Linux + K8s Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "chat-trigger-s25",
+      "name": "Chat Trigger",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1,
+      "position": [240, 400],
+      "webhookId": "s25-chat-trigger"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.chatInput }}",
+        "options": {
+          "systemMessage": "You are a DevOps assistant that can investigate both Kubernetes cluster state AND the underlying Linux OS.\n\nYou have these tools:\n1. kubectl_read — read-only kubectl commands (get, describe, logs, events, top)\n2. promql — PromQL queries against Prometheus for live metrics\n3. linux_read — Linux OS diagnostics: df, free, uptime, ps, netstat, top -bn1, cat /proc/...\n\n## When to use each tool:\n- K8s questions (pods, deployments, services, events) → kubectl_read\n- Metrics and graphs (CPU%, memory%, custom metrics) → promql  \n- OS-level questions (disk space, memory, processes, load) → linux_read\n- For deep investigation, use multiple tools and correlate\n\n## Response style:\n- Concise, use emojis ✅ ❌ ⚠️ 📊 🖥️\n- Under 400 words\n- When comparing K8s metrics vs OS metrics, explain any differences\n- Always state which tool you used and why\n\n## Example investigations:\n- 'check disk space' → linux_read: df -h\n- 'why is the pod OOMKilled' → kubectl_read: describe pod, then linux_read: free -m\n- 'is the node under load' → linux_read: uptime AND promql: node_load1"
+        }
+      },
+      "id": "agent-s25",
+      "name": "K8s + Linux Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [560, 400],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "gemini-s25",
+      "name": "Gemini",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [360, 600],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "GQ1hkgYO7ltcNZw8",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Run read-only kubectl commands to investigate Kubernetes cluster state. Examples: get pods -n workshop, describe pod <name> -n <ns>, logs <pod> -n <ns>, get events -A --sort-by=.lastTimestamp, top pods -n workshop",
+        "method": "POST",
+        "url": "http://mcp-server.clawops.svc.cluster.local:8000/tools/kubectl-read",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"command\": \"{command}\"}"
+      },
+      "id": "kubectl-read-s25",
+      "name": "kubectl_read",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [460, 600]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Run PromQL queries against Prometheus to get live metrics. Use single quotes for label selectors. Examples: up, rate(container_cpu_usage_seconds_total[5m]), container_memory_working_set_bytes{namespace='workshop'}",
+        "method": "POST",
+        "url": "http://mcp-server.clawops.svc.cluster.local:8000/tools/promql",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"query\": \"{query}\"}"
+      },
+      "id": "promql-s25",
+      "name": "promql",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [560, 600]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Run safe read-only Linux OS diagnostic commands on the cluster node. Use for disk space, memory, CPU load, running processes, network connections. Examples: df -h, free -m, uptime, ps aux, top -bn1, netstat -tlnp, cat /proc/loadavg, uname -a",
+        "method": "POST",
+        "url": "http://linux-mcp-server.workshop.svc.cluster.local:8001/tools/linux-read",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"command\": \"{command}\"}"
+      },
+      "id": "linux-read-s25",
+      "name": "linux_read",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [660, 600]
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Chat Trigger').first().json.sessionId }}",
+        "contextWindowLength": 10
+      },
+      "id": "memory-s25",
+      "name": "Chat Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [760, 600]
+    }
+  ],
+  "connections": {
+    "Chat Trigger": {
+      "main": [[{"node": "K8s + Linux Agent", "type": "main", "index": 0}]]
+    },
+    "Gemini": {
+      "ai_languageModel": [[{"node": "K8s + Linux Agent", "type": "ai_languageModel", "index": 0}]]
+    },
+    "kubectl_read": {
+      "ai_tool": [[{"node": "K8s + Linux Agent", "type": "ai_tool", "index": 0}]]
+    },
+    "promql": {
+      "ai_tool": [[{"node": "K8s + Linux Agent", "type": "ai_tool", "index": 0}]]
+    },
+    "linux_read": {
+      "ai_tool": [[{"node": "K8s + Linux Agent", "type": "ai_tool", "index": 0}]]
+    },
+    "Chat Memory": {
+      "ai_memory": [[{"node": "K8s + Linux Agent", "type": "ai_memory", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "tags": []
+}

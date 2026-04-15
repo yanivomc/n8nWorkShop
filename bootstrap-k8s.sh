@@ -204,7 +204,7 @@ import_workflows() {
   fi
 
   N8N_KEY="$SAVED_KEY"
-  for wf in s2-ai-agent-mcp s4-telegram-human-loop s5-alert-intelligence; do
+  for wf in s2-ai-agent-mcp s2.5-linux-agent s4-telegram-human-loop s5-alert-intelligence; do
     python3 -c "
 import json
 with open('n8n-workflows/${wf}.json') as f: d=json.load(f)
@@ -241,6 +241,8 @@ case $CHOICE in
      check "target-app pod running" "kubectl get pods -n workshop -l app=target-app --field-selector=status.phase=Running | grep -q target"
      [[ -n "$N8N_IP" ]] && check "n8n healthz" "curl -sf --max-time 5 http://${N8N_IP}:5678/healthz -o /dev/null"
      [[ -n "$MCP_IP" ]] && check "mcp-server health" "curl -sf --max-time 5 http://${MCP_IP}:8000/health -o /dev/null"
+LINUX_MCP_IP=$(kubectl get svc linux-mcp-server -n workshop -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
+[[ -n "$LINUX_MCP_IP" ]] && check "linux-mcp-server health" "curl -sf --max-time 5 http://${LINUX_MCP_IP}:8001/health -o /dev/null"
      check "ingress LB reachable" "curl -sf --max-time 10 http://${INGRESS_LB}/ -o /dev/null"
      check "dashboard accessible" "curl -sfL --max-time 10 http://${INGRESS_LB}/dashboard/ | grep -qi clawops"
      echo -e "\n  Tests: ${GREEN}${PASS} passed${NC}  ${FAIL} failed"
@@ -367,7 +369,7 @@ ok "Grafana: via ingress http://${INGRESS_LB}/grafana"
 ok "Alertmanager: via ingress http://${INGRESS_LB}/alertmanager"
 
 # ── PHASE 4.5: Build & push MCP server image ─────────────────────────────────
-hdr "Phase 4.5 — MCP server image"
+hdr "Phase 4.5 — MCP + Linux MCP images"
 
 MCP_IMAGE="yanivomc/mcp-server:latest"
 
@@ -482,6 +484,10 @@ ok "Deployments restarted (configmaps refreshed)"
 info "Waiting 30s for pods to restart..."
 sleep 30
 
+# Linux MCP server
+kubectl apply -f "$WORKSHOP_DIR/linux-mcp-server/deployment.yaml" >> "$LOG_FILE" 2>&1
+ok "linux-mcp-server"
+
 # Target app
 kubectl apply -f "$WORKSHOP_DIR/target-app/deployment.yaml" >> "$LOG_FILE" 2>&1
 ok "target-app"
@@ -503,6 +509,8 @@ kubectl rollout status deployment/mcp-server -n clawops --timeout=120s >> "$LOG_
   && ok "mcp-server ready" || warn "mcp-server not ready yet"
 kubectl rollout status deployment/clawops-dashboard -n clawops --timeout=60s >> "$LOG_FILE" 2>&1 \
   && ok "dashboard ready" || warn "dashboard not ready yet"
+kubectl rollout status deployment/linux-mcp-server -n workshop --timeout=60s >> "$LOG_FILE" 2>&1 \
+  && ok "linux-mcp-server ready" || warn "linux-mcp-server not ready"
 kubectl rollout status deployment/target-app -n workshop --timeout=60s >> "$LOG_FILE" 2>&1 \
   && ok "target-app ready" || warn "target-app not ready yet"
 
@@ -591,7 +599,7 @@ N8N_KEY=$(kubectl get configmap n8n-config -n clawops   -o jsonpath='{.data.N8N_
 if [[ -z "$N8N_KEY" ]]; then
   warn "N8N_API_KEY not in ConfigMap — skip workflow import. Set key in n8n UI then re-run: bash student-env/setup.sh"
 else
-  for wf in s2-ai-agent-mcp s4-telegram-human-loop s5-alert-intelligence; do
+  for wf in s2-ai-agent-mcp s2.5-linux-agent s4-telegram-human-loop s5-alert-intelligence; do
     python3 -c "
 import json
 with open('n8n-workflows/${wf}.json') as f: d=json.load(f)

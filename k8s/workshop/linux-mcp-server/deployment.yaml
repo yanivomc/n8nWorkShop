@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: linux-mcp-server
+  namespace: workshop
+  labels:
+    app: linux-mcp-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: linux-mcp-server
+  template:
+    metadata:
+      labels:
+        app: linux-mcp-server
+    spec:
+      containers:
+        - name: linux-mcp-server
+          image: yanivomc/linux-mcp-server:latest
+          ports:
+            - containerPort: 8001
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 10
+            periodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: linux-mcp-server
+  namespace: workshop
+  labels:
+    app: linux-mcp-server
+spec:
+  selector:
+    app: linux-mcp-server
+  ports:
+    - port: 8001
+      targetPort: 8001
+  type: ClusterIP
