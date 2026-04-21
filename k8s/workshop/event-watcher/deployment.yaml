@@ -1,0 +1,132 @@
+---
+# ── ServiceAccount + RBAC ─────────────────────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: event-watcher
+  namespace: workshop
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: event-watcher-role
+rules:
+  - apiGroups: [""]
+    resources: ["events", "pods", "nodes", "namespaces"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: event-watcher-binding
+subjects:
+  - kind: ServiceAccount
+    name: event-watcher
+    namespace: workshop
+roleRef:
+  kind: ClusterRole
+  name: event-watcher-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# ── ConfigMap ─────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: event-watcher-config
+  namespace: workshop
+data:
+  WATCH_NAMESPACES:    "workshop,clawops"
+  WATCH_LABELS:        ""
+  WATCH_REASONS:       "OOMKilling,BackOff,Failed,Killing,Scheduled,Started,Pulled,Created,SuccessfulCreate,ScalingReplicaSet,FailedScheduling,Evicted,NodeNotReady,FailedMount,Unhealthy"
+  N8N_WEBHOOK_URL:     "http://n8n.clawops.svc.cluster.local:5678/webhook/k8s-event-s6"
+  N8N_SERIOUS_REASONS: "OOMKilling,BackOff,Failed,Killing,Evicted,FailedScheduling,NodeNotReady"
+  DASHBOARD_SSE_URL:   "http://clawops-dashboard.clawops.svc.cluster.local:80/api/k8s-events"
+  MAX_STORED_EVENTS:   "500"
+  DB_PATH:             "/data/events.db"
+---
+# ── PVC ───────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: event-watcher-data
+  namespace: workshop
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+# ── Deployment ────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: event-watcher
+  namespace: workshop
+  labels:
+    app: event-watcher
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: event-watcher
+  template:
+    metadata:
+      labels:
+        app: event-watcher
+    spec:
+      serviceAccountName: event-watcher
+      containers:
+        - name: event-watcher
+          image: yanivomc/event-watcher:latest
+          ports:
+            - containerPort: 8002
+              name: http
+          envFrom:
+            - configMapRef:
+                name: event-watcher-config
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            initialDelaySeconds: 15
+            periodSeconds: 30
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: event-watcher-data
+---
+# ── Service ───────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: event-watcher
+  namespace: workshop
+  labels:
+    app: event-watcher
+spec:
+  selector:
+    app: event-watcher
+  ports:
+    - port: 8002
+      targetPort: 8002
+      name: http
+  type: ClusterIP
