@@ -81,6 +81,7 @@ update_configs() {
   load_monitoring_urls
   detect_master_ip
   apply_configmaps
+  apply_workshop_configmaps
   restart_pods
   ok "Done"
 }
@@ -137,8 +138,16 @@ restart_pods() {
   kubectl rollout restart deployment/n8n -n clawops >> "$LOG_FILE" 2>&1 || true
   kubectl rollout restart deployment/mcp-server -n clawops >> "$LOG_FILE" 2>&1 || true
   kubectl rollout restart deployment/clawops-dashboard -n clawops >> "$LOG_FILE" 2>&1 || true
+  kubectl rollout restart deployment/event-watcher -n workshop >> "$LOG_FILE" 2>&1 || true
+  kubectl rollout restart deployment/linux-mcp-server -n workshop >> "$LOG_FILE" 2>&1 || true
   sleep 30
   ok "Pods restarted"
+}
+
+apply_workshop_configmaps() {
+  info "Applying workshop configmaps..."
+  kubectl apply -f "$WORKSHOP_DIR/event-watcher/deployment.yaml" >> "$LOG_FILE" 2>&1 || true
+  ok "Workshop configmaps applied"
 }
 
 show_totp() {
