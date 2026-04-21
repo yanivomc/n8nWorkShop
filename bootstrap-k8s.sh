@@ -204,7 +204,7 @@ import_workflows() {
   fi
 
   N8N_KEY="$SAVED_KEY"
-  for wf in s2-ai-agent-mcp s2.5-linux-agent s4-telegram-human-loop s5-alert-intelligence; do
+  for wf in s2-ai-agent-mcp s2.5-linux-agent s4-telegram-human-loop s5-alert-intelligence s6-k8s-event-intelligence; do
     python3 -c "
 import json
 with open('n8n-workflows/${wf}.json') as f: d=json.load(f)
@@ -615,7 +615,7 @@ N8N_KEY=$(kubectl get configmap n8n-config -n clawops   -o jsonpath='{.data.N8N_
 if [[ -z "$N8N_KEY" ]]; then
   warn "N8N_API_KEY not in ConfigMap — skip workflow import. Set key in n8n UI then re-run: bash student-env/setup.sh"
 else
-  for wf in s2-ai-agent-mcp s2.5-linux-agent s4-telegram-human-loop s5-alert-intelligence; do
+  for wf in s2-ai-agent-mcp s2.5-linux-agent s4-telegram-human-loop s5-alert-intelligence s6-k8s-event-intelligence; do
     python3 -c "
 import json
 with open('n8n-workflows/${wf}.json') as f: d=json.load(f)
