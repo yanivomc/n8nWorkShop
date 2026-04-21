@@ -147,7 +147,13 @@ async def forward_to_n8n(ev: dict):
     # Always buffer serious events; ignore pure info
     if ev.get("severity") == "info" and ev.get("reason") not in N8N_SERIOUS_REASONS:
         return
-    key = f"{ev['namespace']}:{ev['name']}"
+    # Group by deploy name (strips pod suffix) — batches entire deployment storm
+    # Falls back to object name if no deploy detected
+    group = ev.get("deploy") or ev.get("name", "unknown")
+    # For node-level events, group by node
+    if ev.get("kind") in ("Node", "NodeCondition"):
+        group = ev.get("node") or ev.get("name", "unknown")
+    key = f"{ev['namespace']}:{group}"
     loop = asyncio.get_event_loop()
     if key not in _batch:
         _batch[key] = {"events": [], "task": None}
