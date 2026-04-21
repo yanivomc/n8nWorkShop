@@ -369,7 +369,8 @@ function loadEvents(){{
   const ns = document.getElementById('ns-filter').value;
   const sev = document.getElementById('sev-filter').value;
   const limit = document.getElementById('limit-filter').value;
-  let url = `/events?limit=${{limit}}`;
+  const BASE2 = window.location.pathname.replace(/\/$/, '').replace(/\/[^/]*$/, '') || '';
+  let url = `${{BASE2}}/events?limit=${{limit}}`;
   if (ns) url += `&namespace=${{ns}}`;
   if (sev) url += `&severity=${{sev}}`;
   fetch(url).then(r=>r.json()).then(data=>{{
@@ -393,11 +394,13 @@ function filterTable(){{
 
 function clearEvents(){{
   if (!confirm('Clear all stored events?')) return;
-  fetch('/events',{{method:'DELETE'}}).then(()=>{{ allEvents=[]; loadEvents(); loadStats(); }});
+  const BASE3 = window.location.pathname.replace(/\/$/, '').replace(/\/[^/]*$/, '') || '';
+  fetch(BASE3+'/events',{{method:'DELETE'}}).then(()=>{{ allEvents=[]; loadEvents(); loadStats(); }});
 }}
 
 function loadStats(){{
-  fetch('/stats').then(r=>r.json()).then(s=>{{
+  const BASE4 = window.location.pathname.replace(/\/$/, '').replace(/\/[^/]*$/, '') || '';
+  fetch(BASE4+'/stats').then(r=>r.json()).then(s=>{{
     document.getElementById('s-total').textContent = s.total;
     document.getElementById('s-errors').textContent = s.errors;
     document.getElementById('s-warns').textContent = s.warns;
@@ -406,7 +409,8 @@ function loadStats(){{
 }}
 
 // SSE live updates
-const es = new EventSource('/events/stream');
+const BASE5 = window.location.pathname.replace(/\/$/, '').replace(/\/[^/]*$/, '') || '';
+const es = new EventSource(BASE5+'/events/stream');
 es.onopen = ()=>{{
   document.getElementById('status-text').textContent = 'live';
   document.getElementById('live-indicator').textContent = '';
