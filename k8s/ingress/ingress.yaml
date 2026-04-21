@@ -132,19 +132,22 @@ spec:
                   number: 9093
 
 ---
-# Event Watcher admin UI at /events-admin — NO rewrite (app serves from root)
+# Event Watcher admin UI at /events-admin — rewrite strips prefix
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: workshop-ingress-event-watcher
   namespace: workshop
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
 spec:
   ingressClassName: nginx
   rules:
     - http:
         paths:
-          - path: /events-admin
-            pathType: Prefix
+          - path: /events-admin(/|$)(.*)
+            pathType: ImplementationSpecific
             backend:
               service:
                 name: event-watcher
