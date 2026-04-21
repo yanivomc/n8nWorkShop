@@ -46,6 +46,7 @@ data:
   DASHBOARD_SSE_URL:   "http://clawops-dashboard.clawops.svc.cluster.local:80/api/k8s-events"
   MAX_STORED_EVENTS:   "500"
   DB_PATH:             "/data/events.db"
+  BATCH_WINDOW_SECONDS: "10"
 ---
 # ── PVC ───────────────────────────────────────────────────────────────────────
 apiVersion: v1

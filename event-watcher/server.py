@@ -98,16 +98,68 @@ def store_event(ev: dict):
         c.execute(f"DELETE FROM events WHERE id NOT IN (SELECT id FROM events ORDER BY id DESC LIMIT {MAX_STORED_EVENTS})")
         c.commit()
 
-# ── Forward serious events to n8n ─────────────────────────────────────────────
-async def forward_to_n8n(ev: dict):
-    if not N8N_WEBHOOK_URL or ev.get("reason") not in N8N_SERIOUS_REASONS:
+# ── Batch buffer — hold events per resource for N seconds then send summary ───
+BATCH_WINDOW   = int(os.getenv("BATCH_WINDOW_SECONDS", "10"))
+_batch: dict   = {}   # key → {"events": [], "task": asyncio.Task}
+
+async def _flush_batch(key: str):
+    """Wait BATCH_WINDOW seconds then send the buffered events as one payload."""
+    await asyncio.sleep(BATCH_WINDOW)
+    batch = _batch.pop(key, None)
+    if not batch or not batch["events"]:
         return
-    try:
-        async with httpx.AsyncClient(timeout=5) as cli:
-            await cli.post(N8N_WEBHOOK_URL, json={"source": "k8s-event-watcher", "event": ev})
-        log.info(f"Forwarded to n8n: {ev['reason']} on {ev['name']}")
-    except Exception as e:
-        log.warning(f"n8n forward failed: {e}")
+    evs   = batch["events"]
+    first = evs[0]
+    # Build summary
+    reasons   = list(dict.fromkeys(e["reason"] for e in evs))   # ordered unique
+    messages  = [e["message"] for e in evs if e["message"]]
+    severity  = "error" if any(e["severity"] == "error" for e in evs) else "warn"
+    summary = {
+        "source":    "k8s-event-watcher",
+        "batched":   True,
+        "count":     len(evs),
+        "window_s":  BATCH_WINDOW,
+        "severity":  severity,
+        "namespace": first["namespace"],
+        "kind":      first["kind"],
+        "name":      first["name"],
+        "deploy":    first["deploy"],
+        "node":      first["node"],
+        "reasons":   reasons,
+        "reason":    reasons[0],              # primary reason for compat
+        "message":   " | ".join(dict.fromkeys(messages))[:500],
+        "events":    evs,
+        "ts":        first["ts"],
+    }
+    log.info(f"BATCH FLUSH | {key} | {len(evs)} events | reasons: {reasons}")
+    if N8N_WEBHOOK_URL:
+        try:
+            async with httpx.AsyncClient(timeout=10) as cli:
+                await cli.post(N8N_WEBHOOK_URL, json=summary)
+            log.info(f"Forwarded batch to n8n: {key}")
+        except Exception as e:
+            log.warning(f"n8n batch forward failed: {e}")
+
+async def forward_to_n8n(ev: dict):
+    """Buffer event into a batch keyed by namespace+name, flush after BATCH_WINDOW."""
+    if not N8N_WEBHOOK_URL:
+        return
+    # Always buffer serious events; ignore pure info
+    if ev.get("severity") == "info" and ev.get("reason") not in N8N_SERIOUS_REASONS:
+        return
+    key = f"{ev['namespace']}:{ev['name']}"
+    loop = asyncio.get_event_loop()
+    if key not in _batch:
+        _batch[key] = {"events": [], "task": None}
+    _batch[key]["events"].append(ev)
+    # Cancel existing flush timer, restart it (extend window on new events up to 30s max)
+    if _batch[key]["task"] and not _batch[key]["task"].done():
+        elapsed = len(_batch[key]["events"])
+        if elapsed < 20:  # keep extending up to ~20 events
+            _batch[key]["task"].cancel()
+            _batch[key]["task"] = asyncio.ensure_future(_flush_batch(key))
+    else:
+        _batch[key]["task"] = asyncio.ensure_future(_flush_batch(key))
 
 # ── K8s event watcher (runs in thread) ───────────────────────────────────────
 def watch_namespace(ns: str, loop: asyncio.AbstractEventLoop):
