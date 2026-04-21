@@ -312,6 +312,14 @@ run helm repo add prometheus-community https://prometheus-community.github.io/he
 run helm repo update
 ok "Helm repos updated"
 
+# Fix stuck release before install
+INGRESS_STATUS=$(helm status ingress-nginx -n ingress-nginx 2>/dev/null | grep "STATUS:" | awk '{print $2}')
+if [[ "$INGRESS_STATUS" == "failed" || "$INGRESS_STATUS" == "pending-install" || "$INGRESS_STATUS" == "pending-upgrade" ]]; then
+  warn "ingress-nginx stuck in '$INGRESS_STATUS' — uninstalling first..."
+  helm uninstall ingress-nginx -n ingress-nginx >> "$LOG_FILE" 2>&1 || true
+  sleep 5
+fi
+
 if helm status ingress-nginx -n ingress-nginx 2>/dev/null | grep -q "deployed"; then
   ok "ingress-nginx already installed"
 else
