@@ -34,36 +34,6 @@
     },
     {
       "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
-            {
-              "leftValue": "={{ $json.skip }}",
-              "rightValue": false,
-              "operator": {
-                "type": "boolean",
-                "operation": "equals"
-              }
-            }
-          ],
-          "combinator": "and"
-        }
-      },
-      "id": "worth-processing",
-      "name": "Worth Processing?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [
-        680,
-        400
-      ]
-    },
-    {
-      "parameters": {
         "promptType": "define",
         "text": "=K8s event detected:\n- Reason: {{ $json.reason }}\n- Object: {{ $json.kind }}/{{ $json.name }}\n- Namespace: {{ $json.namespace }}\n- Deployment: {{ $json.deploy }}\n- Node: {{ $json.node }}\n- Message: {{ $json.message }}\n- Severity: {{ $json.severity }}\n- Time: {{ $json.ts }}\n\nInvestigate this event and provide a concise SRE assessment.",
         "options": {
@@ -75,8 +45,8 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 1.7,
       "position": [
-        900,
-        400
+        1340,
+        520
       ],
       "onError": "continueErrorOutput"
     },
@@ -144,8 +114,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1120,
-        400
+        1560,
+        520
       ]
     },
     {
@@ -174,8 +144,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        1340,
-        400
+        1780,
+        520
       ]
     },
     {
@@ -191,8 +161,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1560,
-        300
+        2000,
+        400
       ]
     },
     {
@@ -208,8 +178,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1780,
-        300
+        2220,
+        400
       ]
     },
     {
@@ -225,8 +195,89 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1560,
-        500
+        2000,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://mcp-server.clawops.svc.cluster.local:8000/incidents?limit=20",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "check-existing",
+      "name": "Check Existing Incidents",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ev = $('Filter + Dedup').first().json;\nconst incidents = $input.first().json;\n\n// Find open incident for same deploy in last 2 hours\nconst list = Array.isArray(incidents) ? incidents : [];\nconst open = list.find(i =>\n  i.status === 'pending' &&\n  i.alertname && i.alertname.toLowerCase().includes(ev.deploy?.toLowerCase() || '') &&\n  i.created_at && (Date.now() - new Date(i.created_at).getTime()) < 7200000\n);\n\nif (open) {\n  return [{ json: {\n    alreadyOpen: true,\n    existingKey: open.key,\n    existingSince: open.created_at,\n    deploy: ev.deploy,\n    reason: ev.reason,\n    namespace: ev.namespace,\n    severity: ev.severity,\n    count: ev.count || 1,\n    reasons: ev.reasons || [ev.reason]\n  }}];\n}\n\nreturn [{ json: {\n  alreadyOpen: false,\n  deploy: ev.deploy,\n  reason: ev.reason,\n  namespace: ev.namespace,\n  severity: ev.severity,\n  name: ev.name,\n  message: ev.message,\n  node: ev.node,\n  kind: ev.kind,\n  ts: ev.ts,\n  count: ev.count || 1,\n  reasons: ev.reasons || [ev.reason]\n}}];"
+      },
+      "id": "already-open-check",
+      "name": "Already Open?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.alreadyOpen }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "route-open",
+      "name": "Route on Open?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://clawops-dashboard.clawops.svc.cluster.local:80/api/chat/send",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ role: 'agent', content: ($json.severity === 'error' ? '\ud83d\udd34' : '\ud83d\udfe1') + ' **Still ongoing** \u2014 `' + ($json.reasons || [$json.reason]).join(', ') + '` on `' + $json.deploy + '` (' + ($json.count || 1) + ' events)\\n\\nExisting incident **#' + $json.existingKey + '** is still open. Use `/approve <totp> ' + $json.existingKey + '` to act, or wait for auto-resolution when the pod recovers.' }) }}"
+      },
+      "id": "send-ongoing",
+      "name": "Send Ongoing Notice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        280
       ]
     }
   ],
@@ -246,7 +297,7 @@
       "main": [
         [
           {
-            "node": "Worth Processing?",
+            "node": "Check Existing Incidents",
             "type": "main",
             "index": 0
           }
@@ -357,6 +408,46 @@
     "Send Chat (info only)": {
       "main": [
         []
+      ]
+    },
+    "Check Existing Incidents": {
+      "main": [
+        [
+          {
+            "node": "Already Open?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already Open?": {
+      "main": [
+        [
+          {
+            "node": "Route on Open?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route on Open?": {
+      "main": [
+        [
+          {
+            "node": "Send Ongoing Notice",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "K8s Event Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
