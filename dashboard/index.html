@@ -1040,12 +1040,16 @@ function monAge(ts) {
 
 function monRenderChips() {
   var el = document.getElementById('mon-chips');
-  var keys = Object.keys(_monPods);
-  el.innerHTML = '<span class="mon-chip ' + (_monFilter.deploys.has('all')?'active':'') + '" onclick="monToggleDeploy('all')">all</span>' +
-    keys.map(function(k) {
-      var d = _monPods[k].deploy;
-      return '<span class="mon-chip ' + (_monFilter.deploys.has(d)?'active':'') + '" onclick="monToggleDeploy('' + d + '')">' + d + '</span>';
-    }).join('');
+  el.innerHTML = '';
+  function makeChip(label, key) {
+    var s = document.createElement('span');
+    s.className = 'mon-chip' + (_monFilter.deploys.has(key) ? ' active' : '');
+    s.textContent = label;
+    s.onclick = (function(k){ return function(){ monToggleDeploy(k); }; })(key);
+    el.appendChild(s);
+  }
+  makeChip('all', 'all');
+  Object.keys(_monPods).forEach(function(k) { makeChip(_monPods[k].deploy, _monPods[k].deploy); });
 }
 
 function monToggleDeploy(name) {
@@ -1084,7 +1088,7 @@ function monRenderTopo() {
     var total = d.pods.length;
     var badgeColor = running===total?'#00C896':running===0?'#E24B4A':'#EF9F27';
     var sel = _monSelectedDeploy === k;
-    return '<div class="mon-deploy-row ' + (sel?'sel':'') + '" onclick="monSelectDeploy('' + k + '')">' +
+    return '<div class="mon-deploy-row ' + (sel?'sel':'') + '" data-k="' + k + '" onclick="monSelectDeploy(this.dataset.k)">' +
       '<div style="flex:1">' +
         '<div style="font-size:12px;font-weight:500;color:#e2e8f0;font-family:Consolas,monospace">' + d.deploy + '</div>' +
         '<div style="font-size:9px;color:#8892A4;margin-top:1px">' + d.ns + '</div>' +
