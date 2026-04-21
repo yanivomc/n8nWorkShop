@@ -154,7 +154,7 @@ async def forward_to_n8n(ev: dict):
     if ev.get("kind") in ("Node", "NodeCondition"):
         group = ev.get("node") or ev.get("name", "unknown")
     key = f"{ev['namespace']}:{group}"
-    loop = asyncio.get_event_loop()
+    loop = _loop
     if key not in _batch:
         _batch[key] = {"events": [], "task": None}
     _batch[key]["events"].append(ev)
@@ -205,8 +205,12 @@ def watch_namespace(ns: str, loop: asyncio.AbstractEventLoop):
         log.error(f"Watch error ({ns}): {e}")
 
 # ── App startup ───────────────────────────────────────────────────────────────
+_loop: asyncio.AbstractEventLoop = None
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _loop
+    _loop = asyncio.get_running_loop()
     init_db()
     try:
         k8s_config.load_incluster_config()
@@ -218,7 +222,7 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             log.error(f"K8s config failed: {e}")
 
-    loop = asyncio.get_event_loop()
+    loop = _loop
     import concurrent.futures
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=len(WATCH_NAMESPACES) + 1)
     for ns in WATCH_NAMESPACES:
@@ -300,7 +304,7 @@ def get_stats():
         warns   = c.execute("SELECT COUNT(*) FROM events WHERE severity='warn'").fetchone()[0]
         by_ns   = {r[0]:r[1] for r in c.execute("SELECT namespace,COUNT(*) FROM events GROUP BY namespace").fetchall()}
         by_rsn  = {r[0]:r[1] for r in c.execute("SELECT reason,COUNT(*) FROM events GROUP BY reason ORDER BY 2 DESC LIMIT 10").fetchall()}
-    now = asyncio.get_event_loop().time()
+    now = _loop.time() if _loop else 0
     active_cooldowns = {k: int(COOLDOWN_S - (now - v)) for k, v in _cooldown.items() if (now - v) < COOLDOWN_S}
     return {"total": total, "errors": errors, "warns": warns, "by_namespace": by_ns, "by_reason": by_rsn, "subscribers": len(_subscribers), "active_cooldowns": active_cooldowns, "pending_batches": list(_batch.keys())}
 
