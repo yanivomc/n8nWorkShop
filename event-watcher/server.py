@@ -287,6 +287,8 @@ def get_config():
         "n8n_webhook_url":     N8N_WEBHOOK_URL or "(not set)",
         "n8n_serious_reasons": N8N_SERIOUS_REASONS,
         "max_stored_events":   MAX_STORED_EVENTS,
+        "batch_window_s":      BATCH_WINDOW,
+        "cooldown_s":          COOLDOWN_S,
         "db_path":             DB_PATH,
     }
 
@@ -298,7 +300,9 @@ def get_stats():
         warns   = c.execute("SELECT COUNT(*) FROM events WHERE severity='warn'").fetchone()[0]
         by_ns   = {r[0]:r[1] for r in c.execute("SELECT namespace,COUNT(*) FROM events GROUP BY namespace").fetchall()}
         by_rsn  = {r[0]:r[1] for r in c.execute("SELECT reason,COUNT(*) FROM events GROUP BY reason ORDER BY 2 DESC LIMIT 10").fetchall()}
-    return {"total": total, "errors": errors, "warns": warns, "by_namespace": by_ns, "by_reason": by_rsn, "subscribers": len(_subscribers)}
+    now = asyncio.get_event_loop().time()
+    active_cooldowns = {k: int(COOLDOWN_S - (now - v)) for k, v in _cooldown.items() if (now - v) < COOLDOWN_S}
+    return {"total": total, "errors": errors, "warns": warns, "by_namespace": by_ns, "by_reason": by_rsn, "subscribers": len(_subscribers), "active_cooldowns": active_cooldowns, "pending_batches": list(_batch.keys())}
 
 # ── Admin UI ──────────────────────────────────────────────────────────────────
 @app.get("/", response_class=HTMLResponse)

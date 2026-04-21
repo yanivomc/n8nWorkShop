@@ -47,6 +47,7 @@ data:
   MAX_STORED_EVENTS:   "500"
   DB_PATH:             "/data/events.db"
   BATCH_WINDOW_SECONDS: "10"
+  COOLDOWN_SECONDS:     "300"
 ---
 # ── PVC ───────────────────────────────────────────────────────────────────────
 apiVersion: v1
