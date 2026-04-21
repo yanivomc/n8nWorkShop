@@ -932,7 +932,7 @@ function monAddEventRow(ev) {
   var row = document.createElement('div');
   row.className = 'mon-ev-row';
   row.innerHTML =
-    '<span style="font-family:Consolas,monospace;font-size:9px;color:#8892A4;flex-shrink:0;width:50px">' + time + '</span>' +
+    '<span style="font-family:Consolas,monospace;font-size:11px;color:#8892A4;flex-shrink:0;width:50px">' + time + '</span>' +
     '<div class="mon-ev-icon ' + sev + '">' + icon + '</div>' +
     '<div style="flex:1">' +
       '<div style="font-weight:500;color:#e2e8f0;font-size:11px">' +
@@ -1062,12 +1062,15 @@ function monToggleDeploy(name) {
   _monSelectedDeploy = null;
   monRenderTopo();
   monRenderChips();
+  monRenderTimeline();
+  monRefreshStats();
 }
 
 function monApplyFilter() {
   _monFilter.ns = document.getElementById('mon-ns').value;
   _monSelectedDeploy = null;
   _monPods = {};
+  _monTlEvents = [];
   monRefreshTopo();
 }
 
@@ -1091,9 +1094,9 @@ function monRenderTopo() {
     return '<div class="mon-deploy-row ' + (sel?'sel':'') + '" data-k="' + k + '" onclick="monSelectDeploy(this.dataset.k)">' +
       '<div style="flex:1">' +
         '<div style="font-size:12px;font-weight:500;color:#e2e8f0;font-family:Consolas,monospace">' + d.deploy + '</div>' +
-        '<div style="font-size:9px;color:#8892A4;margin-top:1px">' + d.ns + '</div>' +
+        '<div style="font-size:13px;color:#8892A4;margin-top:1px">' + d.ns + '</div>' +
       '</div>' +
-      '<span style="font-size:9px;padding:1px 7px;border-radius:999px;background:' + badgeColor + '22;color:' + badgeColor + ';font-family:Consolas,monospace">' + running + '/' + total + '</span>' +
+      '<span style="font-size:12px;padding:1px 7px;border-radius:999px;background:' + badgeColor + '22;color:' + badgeColor + ';font-family:Consolas,monospace">' + running + '/' + total + '</span>' +
       '<div style="display:flex;gap:3px;flex-wrap:wrap;max-width:120px">' +
         d.pods.map(function(p) {
           return '<div class="mon-pdot ' + p.status + '" title="' + p.name + ' · ' + p.status + ' · ' + p.age + '">' +
@@ -1120,21 +1123,21 @@ function monSelectDeploy(key) {
   drawer.style.display = 'block';
   // Show pod details
   drawer.innerHTML =
-    '<div style="font-size:10px;font-weight:600;color:#00D4FF;margin-bottom:6px;font-family:Consolas,monospace">▸ ' + d.deploy + ' — connected objects</div>' +
+    '<div style="font-size:13px;font-weight:600;color:#00D4FF;margin-bottom:6px;font-family:Consolas,monospace">▸ ' + d.deploy + ' — connected objects</div>' +
     '<div style="display:flex;flex-direction:column;gap:4px">' +
       '<div style="display:flex;align-items:center;gap:6px">' +
-        '<span style="font-size:9px;padding:1px 6px;border-radius:999px;background:rgba(0,212,255,0.12);color:#00D4FF;font-family:Consolas,monospace">Deployment</span>' +
-        '<span style="font-family:Consolas,monospace;font-size:10px;color:#e2e8f0">' + d.deploy + '</span>' +
-        '<span style="font-size:9px;color:#8892A4;margin-left:auto">' + d.ns + '</span>' +
+        '<span style="font-size:12px;padding:1px 6px;border-radius:999px;background:rgba(0,212,255,0.12);color:#00D4FF;font-family:Consolas,monospace">Deployment</span>' +
+        '<span style="font-family:Consolas,monospace;font-size:13px;color:#e2e8f0">' + d.deploy + '</span>' +
+        '<span style="font-size:13px;color:#8892A4;margin-left:auto">' + d.ns + '</span>' +
       '</div>' +
       '<div style="padding-left:14px;border-left:1.5px solid #1E3A5F;display:flex;flex-direction:column;gap:3px;margin-left:6px;margin-top:2px">' +
         d.pods.map(function(p) {
           var c = p.status==='running'?'#00C896':p.status==='failed'?'#E24B4A':p.status==='terminating'?'#AFA9EC':'#EF9F27';
           return '<div style="display:flex;align-items:center;gap:6px">' +
-            '<span style="font-size:9px;padding:1px 6px;border-radius:999px;background:#1E3A5F;color:#8892A4;font-family:Consolas,monospace">Pod</span>' +
-            '<span style="font-family:Consolas,monospace;font-size:10px;color:#8892A4">' + p.shortName + '</span>' +
-            '<span style="font-size:9px;color:' + c + ';margin-left:auto">' + p.status + '</span>' +
-            '<span style="font-size:9px;color:#8892A4">' + (p.node?'→ '+p.node:'') + '</span>' +
+            '<span style="font-size:12px;padding:1px 6px;border-radius:999px;background:#1E3A5F;color:#8892A4;font-family:Consolas,monospace">Pod</span>' +
+            '<span style="font-family:Consolas,monospace;font-size:13px;color:#8892A4">' + p.shortName + '</span>' +
+            '<span style="font-size:12px;color:' + c + ';margin-left:auto">' + p.status + '</span>' +
+            '<span style="font-size:12px;color:#8892A4">' + (p.node?'→ '+p.node:'') + '</span>' +
           '</div>';
         }).join('') +
       '</div>' +
@@ -1145,23 +1148,32 @@ function monSelectDeploy(key) {
 // ── Timeline ─────────────────────────────────────────────────────
 function monRenderTimeline() {
   var el = document.getElementById('mon-timeline');
-  if (!_monTlEvents.length) {
-    el.innerHTML = '<div style="color:#8892A4;font-size:11px;text-align:center;padding:12px">Waiting for lifecycle events...</div>';
+  // Filter by selected deployment
+  var ns = document.getElementById('mon-ns').value;
+  var filtered = _monTlEvents.filter(function(ev) {
+    if (ns !== 'all' && ev.namespace !== ns) return false;
+    if (!_monFilter.deploys.has('all') && !_monFilter.deploys.has(ev.deploy)) return false;
+    return true;
+  });
+  if (!filtered.length) {
+    el.innerHTML = '<div style="color:#8892A4;font-size:13px;text-align:center;padding:14px">' +
+      (_monTlEvents.length ? 'No lifecycle events for selected deployment' : 'Waiting for lifecycle events...') +
+    '</div>';
     return;
   }
-  el.innerHTML = _monTlEvents.map(function(ev) {
+  el.innerHTML = filtered.map(function(ev) {
     var sev = ev.severity || 'info';
     var color = sev==='error'?'#E24B4A':sev==='warn'?'#EF9F27':'#00C896';
     var time = new Date(ev.ts).toLocaleTimeString('en',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
     return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
-      '<div style="font-family:Consolas,monospace;font-size:9px;color:#8892A4;width:50px;flex-shrink:0">' + time + '</div>' +
-      '<div style="font-family:Consolas,monospace;font-size:10px;color:#8892A4;width:100px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (ev.deploy||ev.name||'') + '</div>' +
+      '<div style="font-family:Consolas,monospace;font-size:12px;color:#8892A4;width:50px;flex-shrink:0">' + time + '</div>' +
+      '<div style="font-family:Consolas,monospace;font-size:13px;color:#8892A4;width:100px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (ev.deploy||ev.name||'') + '</div>' +
       '<div style="flex:1;height:16px;background:#080C18;border-radius:3px;position:relative;overflow:hidden">' +
         '<div style="position:absolute;top:0;left:0;height:100%;width:100%;background:' + color + '22;border-left:3px solid ' + color + ';display:flex;align-items:center;padding:0 6px">' +
-          '<span style="font-family:Consolas,monospace;font-size:8px;color:' + color + '">' + (ev.reason||'') + '</span>' +
+          '<span style="font-family:Consolas,monospace;font-size:13px;color:' + color + '">' + (ev.reason||'') + '</span>' +
         '</div>' +
       '</div>' +
-      '<div style="font-size:10px;color:#8892A4;width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (ev.message||'').substring(0,60) + '</div>' +
+      '<div style="font-size:13px;color:#8892A4;width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (ev.message||'').substring(0,60) + '</div>' +
     '</div>';
   }).join('');
 }
@@ -1200,41 +1212,41 @@ setInterval(monFetchEWStats, 15000);
 
   <!-- Filter bar -->
   <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #1E3A5F;flex-wrap:wrap">
-    <span style="font-size:10px;color:#8892A4;font-family:Consolas,monospace;letter-spacing:1px">NAMESPACE</span>
-    <select id="mon-ns" onchange="monApplyFilter()" style="font-size:11px;padding:3px 8px;border:1px solid #1E3A5F;border-radius:4px;background:#0D1F3C;color:#e2e8f0;font-family:Consolas,monospace">
+    <span style="font-size:13px;color:#8892A4;font-family:Consolas,monospace;letter-spacing:1px">NAMESPACE</span>
+    <select id="mon-ns" onchange="monApplyFilter()" style="font-size:13px;padding:3px 8px;border:1px solid #1E3A5F;border-radius:4px;background:#0D1F3C;color:#e2e8f0;font-family:Consolas,monospace">
       <option value="all">all</option>
       <option value="workshop" selected>workshop</option>
       <option value="clawops">clawops</option>
     </select>
-    <span style="font-size:10px;color:#8892A4;font-family:Consolas,monospace;letter-spacing:1px;margin-left:6px">DEPLOYMENT</span>
+    <span style="font-size:13px;color:#8892A4;font-family:Consolas,monospace;letter-spacing:1px;margin-left:6px">DEPLOYMENT</span>
     <div id="mon-chips" style="display:flex;gap:6px;flex-wrap:wrap;flex:1"></div>
     <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
       <div id="mon-live-dot" style="width:7px;height:7px;border-radius:50%;background:#1D9E75;animation:blink2 1.4s infinite"></div>
-      <span id="mon-live-txt" style="font-size:10px;color:#00C896;font-family:Consolas,monospace">CONNECTING...</span>
+      <span id="mon-live-txt" style="font-size:12px;color:#00C896;font-family:Consolas,monospace">CONNECTING...</span>
     </div>
   </div>
 
   <!-- Stats row -->
   <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:10px 16px">
     <div style="background:#0F1729;border:1px solid #1E3A5F;border-radius:6px;padding:8px 12px">
-      <div id="mon-s-running" style="font-size:22px;font-weight:600;color:#00C896">—</div>
-      <div style="font-size:10px;color:#8892A4;margin-top:2px">pods running</div>
+      <div id="mon-s-running" style="font-size:26px;font-weight:600;color:#00C896">—</div>
+      <div style="font-size:12px;color:#8892A4;margin-top:3px">pods running</div>
     </div>
     <div style="background:#0F1729;border:1px solid #1E3A5F;border-radius:6px;padding:8px 12px">
-      <div id="mon-s-total" style="font-size:22px;font-weight:600;color:#e2e8f0">—</div>
-      <div style="font-size:10px;color:#8892A4;margin-top:2px">pods total</div>
+      <div id="mon-s-total" style="font-size:26px;font-weight:600;color:#e2e8f0">—</div>
+      <div style="font-size:12px;color:#8892A4;margin-top:3px">pods total</div>
     </div>
     <div style="background:#0F1729;border:1px solid #1E3A5F;border-radius:6px;padding:8px 12px">
-      <div id="mon-s-events" style="font-size:22px;font-weight:600;color:#e2e8f0">—</div>
-      <div style="font-size:10px;color:#8892A4;margin-top:2px">events caught</div>
+      <div id="mon-s-events" style="font-size:26px;font-weight:600;color:#e2e8f0">—</div>
+      <div style="font-size:12px;color:#8892A4;margin-top:3px">events caught</div>
     </div>
     <div style="background:#0F1729;border:1px solid #1E3A5F;border-radius:6px;padding:8px 12px">
-      <div id="mon-s-errors" style="font-size:22px;font-weight:600;color:#E24B4A">—</div>
-      <div style="font-size:10px;color:#8892A4;margin-top:2px">errors</div>
+      <div id="mon-s-errors" style="font-size:26px;font-weight:600;color:#E24B4A">—</div>
+      <div style="font-size:12px;color:#8892A4;margin-top:3px">errors</div>
     </div>
     <div style="background:#0F1729;border:1px solid #1E3A5F;border-radius:6px;padding:8px 12px">
-      <div id="mon-s-speed" style="font-size:22px;font-weight:600;color:#00D4FF">&lt;1s</div>
-      <div style="font-size:10px;color:#8892A4;margin-top:2px">detect time</div>
+      <div id="mon-s-speed" style="font-size:26px;font-weight:600;color:#00D4FF">&lt;1s</div>
+      <div style="font-size:12px;color:#8892A4;margin-top:3px">detect time</div>
     </div>
   </div>
 
@@ -1243,35 +1255,35 @@ setInterval(monFetchEWStats, 15000);
 
     <!-- Topology -->
     <div style="background:#0F1729;border:1px solid #1E3A5F;border-radius:8px;overflow:hidden;display:flex;flex-direction:column">
-      <div style="padding:8px 12px;border-bottom:1px solid #1E3A5F;font-size:10px;font-weight:600;color:#8892A4;font-family:Consolas,monospace;letter-spacing:1px;display:flex;align-items:center;justify-content:space-between">
+      <div style="padding:8px 12px;border-bottom:1px solid #1E3A5F;font-size:12px;font-weight:600;color:#8892A4;font-family:Consolas,monospace;letter-spacing:1px;display:flex;align-items:center;justify-content:space-between">
         POD TOPOLOGY
-        <span id="mon-selected-deploy" style="color:#00D4FF;font-size:9px">click deployment to inspect</span>
+        <span id="mon-selected-deploy" style="color:#00D4FF;font-size:12px">click deployment to inspect</span>
       </div>
       <div id="mon-topo" style="overflow-y:auto;flex:1;padding:10px 12px"></div>
-      <div id="mon-drawer" style="display:none;background:#080C18;border-top:1px solid #1E3A5F;padding:10px 12px;font-size:11px;max-height:160px;overflow-y:auto"></div>
+      <div id="mon-drawer" style="display:none;background:#080C18;border-top:1px solid #1E3A5F;padding:10px 12px;font-size:13px;max-height:160px;overflow-y:auto"></div>
       <div style="display:flex;gap:10px;padding:6px 12px;border-top:1px solid #1E3A5F;flex-wrap:wrap">
-        <span style="font-size:9px;color:#00C896;font-family:Consolas,monospace">● running</span>
-        <span style="font-size:9px;color:#EF9F27;font-family:Consolas,monospace">● pending</span>
-        <span style="font-size:9px;color:#AFA9EC;font-family:Consolas,monospace">● terminating</span>
-        <span style="font-size:9px;color:#E24B4A;font-family:Consolas,monospace">● failed</span>
+        <span style="font-size:13px;color:#00C896;font-family:Consolas,monospace">● running</span>
+        <span style="font-size:12px;color:#EF9F27;font-family:Consolas,monospace">● pending</span>
+        <span style="font-size:12px;color:#AFA9EC;font-family:Consolas,monospace">● terminating</span>
+        <span style="font-size:12px;color:#E24B4A;font-family:Consolas,monospace">● failed</span>
       </div>
     </div>
 
     <!-- Live events from event-watcher SSE -->
     <div style="background:#0F1729;border:1px solid #1E3A5F;border-radius:8px;overflow:hidden;display:flex;flex-direction:column">
-      <div style="padding:8px 12px;border-bottom:1px solid #1E3A5F;font-size:10px;font-weight:600;color:#8892A4;font-family:Consolas,monospace;letter-spacing:1px;display:flex;align-items:center;gap:8px">
+      <div style="padding:8px 12px;border-bottom:1px solid #1E3A5F;font-size:12px;font-weight:600;color:#8892A4;font-family:Consolas,monospace;letter-spacing:1px;display:flex;align-items:center;gap:8px">
         LIVE K8S EVENTS
-        <span id="mon-event-count" style="color:#00C896;font-size:9px"></span>
-        <button onclick="document.getElementById('mon-events').innerHTML='';_monEventCount=0;updateMonStats()" style="margin-left:auto;font-size:9px;padding:1px 6px;border:1px solid #1E3A5F;border-radius:3px;background:transparent;color:#8892A4;cursor:pointer;font-family:Consolas,monospace">CLEAR</button>
+        <span id="mon-event-count" style="color:#00C896;font-size:13px"></span>
+        <button onclick="document.getElementById('mon-events').innerHTML='';_monEventCount=0;updateMonStats()" style="margin-left:auto;font-size:12px;padding:1px 6px;border:1px solid #1E3A5F;border-radius:3px;background:transparent;color:#8892A4;cursor:pointer;font-family:Consolas,monospace">CLEAR</button>
       </div>
-      <div id="mon-events" style="overflow-y:auto;flex:1;font-size:11px"></div>
+      <div id="mon-events" style="overflow-y:auto;flex:1;font-size:13px"></div>
     </div>
 
   </div>
 
   <!-- Lifecycle timeline (full width) -->
   <div style="background:#0F1729;border:1px solid #1E3A5F;border-radius:8px;margin:0 16px 12px;overflow:hidden">
-    <div style="padding:8px 12px;border-bottom:1px solid #1E3A5F;font-size:10px;font-weight:600;color:#8892A4;font-family:Consolas,monospace;letter-spacing:1px">
+    <div style="padding:8px 12px;border-bottom:1px solid #1E3A5F;font-size:13px;font-weight:600;color:#8892A4;font-family:Consolas,monospace;letter-spacing:1px">
       POD LIFECYCLE — LAST 8 EVENTS
     </div>
     <div id="mon-timeline" style="padding:10px 12px"></div>
@@ -1281,12 +1293,12 @@ setInterval(monFetchEWStats, 15000);
 
 <style>
 @keyframes blink2{0%,100%{opacity:1}50%{opacity:.3}}
-.mon-chip{font-size:10px;padding:2px 8px;border-radius:999px;border:1px solid #1E3A5F;color:#8892A4;cursor:pointer;background:#0D1F3C;font-family:Consolas,monospace;white-space:nowrap;transition:all .15s}
+.mon-chip{font-size:13px;padding:5px 14px;border-radius:999px;border:1px solid #1E3A5F;color:#8892A4;cursor:pointer;background:#0D1F3C;font-family:Consolas,monospace;white-space:nowrap;transition:all .15s}
 .mon-chip:hover{background:#1E3A5F}
 .mon-chip.active{background:rgba(0,212,255,0.12);color:#00D4FF;border-color:#00D4FF}
-.mon-deploy-row{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:5px;cursor:pointer;border:1px solid transparent;transition:all .12s;margin-bottom:6px}
+.mon-deploy-row{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:6px;cursor:pointer;border:1px solid transparent;transition:all .12s;margin-bottom:6px}
 .mon-deploy-row:hover,.mon-deploy-row.sel{background:#080C18;border-color:#1E3A5F}
-.mon-pdot{width:22px;height:22px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:700;font-family:Consolas,monospace;cursor:default;border:1px solid transparent;position:relative;transition:transform .12s}
+.mon-pdot{width:30px;height:30px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;font-family:Consolas,monospace;cursor:default;border:1px solid transparent;position:relative;transition:transform .12s}
 .mon-pdot:hover{transform:scale(1.2)}
 .mon-pdot.running{background:#0F3D2A;color:#00C896;border-color:#00C896}
 .mon-pdot.pending{background:#3D2A0F;color:#EF9F27;border-color:#EF9F27}
@@ -1294,14 +1306,14 @@ setInterval(monFetchEWStats, 15000);
 .mon-pdot.terminating{background:#2A1E4A;color:#AFA9EC;border-color:#AFA9EC;animation:fp2 1.5s infinite}
 .mon-pdot.unknown{background:#1E3A5F;color:#8892A4;border-style:dashed}
 @keyframes fp2{0%,100%{opacity:1}50%{opacity:.4}}
-.mon-ev-row{display:flex;align-items:flex-start;gap:7px;padding:6px 12px;border-bottom:1px solid #0D1F3C;animation:si2 .3s ease}
+.mon-ev-row{display:flex;align-items:flex-start;gap:9px;padding:9px 14px;border-bottom:1px solid #0D1F3C;animation:si2 .3s ease}
 @keyframes si2{from{opacity:0;transform:translateX(-5px)}to{opacity:1;transform:none}}
-.mon-ev-icon{width:14px;height:14px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:8px;flex-shrink:0;font-family:Consolas}
+.mon-ev-icon{width:18px;height:18px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;font-family:Consolas}
 .mon-ev-icon.err{background:#3D0F0F;color:#E24B4A}
 .mon-ev-icon.warn{background:#3D2A0F;color:#EF9F27}
 .mon-ev-icon.ok{background:#0F3D2A;color:#00C896}
 .mon-ev-icon.info{background:#1E1E4A;color:#AFA9EC}
-.tl-seg{position:absolute;top:0;height:100%;display:flex;align-items:center;font-size:7px;font-weight:600;padding:0 3px;white-space:nowrap;overflow:hidden;font-family:Consolas,monospace}
+.tl-seg{position:absolute;top:0;height:100%;display:flex;align-items:center;font-size:10px;font-weight:600;padding:0 3px;white-space:nowrap;overflow:hidden;font-family:Consolas,monospace}
 </style>
 
 </body>
