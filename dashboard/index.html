@@ -195,6 +195,10 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
         style="background:rgba(0,212,255,0.06);border:1px solid #00D4FF;color:#00D4FF;font-family:Consolas,monospace;font-size:11px;font-weight:bold;padding:5px 16px;cursor:pointer;letter-spacing:2px;opacity:0.6;">
         💬 CHAT
       </button>
+      <button id="btn-monitor" onclick="switchTab('monitor')"
+        style="background:rgba(0,200,150,0.06);border:1px solid #00C896;color:#00C896;font-family:Consolas,monospace;font-size:11px;font-weight:bold;padding:5px 16px;cursor:pointer;letter-spacing:2px;opacity:0.6;">
+        ⬡ MONITOR
+      </button>
       <button onclick="openVscode()"
         style="background:rgba(123,47,255,0.06);border:1px solid #7B2FFF;color:#7B2FFF;font-family:Consolas,monospace;font-size:11px;font-weight:bold;padding:5px 16px;cursor:pointer;letter-spacing:2px;opacity:0.6;">
         ⬡ VSCODE ↗
@@ -802,7 +806,22 @@ function switchTab(tab) {
       if (!ip) { alert('MASTER_IP not configured in dashboard ConfigMap'); switchTab('dashboard'); return; }
       iframe.src = 'http://' + ip + ':' + port;
     }
+  } else if (tab === 'monitor') {
+    dash.style.display = 'none';
+    term.style.display = 'none';
+    var pm = document.getElementById('panel-monitor');
+    if(pm) pm.style.display = 'flex';
+    if(btnD) { btnD.style.opacity='0.45'; btnD.style.background='rgba(0,212,255,0.04)'; }
+    if(btnT) { btnT.style.opacity='0.45'; btnT.style.background='rgba(0,200,150,0.04)'; }
+    var bM = document.getElementById('btn-monitor');
+    if(bM) { bM.style.opacity='1'; bM.style.background='rgba(0,200,150,0.18)'; }
+    monInit();
+    return;
   } else {
+    var pm2 = document.getElementById('panel-monitor');
+    if(pm2) pm2.style.display = 'none';
+    var bM2 = document.getElementById('btn-monitor');
+    if(bM2) { bM2.style.opacity='0.45'; bM2.style.background='rgba(0,200,150,0.04)'; }
     term.style.display = 'none';
     dash.style.display = 'block';
     if(btnD) { btnD.style.opacity='1';    btnD.style.background='rgba(0,212,255,0.08)'; }
@@ -837,6 +856,449 @@ function reloadTerminal() {
   var iframe = document.getElementById('terminal-iframe');
   iframe.src = iframe.src;
 }
+
+// ════════════════════════════════════════════════════════════════════
+// MONITOR TAB
+// ════════════════════════════════════════════════════════════════════
+var _monInited = false;
+var _monESSE   = null;
+var _monEventCount = 0;
+var _monSelectedDeploy = null;
+var _monFilter = { ns: 'workshop', deploys: new Set(['all']) };
+var _monPods   = {};   // deploy → [{name,status,node,age}]
+var _monTlEvents = []; // last 8 lifecycle events
+
+function monInit() {
+  if (_monInited) { monRefreshTopo(); return; }
+  _monInited = true;
+  monConnectSSE();
+  monRefreshTopo();
+  setInterval(monRefreshTopo, 30000);
+}
+
+// ── SSE from event-watcher ────────────────────────────────────────
+function monConnectSSE() {
+  var cfg = window.CLAWOPS_CONFIG || {};
+  var ewBase = cfg.eventWatcherUrl || '';
+  if (!ewBase) {
+    // Try derive from current LB
+    ewBase = window.location.protocol + '//' + window.location.host + '/events-admin';
+  }
+  try {
+    _monESSE = new EventSource(ewBase + '/events/stream');
+    _monESSE.onopen = function() {
+      document.getElementById('mon-live-dot').style.background = '#00C896';
+      document.getElementById('mon-live-txt').textContent = 'LIVE';
+    };
+    _monESSE.onerror = function() {
+      document.getElementById('mon-live-dot').style.background = '#E24B4A';
+      document.getElementById('mon-live-txt').textContent = 'RECONNECTING';
+    };
+    _monESSE.onmessage = function(e) {
+      try {
+        var ev = JSON.parse(e.data);
+        if (ev.type === 'connected') return;
+        monHandleEvent(ev);
+      } catch(err) {}
+    };
+  } catch(e) {
+    document.getElementById('mon-live-txt').textContent = 'SSE ERROR';
+  }
+}
+
+function monHandleEvent(ev) {
+  _monEventCount++;
+  document.getElementById('mon-event-count').textContent = '(' + _monEventCount + ')';
+  // Only show if matches filter
+  var ns = document.getElementById('mon-ns').value;
+  if (ns !== 'all' && ev.namespace !== ns) return;
+  if (!_monFilter.deploys.has('all') && !_monFilter.deploys.has(ev.deploy)) return;
+
+  monAddEventRow(ev);
+  // Add to timeline if pod lifecycle event
+  if (['Scheduled','Started','Pulled','OOMKilling','BackOff','Failed','Killing'].includes(ev.reason)) {
+    _monTlEvents.unshift(ev);
+    if (_monTlEvents.length > 8) _monTlEvents.pop();
+    monRenderTimeline();
+  }
+  monRefreshStats();
+}
+
+function monAddEventRow(ev) {
+  var container = document.getElementById('mon-events');
+  var sev = ev.severity || 'info';
+  var icon = sev==='error'?'!':sev==='warn'?'~':ev.reason==='Started'||ev.reason==='Pulled'?'✓':'i';
+  var time = new Date(ev.ts).toLocaleTimeString('en',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  var row = document.createElement('div');
+  row.className = 'mon-ev-row';
+  row.innerHTML =
+    '<span style="font-family:Consolas,monospace;font-size:9px;color:#8892A4;flex-shrink:0;width:50px">' + time + '</span>' +
+    '<div class="mon-ev-icon ' + sev + '">' + icon + '</div>' +
+    '<div style="flex:1">' +
+      '<div style="font-weight:500;color:#e2e8f0;font-size:11px">' +
+        (ev.deploy||ev.name||'') +
+        '<span style="font-size:9px;padding:0 5px;border-radius:999px;background:#1E3A5F;color:#8892A4;margin-left:5px">' + (ev.reason||'') + '</span>' +
+      '</div>' +
+      '<div style="color:#8892A4;font-size:10px;margin-top:1px">' + (ev.message||'').substring(0,100) + '</div>' +
+    '</div>';
+  container.insertBefore(row, container.firstChild);
+  // Keep max 60 rows
+  while (container.children.length > 60) container.removeChild(container.lastChild);
+}
+
+// ── Topology from kubectl via MCP ────────────────────────────────
+function monRefreshTopo() {
+  var cfg = window.CLAWOPS_CONFIG || {};
+  var ns = document.getElementById('mon-ns').value;
+  var namespaces = ns === 'all' ? ['workshop','clawops'] : [ns];
+  _monPods = {};
+
+  var fetchNs = function(nsName) {
+    return fetch((cfg.basePath||'') + '/api/kubectl', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({command: 'get pods -n ' + nsName + ' -o json'})
+    })
+    .then(function(r){return r.ok?r.json():null;})
+    .catch(function(){return null;});
+  };
+
+  // Use MCP directly
+  var mcpUrl = cfg.mcpInternal || 'http://mcp-server.clawops.svc.cluster.local:8000';
+  // From browser we can't hit internal — use dashboard proxy
+  Promise.all(namespaces.map(function(nsName) {
+    return fetch((cfg.basePath||'') + '/api/pods/' + nsName)
+      .then(function(r){return r.ok?r.json():null;})
+      .catch(function(){return null;});
+  })).then(function(results) {
+    results.forEach(function(data, i) {
+      if (!data) return;
+      var nsName = namespaces[i];
+      monParsePods(data, nsName);
+    });
+    monRenderTopo();
+    monRenderChips();
+    monRefreshStats();
+  });
+}
+
+function monParsePods(data, ns) {
+  var items = (data && data.items) ? data.items : (Array.isArray(data) ? data : []);
+  items.forEach(function(pod) {
+    var meta = pod.metadata || {};
+    var spec = pod.spec || {};
+    var status = pod.status || {};
+    // derive deploy from owner references
+    var deploy = '';
+    var owners = meta.ownerReferences || [];
+    if (owners.length) {
+      var rs = owners.find(function(o){return o.kind==='ReplicaSet';});
+      if (rs) deploy = rs.name.replace(/-[a-z0-9]+$/, '');
+      var dep = owners.find(function(o){return o.kind==='Deployment';});
+      if (dep) deploy = dep.name;
+    }
+    if (!deploy) deploy = meta.name;
+
+    var phase = (status.phase || 'Unknown').toLowerCase();
+    // Check container statuses for more detail
+    var cs = (status.containerStatuses || [])[0];
+    var podStatus = phase;
+    if (cs) {
+      if (cs.state && cs.state.waiting) podStatus = cs.state.waiting.reason ? cs.state.waiting.reason.toLowerCase() : 'pending';
+      else if (cs.state && cs.state.terminated) podStatus = 'failed';
+      else if (cs.ready) podStatus = 'running';
+    }
+    if (status.phase === 'Pending') podStatus = 'pending';
+    if (meta.deletionTimestamp) podStatus = 'terminating';
+
+    // Normalize
+    if (podStatus.includes('running') || podStatus === 'running') podStatus = 'running';
+    else if (podStatus.includes('backoff') || podStatus.includes('error') || podStatus === 'failed') podStatus = 'failed';
+    else if (podStatus === 'terminating') podStatus = 'terminating';
+    else if (podStatus === 'pending' || podStatus.includes('pull') || podStatus.includes('init')) podStatus = 'pending';
+    else podStatus = 'unknown';
+
+    var key = ns + ':' + deploy;
+    if (!_monPods[key]) _monPods[key] = {deploy:deploy, ns:ns, pods:[]};
+    _monPods[key].pods.push({
+      name: meta.name,
+      shortName: meta.name.split('-').slice(-2).join('-'),
+      status: podStatus,
+      node: spec.nodeName || '',
+      age: monAge(meta.creationTimestamp)
+    });
+  });
+}
+
+function monAge(ts) {
+  if (!ts) return '?';
+  var d = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
+  if (d < 60) return d + 's';
+  if (d < 3600) return Math.floor(d/60) + 'm';
+  return Math.floor(d/3600) + 'h';
+}
+
+function monRenderChips() {
+  var el = document.getElementById('mon-chips');
+  var keys = Object.keys(_monPods);
+  el.innerHTML = '<span class="mon-chip ' + (_monFilter.deploys.has('all')?'active':'') + '" onclick="monToggleDeploy('all')">all</span>' +
+    keys.map(function(k) {
+      var d = _monPods[k].deploy;
+      return '<span class="mon-chip ' + (_monFilter.deploys.has(d)?'active':'') + '" onclick="monToggleDeploy('' + d + '')">' + d + '</span>';
+    }).join('');
+}
+
+function monToggleDeploy(name) {
+  if (name === 'all') { _monFilter.deploys = new Set(['all']); }
+  else {
+    _monFilter.deploys.delete('all');
+    if (_monFilter.deploys.has(name)) { _monFilter.deploys.delete(name); if (!_monFilter.deploys.size) _monFilter.deploys.add('all'); }
+    else _monFilter.deploys.add(name);
+  }
+  _monSelectedDeploy = null;
+  monRenderTopo();
+  monRenderChips();
+}
+
+function monApplyFilter() {
+  _monFilter.ns = document.getElementById('mon-ns').value;
+  _monSelectedDeploy = null;
+  _monPods = {};
+  monRefreshTopo();
+}
+
+function monRenderTopo() {
+  var el = document.getElementById('mon-topo');
+  var keys = Object.keys(_monPods).filter(function(k) {
+    var d = _monPods[k];
+    var ns = document.getElementById('mon-ns').value;
+    if (ns !== 'all' && d.ns !== ns) return false;
+    if (!_monFilter.deploys.has('all') && !_monFilter.deploys.has(d.deploy)) return false;
+    return true;
+  });
+  if (!keys.length) { el.innerHTML = '<div style="color:#8892A4;font-size:12px;text-align:center;padding:30px">No pods found — checking cluster...</div>'; return; }
+
+  el.innerHTML = keys.map(function(k) {
+    var d = _monPods[k];
+    var running = d.pods.filter(function(p){return p.status==='running';}).length;
+    var total = d.pods.length;
+    var badgeColor = running===total?'#00C896':running===0?'#E24B4A':'#EF9F27';
+    var sel = _monSelectedDeploy === k;
+    return '<div class="mon-deploy-row ' + (sel?'sel':'') + '" onclick="monSelectDeploy('' + k + '')">' +
+      '<div style="flex:1">' +
+        '<div style="font-size:12px;font-weight:500;color:#e2e8f0;font-family:Consolas,monospace">' + d.deploy + '</div>' +
+        '<div style="font-size:9px;color:#8892A4;margin-top:1px">' + d.ns + '</div>' +
+      '</div>' +
+      '<span style="font-size:9px;padding:1px 7px;border-radius:999px;background:' + badgeColor + '22;color:' + badgeColor + ';font-family:Consolas,monospace">' + running + '/' + total + '</span>' +
+      '<div style="display:flex;gap:3px;flex-wrap:wrap;max-width:120px">' +
+        d.pods.map(function(p) {
+          return '<div class="mon-pdot ' + p.status + '" title="' + p.name + ' · ' + p.status + ' · ' + p.age + '">' +
+            (p.status==='running'?'OK':p.status==='pending'?'…':p.status==='terminating'?'T':'!') +
+          '</div>';
+        }).join('') +
+      '</div>' +
+      '<svg width="8" height="8" viewBox="0 0 10 10" style="transform:' + (sel?'rotate(90deg)':'none') + ';transition:transform .2s;color:#8892A4"><path d="M3 1l4 4-4 4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>' +
+    '</div>';
+  }).join('');
+}
+
+function monSelectDeploy(key) {
+  _monSelectedDeploy = _monSelectedDeploy === key ? null : key;
+  var d = _monPods[key];
+  var drawer = document.getElementById('mon-drawer');
+  var lbl = document.getElementById('mon-selected-deploy');
+  if (!_monSelectedDeploy || !d) {
+    drawer.style.display = 'none';
+    lbl.textContent = 'click deployment to inspect';
+    monRenderTopo(); return;
+  }
+  lbl.textContent = d.deploy;
+  drawer.style.display = 'block';
+  // Show pod details
+  drawer.innerHTML =
+    '<div style="font-size:10px;font-weight:600;color:#00D4FF;margin-bottom:6px;font-family:Consolas,monospace">▸ ' + d.deploy + ' — connected objects</div>' +
+    '<div style="display:flex;flex-direction:column;gap:4px">' +
+      '<div style="display:flex;align-items:center;gap:6px">' +
+        '<span style="font-size:9px;padding:1px 6px;border-radius:999px;background:rgba(0,212,255,0.12);color:#00D4FF;font-family:Consolas,monospace">Deployment</span>' +
+        '<span style="font-family:Consolas,monospace;font-size:10px;color:#e2e8f0">' + d.deploy + '</span>' +
+        '<span style="font-size:9px;color:#8892A4;margin-left:auto">' + d.ns + '</span>' +
+      '</div>' +
+      '<div style="padding-left:14px;border-left:1.5px solid #1E3A5F;display:flex;flex-direction:column;gap:3px;margin-left:6px;margin-top:2px">' +
+        d.pods.map(function(p) {
+          var c = p.status==='running'?'#00C896':p.status==='failed'?'#E24B4A':p.status==='terminating'?'#AFA9EC':'#EF9F27';
+          return '<div style="display:flex;align-items:center;gap:6px">' +
+            '<span style="font-size:9px;padding:1px 6px;border-radius:999px;background:#1E3A5F;color:#8892A4;font-family:Consolas,monospace">Pod</span>' +
+            '<span style="font-family:Consolas,monospace;font-size:10px;color:#8892A4">' + p.shortName + '</span>' +
+            '<span style="font-size:9px;color:' + c + ';margin-left:auto">' + p.status + '</span>' +
+            '<span style="font-size:9px;color:#8892A4">' + (p.node?'→ '+p.node:'') + '</span>' +
+          '</div>';
+        }).join('') +
+      '</div>' +
+    '</div>';
+  monRenderTopo();
+}
+
+// ── Timeline ─────────────────────────────────────────────────────
+function monRenderTimeline() {
+  var el = document.getElementById('mon-timeline');
+  if (!_monTlEvents.length) {
+    el.innerHTML = '<div style="color:#8892A4;font-size:11px;text-align:center;padding:12px">Waiting for lifecycle events...</div>';
+    return;
+  }
+  el.innerHTML = _monTlEvents.map(function(ev) {
+    var sev = ev.severity || 'info';
+    var color = sev==='error'?'#E24B4A':sev==='warn'?'#EF9F27':'#00C896';
+    var time = new Date(ev.ts).toLocaleTimeString('en',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
+      '<div style="font-family:Consolas,monospace;font-size:9px;color:#8892A4;width:50px;flex-shrink:0">' + time + '</div>' +
+      '<div style="font-family:Consolas,monospace;font-size:10px;color:#8892A4;width:100px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (ev.deploy||ev.name||'') + '</div>' +
+      '<div style="flex:1;height:16px;background:#080C18;border-radius:3px;position:relative;overflow:hidden">' +
+        '<div style="position:absolute;top:0;left:0;height:100%;width:100%;background:' + color + '22;border-left:3px solid ' + color + ';display:flex;align-items:center;padding:0 6px">' +
+          '<span style="font-family:Consolas,monospace;font-size:8px;color:' + color + '">' + (ev.reason||'') + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div style="font-size:10px;color:#8892A4;width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (ev.message||'').substring(0,60) + '</div>' +
+    '</div>';
+  }).join('');
+}
+
+// ── Stats ─────────────────────────────────────────────────────────
+function monRefreshStats() {
+  var ns = document.getElementById('mon-ns').value;
+  var total=0, running=0;
+  Object.values(_monPods).forEach(function(d) {
+    if (ns !== 'all' && d.ns !== ns) return;
+    if (!_monFilter.deploys.has('all') && !_monFilter.deploys.has(d.deploy)) return;
+    total += d.pods.length;
+    running += d.pods.filter(function(p){return p.status==='running';}).length;
+  });
+  document.getElementById('mon-s-running').textContent = running || '—';
+  document.getElementById('mon-s-total').textContent = total || '—';
+  document.getElementById('mon-s-events').textContent = _monEventCount || '0';
+}
+
+// Update errors from event-watcher stats
+function monFetchEWStats() {
+  var cfg = window.CLAWOPS_CONFIG || {};
+  var ewBase = window.location.protocol + '//' + window.location.host + '/events-admin';
+  fetch(ewBase + '/stats').then(function(r){return r.json();}).then(function(s) {
+    document.getElementById('mon-s-errors').textContent = s.errors || '0';
+  }).catch(function(){});
+}
+setInterval(monFetchEWStats, 15000);
+
 </script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     MONITOR TAB
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="panel-monitor" style="display:none;flex-direction:column;height:calc(100vh - 108px);background:#080C18;overflow:hidden">
+
+  <!-- Filter bar -->
+  <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #1E3A5F;flex-wrap:wrap">
+    <span style="font-size:10px;color:#8892A4;font-family:Consolas,monospace;letter-spacing:1px">NAMESPACE</span>
+    <select id="mon-ns" onchange="monApplyFilter()" style="font-size:11px;padding:3px 8px;border:1px solid #1E3A5F;border-radius:4px;background:#0D1F3C;color:#e2e8f0;font-family:Consolas,monospace">
+      <option value="all">all</option>
+      <option value="workshop" selected>workshop</option>
+      <option value="clawops">clawops</option>
+    </select>
+    <span style="font-size:10px;color:#8892A4;font-family:Consolas,monospace;letter-spacing:1px;margin-left:6px">DEPLOYMENT</span>
+    <div id="mon-chips" style="display:flex;gap:6px;flex-wrap:wrap;flex:1"></div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+      <div id="mon-live-dot" style="width:7px;height:7px;border-radius:50%;background:#1D9E75;animation:blink2 1.4s infinite"></div>
+      <span id="mon-live-txt" style="font-size:10px;color:#00C896;font-family:Consolas,monospace">CONNECTING...</span>
+    </div>
+  </div>
+
+  <!-- Stats row -->
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:10px 16px">
+    <div style="background:#0F1729;border:1px solid #1E3A5F;border-radius:6px;padding:8px 12px">
+      <div id="mon-s-running" style="font-size:22px;font-weight:600;color:#00C896">—</div>
+      <div style="font-size:10px;color:#8892A4;margin-top:2px">pods running</div>
+    </div>
+    <div style="background:#0F1729;border:1px solid #1E3A5F;border-radius:6px;padding:8px 12px">
+      <div id="mon-s-total" style="font-size:22px;font-weight:600;color:#e2e8f0">—</div>
+      <div style="font-size:10px;color:#8892A4;margin-top:2px">pods total</div>
+    </div>
+    <div style="background:#0F1729;border:1px solid #1E3A5F;border-radius:6px;padding:8px 12px">
+      <div id="mon-s-events" style="font-size:22px;font-weight:600;color:#e2e8f0">—</div>
+      <div style="font-size:10px;color:#8892A4;margin-top:2px">events caught</div>
+    </div>
+    <div style="background:#0F1729;border:1px solid #1E3A5F;border-radius:6px;padding:8px 12px">
+      <div id="mon-s-errors" style="font-size:22px;font-weight:600;color:#E24B4A">—</div>
+      <div style="font-size:10px;color:#8892A4;margin-top:2px">errors</div>
+    </div>
+    <div style="background:#0F1729;border:1px solid #1E3A5F;border-radius:6px;padding:8px 12px">
+      <div id="mon-s-speed" style="font-size:22px;font-weight:600;color:#00D4FF">&lt;1s</div>
+      <div style="font-size:10px;color:#8892A4;margin-top:2px">detect time</div>
+    </div>
+  </div>
+
+  <!-- Main panels -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 16px 10px;flex:1;min-height:0;overflow:hidden">
+
+    <!-- Topology -->
+    <div style="background:#0F1729;border:1px solid #1E3A5F;border-radius:8px;overflow:hidden;display:flex;flex-direction:column">
+      <div style="padding:8px 12px;border-bottom:1px solid #1E3A5F;font-size:10px;font-weight:600;color:#8892A4;font-family:Consolas,monospace;letter-spacing:1px;display:flex;align-items:center;justify-content:space-between">
+        POD TOPOLOGY
+        <span id="mon-selected-deploy" style="color:#00D4FF;font-size:9px">click deployment to inspect</span>
+      </div>
+      <div id="mon-topo" style="overflow-y:auto;flex:1;padding:10px 12px"></div>
+      <div id="mon-drawer" style="display:none;background:#080C18;border-top:1px solid #1E3A5F;padding:10px 12px;font-size:11px;max-height:160px;overflow-y:auto"></div>
+      <div style="display:flex;gap:10px;padding:6px 12px;border-top:1px solid #1E3A5F;flex-wrap:wrap">
+        <span style="font-size:9px;color:#00C896;font-family:Consolas,monospace">● running</span>
+        <span style="font-size:9px;color:#EF9F27;font-family:Consolas,monospace">● pending</span>
+        <span style="font-size:9px;color:#AFA9EC;font-family:Consolas,monospace">● terminating</span>
+        <span style="font-size:9px;color:#E24B4A;font-family:Consolas,monospace">● failed</span>
+      </div>
+    </div>
+
+    <!-- Live events from event-watcher SSE -->
+    <div style="background:#0F1729;border:1px solid #1E3A5F;border-radius:8px;overflow:hidden;display:flex;flex-direction:column">
+      <div style="padding:8px 12px;border-bottom:1px solid #1E3A5F;font-size:10px;font-weight:600;color:#8892A4;font-family:Consolas,monospace;letter-spacing:1px;display:flex;align-items:center;gap:8px">
+        LIVE K8S EVENTS
+        <span id="mon-event-count" style="color:#00C896;font-size:9px"></span>
+        <button onclick="document.getElementById('mon-events').innerHTML='';_monEventCount=0;updateMonStats()" style="margin-left:auto;font-size:9px;padding:1px 6px;border:1px solid #1E3A5F;border-radius:3px;background:transparent;color:#8892A4;cursor:pointer;font-family:Consolas,monospace">CLEAR</button>
+      </div>
+      <div id="mon-events" style="overflow-y:auto;flex:1;font-size:11px"></div>
+    </div>
+
+  </div>
+
+  <!-- Lifecycle timeline (full width) -->
+  <div style="background:#0F1729;border:1px solid #1E3A5F;border-radius:8px;margin:0 16px 12px;overflow:hidden">
+    <div style="padding:8px 12px;border-bottom:1px solid #1E3A5F;font-size:10px;font-weight:600;color:#8892A4;font-family:Consolas,monospace;letter-spacing:1px">
+      POD LIFECYCLE — LAST 8 EVENTS
+    </div>
+    <div id="mon-timeline" style="padding:10px 12px"></div>
+  </div>
+
+</div>
+
+<style>
+@keyframes blink2{0%,100%{opacity:1}50%{opacity:.3}}
+.mon-chip{font-size:10px;padding:2px 8px;border-radius:999px;border:1px solid #1E3A5F;color:#8892A4;cursor:pointer;background:#0D1F3C;font-family:Consolas,monospace;white-space:nowrap;transition:all .15s}
+.mon-chip:hover{background:#1E3A5F}
+.mon-chip.active{background:rgba(0,212,255,0.12);color:#00D4FF;border-color:#00D4FF}
+.mon-deploy-row{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:5px;cursor:pointer;border:1px solid transparent;transition:all .12s;margin-bottom:6px}
+.mon-deploy-row:hover,.mon-deploy-row.sel{background:#080C18;border-color:#1E3A5F}
+.mon-pdot{width:22px;height:22px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:700;font-family:Consolas,monospace;cursor:default;border:1px solid transparent;position:relative;transition:transform .12s}
+.mon-pdot:hover{transform:scale(1.2)}
+.mon-pdot.running{background:#0F3D2A;color:#00C896;border-color:#00C896}
+.mon-pdot.pending{background:#3D2A0F;color:#EF9F27;border-color:#EF9F27}
+.mon-pdot.failed{background:#3D0F0F;color:#E24B4A;border-color:#E24B4A}
+.mon-pdot.terminating{background:#2A1E4A;color:#AFA9EC;border-color:#AFA9EC;animation:fp2 1.5s infinite}
+.mon-pdot.unknown{background:#1E3A5F;color:#8892A4;border-style:dashed}
+@keyframes fp2{0%,100%{opacity:1}50%{opacity:.4}}
+.mon-ev-row{display:flex;align-items:flex-start;gap:7px;padding:6px 12px;border-bottom:1px solid #0D1F3C;animation:si2 .3s ease}
+@keyframes si2{from{opacity:0;transform:translateX(-5px)}to{opacity:1;transform:none}}
+.mon-ev-icon{width:14px;height:14px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:8px;flex-shrink:0;font-family:Consolas}
+.mon-ev-icon.err{background:#3D0F0F;color:#E24B4A}
+.mon-ev-icon.warn{background:#3D2A0F;color:#EF9F27}
+.mon-ev-icon.ok{background:#0F3D2A;color:#00C896}
+.mon-ev-icon.info{background:#1E1E4A;color:#AFA9EC}
+.tl-seg{position:absolute;top:0;height:100%;display:flex;align-items:center;font-size:7px;font-weight:600;padding:0 3px;white-space:nowrap;overflow:hidden;font-family:Consolas,monospace}
+</style>
+
 </body>
 </html>

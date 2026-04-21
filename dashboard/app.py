@@ -139,6 +139,25 @@ async def remove_instance(inst_id: str):
         return {"status": "removed"}
     return JSONResponse({"status": "not_found"}, status_code=404)
 
+@app.get("/api/pods/{namespace}")
+async def get_pods(namespace: str):
+    """Proxy: get pods for a namespace via MCP kubectl-read."""
+    try:
+        r = await _client.post(
+            f"{MCP_URL}/tools/kubectl-read",
+            json={"command": f"get pods -n {namespace} -o json"},
+            timeout=10
+        )
+        data = r.json()
+        raw = data.get("output", "")
+        import json as _json
+        try:
+            return _json.loads(raw)
+        except Exception:
+            return {"items": [], "error": raw[:200]}
+    except Exception as e:
+        return {"items": [], "error": str(e)}
+
 @app.get("/api/incidents")
 async def proxy_incidents(limit: int = 20):
     """Proxy incidents list from MCP server."""
