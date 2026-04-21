@@ -3,7 +3,7 @@ ClawOps Event Watcher — K8s API real-time event stream
 Catches pod/deployment events before Prometheus sees them.
 Admin UI at /  |  SSE stream at /events/stream  |  Config at /config
 """
-import os, json, logging, sys, asyncio, sqlite3, httpx
+import os, json, time, logging, sys, asyncio, sqlite3, httpx
 from datetime import datetime, timezone
 from typing import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -304,7 +304,7 @@ def get_stats():
         warns   = c.execute("SELECT COUNT(*) FROM events WHERE severity='warn'").fetchone()[0]
         by_ns   = {r[0]:r[1] for r in c.execute("SELECT namespace,COUNT(*) FROM events GROUP BY namespace").fetchall()}
         by_rsn  = {r[0]:r[1] for r in c.execute("SELECT reason,COUNT(*) FROM events GROUP BY reason ORDER BY 2 DESC LIMIT 10").fetchall()}
-    now = _loop.time() if _loop else 0
+    now = time.time()
     active_cooldowns = {k: int(COOLDOWN_S - (now - v)) for k, v in _cooldown.items() if (now - v) < COOLDOWN_S}
     return {"total": total, "errors": errors, "warns": warns, "by_namespace": by_ns, "by_reason": by_rsn, "subscribers": len(_subscribers), "active_cooldowns": active_cooldowns, "pending_batches": list(_batch.keys())}
 
