@@ -100,7 +100,9 @@ def store_event(ev: dict):
 
 # ── Batch buffer — hold events per resource for N seconds then send summary ───
 BATCH_WINDOW   = int(os.getenv("BATCH_WINDOW_SECONDS", "10"))
-_batch: dict   = {}   # key → {"events": [], "task": asyncio.Task}
+COOLDOWN_S     = int(os.getenv("COOLDOWN_SECONDS", "300"))
+_batch: dict   = {}    # key → {"events": [], "task": asyncio.Task}
+_cooldown: dict = {}   # key → last_flush_unix_timestamp
 
 async def _flush_batch(key: str):
     """Wait BATCH_WINDOW seconds then send the buffered events as one payload."""
@@ -136,7 +138,8 @@ async def _flush_batch(key: str):
         try:
             async with httpx.AsyncClient(timeout=10) as cli:
                 await cli.post(N8N_WEBHOOK_URL, json=summary)
-            log.info(f"Forwarded batch to n8n: {key}")
+            _cooldown[key] = time.time()
+            log.info(f"Forwarded batch to n8n: {key} (cooldown {COOLDOWN_S}s)")
         except Exception as e:
             log.warning(f"n8n batch forward failed: {e}")
 
@@ -154,7 +157,13 @@ async def forward_to_n8n(ev: dict):
     if ev.get("kind") in ("Node", "NodeCondition"):
         group = ev.get("node") or ev.get("name", "unknown")
     key = f"{ev['namespace']}:{group}"
-    loop = _loop
+    # Cooldown check — drop silently if we flushed recently
+    now_t = time.time()
+    if key in _cooldown and (now_t - _cooldown[key]) < COOLDOWN_S:
+        remaining = int(COOLDOWN_S - (now_t - _cooldown[key]))
+        log.debug(f"COOLDOWN | {key} | {remaining}s remaining — event dropped")
+        return
+
     if key not in _batch:
         _batch[key] = {"events": [], "task": None}
     _batch[key]["events"].append(ev)
