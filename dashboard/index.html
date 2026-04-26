@@ -1056,7 +1056,6 @@ function monParsePods(data, ns) {
     if (!deploy) deploy = meta.name;
 
     var phase = (status.phase || 'Unknown').toLowerCase();
-    // Check container statuses for more detail
     var cs = (status.containerStatuses || [])[0];
     var podStatus = phase;
     if (cs) {
@@ -1066,8 +1065,6 @@ function monParsePods(data, ns) {
     }
     if (status.phase === 'Pending') podStatus = 'pending';
     if (meta.deletionTimestamp) podStatus = 'terminating';
-
-    // Normalize
     if (podStatus.includes('running') || podStatus === 'running') podStatus = 'running';
     else if (podStatus.includes('backoff') || podStatus.includes('error') || podStatus === 'failed') podStatus = 'failed';
     else if (podStatus === 'terminating') podStatus = 'terminating';
@@ -1083,7 +1080,35 @@ function monParsePods(data, ns) {
       node: spec.nodeName || '',
       age: monAge(meta.creationTimestamp)
     });
+
+    // ── Synthesize timeline from pod conditions + container status ──
+    // Only add if not already in timeline (avoid duplicates on refresh)
+    var alreadyIn = _monTlEvents.find(function(e){ return e.name === meta.name && e._synthetic; });
+    if (!alreadyIn && meta.creationTimestamp) {
+      var conds = status.conditions || [];
+      var readyCond  = conds.find(function(c){ return c.type==='Ready'; });
+      var initCond   = conds.find(function(c){ return c.type==='Initialized'; });
+      var startedTs  = (readyCond && readyCond.lastTransitionTime) ? readyCond.lastTransitionTime : null;
+      var reason = podStatus === 'running' ? 'Started' :
+                   podStatus === 'failed'  ? 'Failed'  :
+                   podStatus === 'terminating' ? 'Killing' : 'Scheduled';
+      _monTlEvents.push({
+        _synthetic: true,
+        ts: startedTs || meta.creationTimestamp,
+        namespace: ns,
+        deploy: deploy,
+        name: meta.name,
+        reason: reason,
+        message: podStatus === 'running'
+          ? 'Running on ' + (spec.nodeName || 'unknown') + ' · age ' + monAge(meta.creationTimestamp)
+          : podStatus,
+        severity: podStatus === 'failed' ? 'error' : podStatus === 'terminating' ? 'warn' : 'info'
+      });
+    }
   });
+  // Keep last 8, sorted newest first
+  _monTlEvents.sort(function(a,b){ return new Date(b.ts) - new Date(a.ts); });
+  if (_monTlEvents.length > 8) _monTlEvents = _monTlEvents.slice(0, 8);
 }
 
 function monAge(ts) {
