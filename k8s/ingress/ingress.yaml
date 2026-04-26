@@ -131,12 +131,12 @@ spec:
                   number: 9093
 
 ---
-# Event Watcher admin UI at /events-admin — rewrite strips prefix
+# Event Watcher admin UI at /events-admin — now in clawops namespace
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: workshop-ingress-event-watcher
-  namespace: workshop
+  name: clawops-ingress-event-watcher
+  namespace: clawops
   annotations:
     nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/rewrite-target: /$2

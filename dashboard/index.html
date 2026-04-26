@@ -1056,7 +1056,8 @@ function monParsePods(data, ns) {
     else podStatus = 'unknown';
     var key = ns + ':' + deploy;
     if (!_monPods[key]) _monPods[key] = {deploy:deploy, ns:ns, pods:[]};
-    _monPods[key].pods.push({name:meta.name, shortName:meta.name.split('-').slice(-2).join('-'), status:podStatus, node:spec.nodeName||'', age:monAge(meta.creationTimestamp)});
+    var containerCount = (status.containerStatuses || []).length || (spec.containers || []).length || 1;
+    _monPods[key].pods.push({name:meta.name, shortName:meta.name.split('-').slice(-2).join('-'), status:podStatus, node:spec.nodeName||'', age:monAge(meta.creationTimestamp), containers:containerCount});
     var alreadyIn = _monTlEvents.find(function(e){ return e.name === meta.name && e._synthetic; });
     if (!alreadyIn && meta.creationTimestamp) {
       var conds = status.conditions || [];
@@ -1145,13 +1146,14 @@ function monRenderTopo() {
     nameDiv.appendChild(nameEl); nameDiv.appendChild(nsEl);
     var badge = document.createElement('span');
     badge.style.cssText = 'font-size:11px;padding:2px 9px;border-radius:999px;font-family:Consolas,monospace;background:' + badgeColor + '22;color:' + badgeColor;
-    badge.textContent = running + '/' + total;
+    var totalContainers = d.pods.reduce(function(a,p){return a+(p.containers||1);},0);
+    badge.textContent = running + '/' + total + ' pods' + (totalContainers > total ? ' · ' + totalContainers + ' containers' : '');
     var dots = document.createElement('div');
     dots.style.cssText = 'display:flex;gap:3px;flex-wrap:wrap;max-width:120px';
     d.pods.forEach(function(p) {
       var dot = document.createElement('div');
       dot.className = 'mon-pdot ' + p.status;
-      dot.title = p.name + ' · ' + p.status + ' · ' + p.age;
+      dot.title = p.name + ' · ' + p.status + ' · ' + p.age + (p.containers > 1 ? ' · ' + p.containers + ' containers' : '');
       dot.textContent = p.status === 'running' ? 'OK' : p.status === 'pending' ? '…' : p.status === 'terminating' ? 'T' : '!';
       dots.appendChild(dot);
     });
