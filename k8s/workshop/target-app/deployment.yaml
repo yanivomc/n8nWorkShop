@@ -79,6 +79,9 @@ spec:
     - name: http-metrics
       port: 8080
       targetPort: 8080
+    - name: chaos-loader
+      port: 8003
+      targetPort: 8003
   type: ClusterIP
 ---
 apiVersion: monitoring.coreos.com/v1
