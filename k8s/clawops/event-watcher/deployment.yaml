@@ -4,7 +4,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: event-watcher
-  namespace: workshop
+  namespace: clawops
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -25,7 +25,7 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: event-watcher
-    namespace: workshop
+    namespace: clawops
 roleRef:
   kind: ClusterRole
   name: event-watcher-role
@@ -36,7 +36,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: event-watcher-config
-  namespace: workshop
+  namespace: clawops
 data:
   WATCH_NAMESPACES:    "workshop"
   WATCH_LABELS:        ""
@@ -54,7 +54,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: event-watcher-data
-  namespace: workshop
+  namespace: clawops
 spec:
   accessModes: [ReadWriteOnce]
   resources:
@@ -66,7 +66,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: event-watcher
-  namespace: workshop
+  namespace: clawops
   labels:
     app: event-watcher
 spec:
@@ -121,7 +121,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: event-watcher
-  namespace: workshop
+  namespace: clawops
   labels:
     app: event-watcher
 spec:
