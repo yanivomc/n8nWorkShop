@@ -289,6 +289,13 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
           <div class="s-desc">SIGKILL in 5s,<br>CrashLoopBackOff</div>
           <div class="s-status" id="st-crash"></div>
         </button>
+        <button class="scenario-btn" id="btn-k8s-demo" onclick="runKubeEventScenario()"
+          style="border-color:#00C896;background:rgba(0,200,150,0.06)">
+          <div class="s-icon">&#x26A1;</div>
+          <div class="s-name" style="color:#00C896">K8s Event Demo</div>
+          <div class="s-desc">Crash → event-watcher<br>→ S6 AI → chat</div>
+          <div class="s-status" id="st-k8s-demo"></div>
+        </button>
         <button class="scenario-btn stop-t" id="btn-stop" onclick="trigger('stop')">
           <div class="s-icon">&#x2705;</div>
           <div class="s-name">Stop All</div>
@@ -708,14 +715,13 @@ document.getElementById('modal').addEventListener('click',e=>{if(e.target===e.cu
   <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid #1E3A5F;background:#0D1F3C">
     <span style="font-family:Consolas,monospace;font-size:11px;font-weight:bold;color:#8892A4;letter-spacing:2px">💬 INCIDENT CHAT</span>
     <div style="display:flex;gap:8px">
-      <button onclick="runKubeEventScenario()" style="font-family:Consolas,monospace;font-size:10px;padding:3px 10px;background:rgba(0,200,150,0.1);border:1px solid #00C896;color:#00C896;cursor:pointer;letter-spacing:1px" title="Trigger a real K8s event to demo the event-watcher pipeline">⬡ K8S EVENT DEMO</button>
       <button onclick="clearChat()" style="font-family:Consolas,monospace;font-size:10px;padding:3px 10px;background:none;border:1px solid #1E3A5F;color:#8892A4;cursor:pointer;letter-spacing:1px">✕ CLEAR</button>
     </div>
   </div>
   <div id="chat-messages">
     <div class="chat-msg system"><div class="meta">SYSTEM</div>ClawOps Incident Chat — AI agent messages and approvals appear here.<div class="ts">--:--:--</div></div>
   </div>
-  <div id="chat-header-bar" style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid #1E3A5F;background:#0D1F3C;flex-shrink:0"><span style="font-family:Consolas,monospace;font-size:11px;font-weight:bold;color:#8892A4;letter-spacing:2px">💬 INCIDENT CHAT</span><div style="display:flex;gap:8px"><button onclick="runKubeEventScenario()" style="font-family:Consolas,monospace;font-size:10px;padding:3px 10px;background:rgba(0,200,150,0.1);border:1px solid #00C896;color:#00C896;cursor:pointer;letter-spacing:1px">⬡ K8S EVENT DEMO</button><button onclick="clearChat()" style="font-family:Consolas,monospace;font-size:10px;padding:3px 10px;background:none;border:1px solid #1E3A5F;color:#8892A4;cursor:pointer;letter-spacing:1px">✕ CLEAR</button></div></div><div id="chat-input-bar">
+  <div id="chat-header-bar" style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid #1E3A5F;background:#0D1F3C;flex-shrink:0"><span style="font-family:Consolas,monospace;font-size:11px;font-weight:bold;color:#8892A4;letter-spacing:2px">💬 INCIDENT CHAT</span><div style="display:flex;gap:8px"><button onclick="clearChat()" style="font-family:Consolas,monospace;font-size:10px;padding:3px 10px;background:none;border:1px solid #1E3A5F;color:#8892A4;cursor:pointer;letter-spacing:1px">✕ CLEAR</button></div></div><div id="chat-input-bar">
     <input id="chat-input" type="text" placeholder="/approve &lt;totp&gt; &lt;key&gt;  or ask a question..." 
       onkeydown="if(event.key==='Enter')sendChatMessage()"/>
     <button id="chat-send-btn" onclick="sendChatMessage()">SEND</button>
@@ -1311,16 +1317,26 @@ function runKubeEventScenario() {
 
   // Use the exact same path as trigger('crash') — goes through dashboard backend
   var base = API_BASE + '/api/chaos/' + encodeURIComponent(instId) + '/action';
+  var demoBtn = document.getElementById('btn-k8s-demo');
+  var demoSt = document.getElementById('st-k8s-demo');
+  if(demoBtn) demoBtn.classList.add('running');
+  if(demoSt) demoSt.textContent = 'triggering...';
+  // Switch to chat to show pipeline messages
+  switchTab('chat');
   fetchJ(base + '/crash', 'POST', {delay_seconds: 5})
     .then(function(res) {
+      if(demoSt) demoSt.textContent = 'watching...';
       addChatMsg('system',
         '✅ Crash triggered — pod SIGKILL in 5s\n' +
         '📡 Watching for: Killing → BackOff → Failed → batch flush → S6 analysis (~15-20s total)'
       );
       // Switch to monitor tab to show live events
       setTimeout(function(){ switchTab('monitor'); }, 1000);
-      // Switch back to chat when S6 should have responded
-      setTimeout(function(){ switchTab('chat'); }, 22000);
+      setTimeout(function(){
+        if(demoBtn) demoBtn.classList.remove('running');
+        if(demoSt) demoSt.textContent = 'done';
+        setTimeout(function(){ if(demoSt) demoSt.textContent=''; }, 5000);
+      }, 25000);
     })
     .catch(function(e) {
       addChatMsg('system', '⚠️ Crash trigger failed: ' + e + ' — try clicking CRASH POD on the dashboard directly');
