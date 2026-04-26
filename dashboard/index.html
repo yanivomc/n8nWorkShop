@@ -1302,18 +1302,24 @@ function runKubeEventScenario() {
   // Get first registered instance key (same as selectedId in trigger())
   var keys = Object.keys(instances || {});
   if (!keys.length) {
-    addChatMsg('system', '⚠️ No target-app instances registered. Deploy target-app first, then refresh.');
+    var _b=document.getElementById('chat-messages'); if(_b){var _d=document.createElement('div');_d.className='chat-msg system';_d.innerHTML='<div class="meta">SYSTEM</div>⚠️ No target-app instances registered. Deploy target-app first, then refresh.<div class="ts">'+new Date().toISOString().substring(11,19)+'</div>';_b.appendChild(_d);_b.scrollTop=_b.scrollHeight;}
     return;
   }
   var instId = keys[0];
   var inst = instances[instId];
 
-  addChatMsg('system',
-    '🔴 **K8s Event Demo** — triggering CRASH scenario on `' + instId + '`\n\n' +
-    '**Pipeline:** pod crashes → K8s events fire → event-watcher catches in <1s → ' +
-    '10s batch window → S6 AI investigates → response appears here\n\n' +
-    '⏳ Watch the MONITOR tab live events panel...'
-  );
+  // Use global function or fallback to direct DOM append
+  var _chatBox = document.getElementById('chat-messages');
+  function _addMsg(txt) {
+    if (typeof addChatMsg === 'function') { addChatMsg('system', txt); return; }
+    if (!_chatBox) return;
+    var d = document.createElement('div');
+    d.className = 'chat-msg system';
+    d.innerHTML = '<div class="meta">SYSTEM</div>' + txt.replace(/\n/g,'<br>') + '<div class="ts">' + new Date().toISOString().substring(11,19) + '</div>';
+    _chatBox.appendChild(d);
+    _chatBox.scrollTop = _chatBox.scrollHeight;
+  }
+  _addMsg('🔴 **K8s Event Demo** — triggering CRASH scenario on `' + instId + '`\n\n**Pipeline:** pod crashes → K8s events fire → event-watcher catches in <1s → 10s batch window → S6 AI investigates → response appears here\n\n⏳ Watch the MONITOR tab live events panel...');
 
   // Use the exact same path as trigger('crash') — goes through dashboard backend
   var base = API_BASE + '/api/chaos/' + encodeURIComponent(instId) + '/action';
@@ -1339,7 +1345,7 @@ function runKubeEventScenario() {
       }, 25000);
     })
     .catch(function(e) {
-      addChatMsg('system', '⚠️ Crash trigger failed: ' + e + ' — try clicking CRASH POD on the dashboard directly');
+      _addMsg('⚠️ Crash trigger failed: ' + e + ' — try clicking CRASH POD on the dashboard directly');
     });
 }
 
