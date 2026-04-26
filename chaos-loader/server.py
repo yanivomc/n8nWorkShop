@@ -23,7 +23,7 @@ async def _loop(mode: str):
         try:
             async with httpx.AsyncClient(timeout=5) as c:
                 if mode == "oom":
-                    await c.post(f"{TARGET}/chaos/memory", json={"mb_per_second": 50, "max_mb": 400})
+                    await c.post(f"{TARGET}/chaos/error-loop", json={})
                 elif mode == "cpu":
                     await c.post(f"{TARGET}/chaos/cpu", json={"cores": 2, "duration_seconds": 60})
                 elif mode == "error":
