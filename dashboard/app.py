@@ -141,18 +141,20 @@ async def remove_instance(inst_id: str):
 
 @app.api_route("/api/chaos-loader/{inst_id:path}/{action}", methods=["POST","DELETE","GET"])
 async def chaos_loader_proxy(inst_id: str, action: str, request: Request):
-    """Proxy to chaos-loader sidecar on port 8003."""
-    inst = registered_instances.get(inst_id)
+    """Proxy to chaos-loader sidecar on port 8003 (same pod as target-app)."""
+    inst = _instances.get(inst_id)
     if not inst:
-        return JSONResponse({"error": "instance not found"}, status_code=404)
-    # chaos-loader is sidecar on same pod — reach via K8s service on port 8003
+        return JSONResponse({"error": f"instance not found: {inst_id}"}, status_code=404)
+    # chaos-loader sidecar shares the pod — same host, port 8003
     svc_url = inst.get("url", "").replace(":8080", ":8003")
     if not svc_url:
-        return JSONResponse({"error": "no url"}, status_code=400)
+        return JSONResponse({"error": "no url for instance"}, status_code=400)
     try:
         body = await request.body()
+        params = dict(request.query_params)
         async with httpx.AsyncClient(timeout=10) as c:
-            r = await c.request(request.method, f"{svc_url}/{action}", content=body, headers={"Content-Type": "application/json"})
+            r = await c.request(request.method, f"{svc_url}/{action}", content=body,
+                                params=params, headers={"Content-Type": "application/json"})
         return JSONResponse(r.json())
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
