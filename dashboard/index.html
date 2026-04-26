@@ -880,7 +880,55 @@ function monInit() {
   _monInited = true;
   monConnectSSE();
   monRefreshTopo();
+  monLoadHistorical();
   setInterval(monRefreshTopo, 30000);
+  setInterval(monFetchEWStats, 15000);
+  monFetchEWStats();
+}
+
+function monLoadHistorical() {
+  // Fetch last 30 events from event-watcher DB to seed timeline + event feed
+  var ewBase = window.location.protocol + '//' + window.location.host + '/events-admin';
+  fetch(ewBase + '/events?limit=30')
+    .then(function(r){ return r.ok ? r.json() : []; })
+    .then(function(events) {
+      if (!Array.isArray(events)) return;
+      // Reverse so oldest first → prepend to feed, most recent at top
+      events.slice().reverse().forEach(function(ev) {
+        // Add to timeline
+        if (['Scheduled','Started','Pulled','OOMKilling','BackOff','Failed','Killing'].includes(ev.reason)) {
+          _monTlEvents.push(ev);
+        }
+        // Add to event feed (dimmed — historical)
+        monAddEventRow(ev, true);
+      });
+      if (_monTlEvents.length > 8) _monTlEvents = _monTlEvents.slice(-8);
+      monRenderTimeline();
+      var el = document.getElementById('mon-events');
+      // Add separator between historical and live
+      var sep = document.createElement('div');
+      sep.style.cssText = 'text-align:center;font-size:10px;color:#1E3A5F;padding:4px;border-bottom:1px solid #1E3A5F;font-family:Consolas,monospace;letter-spacing:1px';
+      sep.textContent = '─── LIVE ───';
+      el.insertBefore(sep, el.firstChild);
+    })
+    .catch(function(){});
+}
+
+function monShowErrors() {
+  // Switch to error filter in event feed
+  var ewBase = window.location.protocol + '//' + window.location.host + '/events-admin';
+  fetch(ewBase + '/events?limit=50&severity=error')
+    .then(function(r){ return r.ok ? r.json() : []; })
+    .then(function(events) {
+      var el = document.getElementById('mon-events');
+      el.innerHTML = '';
+      var hdr = document.createElement('div');
+      hdr.style.cssText = 'text-align:center;font-size:11px;color:#E24B4A;padding:6px;border-bottom:1px solid #1E3A5F;font-family:Consolas,monospace;letter-spacing:1px;display:flex;justify-content:space-between;align-items:center';
+      hdr.innerHTML = '<span>🔴 ERROR EVENTS (' + events.length + ')</span><span style="cursor:pointer;color:#8892A4" onclick="monLoadHistorical()">✕ clear</span>';
+      el.appendChild(hdr);
+      events.forEach(function(ev){ monAddEventRow(ev, false); });
+      if (!events.length) el.innerHTML += '<div style="color:#8892A4;text-align:center;padding:20px;font-size:13px">No error events stored</div>';
+    });
 }
 
 // ── SSE from event-watcher ────────────────────────────────────────
@@ -931,13 +979,14 @@ function monHandleEvent(ev) {
   monRefreshStats();
 }
 
-function monAddEventRow(ev) {
+function monAddEventRow(ev, historical) {
   var container = document.getElementById('mon-events');
   var sev = ev.severity || 'info';
   var icon = sev==='error'?'!':sev==='warn'?'~':ev.reason==='Started'||ev.reason==='Pulled'?'✓':'i';
   var time = new Date(ev.ts).toLocaleTimeString('en',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
   var row = document.createElement('div');
   row.className = 'mon-ev-row';
+  if (historical) row.style.opacity = '0.5';
   row.innerHTML =
     '<span style="font-family:Consolas,monospace;font-size:11px;color:#8892A4;flex-shrink:0;width:50px">' + time + '</span>' +
     '<div class="mon-ev-icon ' + sev + '">' + icon + '</div>' +
@@ -1289,8 +1338,8 @@ var _registeredInstances = [];
       <div style="font-size:12px;color:#8892A4;margin-top:3px">events caught</div>
     </div>
     <div style="background:#0F1729;border:1px solid #1E3A5F;border-radius:6px;padding:8px 12px">
-      <div id="mon-s-errors" style="font-size:26px;font-weight:600;color:#E24B4A">—</div>
-      <div style="font-size:12px;color:#8892A4;margin-top:3px">errors</div>
+      <div id="mon-s-errors" style="font-size:26px;font-weight:600;color:#E24B4A;cursor:pointer" onclick="monShowErrors()" title="Click to view error events">—</div>
+      <div style="font-size:12px;color:#8892A4;margin-top:3px;cursor:pointer" onclick="monShowErrors()">errors ↗</div>
     </div>
     <div style="background:#0F1729;border:1px solid #1E3A5F;border-radius:6px;padding:8px 12px">
       <div id="mon-s-speed" style="font-size:26px;font-weight:600;color:#00D4FF">&lt;1s</div>
