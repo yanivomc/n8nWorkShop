@@ -77,7 +77,7 @@
       "parameters": {
         "toolDescription": "Run safe read-only Linux OS diagnostic commands on the cluster node. Use for disk space, memory, CPU load, running processes, network connections. Examples: df -h, free -m, uptime, ps aux, top -bn1, netstat -tlnp, cat /proc/loadavg, uname -a",
         "method": "POST",
-        "url": "http://linux-mcp-server.workshop.svc.cluster.local:8001/tools/linux-read",
+        "url": "http://linux-mcp-server.clawops.svc.cluster.local:8001/tools/linux-read",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\"command\": \"{command}\"}"

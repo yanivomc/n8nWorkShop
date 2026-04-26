@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: linux-mcp-server
-  namespace: workshop
+  namespace: clawops
   labels:
     app: linux-mcp-server
 spec:
@@ -44,7 +44,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: linux-mcp-server
-  namespace: workshop
+  namespace: clawops
   labels:
     app: linux-mcp-server
 spec:

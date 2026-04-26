@@ -139,7 +139,7 @@ restart_pods() {
   kubectl rollout restart deployment/mcp-server -n clawops >> "$LOG_FILE" 2>&1 || true
   kubectl rollout restart deployment/clawops-dashboard -n clawops >> "$LOG_FILE" 2>&1 || true
   kubectl rollout restart deployment/event-watcher -n workshop >> "$LOG_FILE" 2>&1 || true
-  kubectl rollout restart deployment/linux-mcp-server -n workshop >> "$LOG_FILE" 2>&1 || true
+  kubectl rollout restart deployment/linux-mcp-server -n clawops >> "$LOG_FILE" 2>&1 || true
   sleep 30
   ok "Pods restarted"
 }
@@ -250,7 +250,7 @@ case $CHOICE in
      check "target-app pod running" "kubectl get pods -n workshop -l app=target-app --field-selector=status.phase=Running | grep -q target"
      [[ -n "$N8N_IP" ]] && check "n8n healthz" "curl -sf --max-time 5 http://${N8N_IP}:5678/healthz -o /dev/null"
      [[ -n "$MCP_IP" ]] && check "mcp-server health" "curl -sf --max-time 5 http://${MCP_IP}:8000/health -o /dev/null"
-LINUX_MCP_IP=$(kubectl get svc linux-mcp-server -n workshop -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
+LINUX_MCP_IP=$(kubectl get svc linux-mcp-server -n clawops -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
 EW_IP=$(kubectl get svc event-watcher -n workshop -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
 [[ -n "$EW_IP" ]] && check "event-watcher health" "curl -sf --max-time 5 http://${EW_IP}:8002/health -o /dev/null"
 [[ -n "$LINUX_MCP_IP" ]] && check "linux-mcp-server health" "curl -sf --max-time 5 http://${LINUX_MCP_IP}:8001/health -o /dev/null"
@@ -504,7 +504,7 @@ info "Waiting 30s for pods to restart..."
 sleep 30
 
 # Linux MCP server
-kubectl apply -f "$WORKSHOP_DIR/linux-mcp-server/deployment.yaml" >> "$LOG_FILE" 2>&1
+kubectl apply -f "$K8S_DIR/clawops/linux-mcp-server/deployment.yaml" >> "$LOG_FILE" 2>&1
 
 # Event watcher
 kubectl apply -f "$WORKSHOP_DIR/event-watcher/deployment.yaml" >> "$LOG_FILE" 2>&1
@@ -534,7 +534,7 @@ kubectl rollout status deployment/clawops-dashboard -n clawops --timeout=60s >> 
   && ok "dashboard ready" || warn "dashboard not ready yet"
 kubectl rollout status deployment/event-watcher -n workshop --timeout=60s >> "$LOG_FILE" 2>&1 \
   && ok "event-watcher ready" || warn "event-watcher not ready"
-kubectl rollout status deployment/linux-mcp-server -n workshop --timeout=60s >> "$LOG_FILE" 2>&1 \
+kubectl rollout status deployment/linux-mcp-server -n clawops --timeout=60s >> "$LOG_FILE" 2>&1 \
   && ok "linux-mcp-server ready" || warn "linux-mcp-server not ready"
 kubectl rollout status deployment/target-app -n workshop --timeout=60s >> "$LOG_FILE" 2>&1 \
   && ok "target-app ready" || warn "target-app not ready yet"
