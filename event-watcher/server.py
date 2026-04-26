@@ -81,9 +81,16 @@ def get_severity(reason: str) -> str:
 # ── Extract deployment name from owner references ────────────────────────────
 def extract_deploy(involved: k8s_client.V1ObjectReference, ns: str) -> str:
     name = involved.name or ""
-    # strip random suffix heuristic: deployment-rs-pod → deployment
+    kind = involved.kind or ""
+    # Deployment/ReplicaSet/StatefulSet — use name directly (no suffix to strip)
+    if kind in ("Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"):
+        return name
+    # ReplicaSet — strip one suffix (deploy-<rs-hash>)
+    if kind == "ReplicaSet":
+        return name.rsplit("-", 1)[0] if "-" in name else name
+    # Pod — strip two suffixes (deploy-<rs-hash>-<pod-hash>)
     parts = name.rsplit("-", 2)
-    if len(parts) >= 3:
+    if len(parts) == 3:
         return parts[0]
     if len(parts) == 2:
         return parts[0]
