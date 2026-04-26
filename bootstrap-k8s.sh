@@ -138,7 +138,7 @@ restart_pods() {
   kubectl rollout restart deployment/n8n -n clawops >> "$LOG_FILE" 2>&1 || true
   kubectl rollout restart deployment/mcp-server -n clawops >> "$LOG_FILE" 2>&1 || true
   kubectl rollout restart deployment/clawops-dashboard -n clawops >> "$LOG_FILE" 2>&1 || true
-  kubectl rollout restart deployment/event-watcher -n workshop >> "$LOG_FILE" 2>&1 || true
+  kubectl rollout restart deployment/event-watcher -n clawops >> "$LOG_FILE" 2>&1 || true
   kubectl rollout restart deployment/linux-mcp-server -n clawops >> "$LOG_FILE" 2>&1 || true
   sleep 30
   ok "Pods restarted"
@@ -146,7 +146,7 @@ restart_pods() {
 
 apply_workshop_configmaps() {
   info "Applying workshop configmaps..."
-  kubectl apply -f "$WORKSHOP_DIR/event-watcher/deployment.yaml" >> "$LOG_FILE" 2>&1 || true
+  kubectl apply -f "$K8S_DIR/clawops/event-watcher/deployment.yaml" >> "$LOG_FILE" 2>&1 || true
   ok "Workshop configmaps applied"
 }
 
@@ -251,7 +251,7 @@ case $CHOICE in
      [[ -n "$N8N_IP" ]] && check "n8n healthz" "curl -sf --max-time 5 http://${N8N_IP}:5678/healthz -o /dev/null"
      [[ -n "$MCP_IP" ]] && check "mcp-server health" "curl -sf --max-time 5 http://${MCP_IP}:8000/health -o /dev/null"
 LINUX_MCP_IP=$(kubectl get svc linux-mcp-server -n clawops -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
-EW_IP=$(kubectl get svc event-watcher -n workshop -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
+EW_IP=$(kubectl get svc event-watcher -n clawops -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
 [[ -n "$EW_IP" ]] && check "event-watcher health" "curl -sf --max-time 5 http://${EW_IP}:8002/health -o /dev/null"
 [[ -n "$LINUX_MCP_IP" ]] && check "linux-mcp-server health" "curl -sf --max-time 5 http://${LINUX_MCP_IP}:8001/health -o /dev/null"
      check "ingress LB reachable" "curl -sf --max-time 10 http://${INGRESS_LB}/ -o /dev/null"
@@ -507,7 +507,7 @@ sleep 30
 kubectl apply -f "$K8S_DIR/clawops/linux-mcp-server/deployment.yaml" >> "$LOG_FILE" 2>&1
 
 # Event watcher
-kubectl apply -f "$WORKSHOP_DIR/event-watcher/deployment.yaml" >> "$LOG_FILE" 2>&1
+kubectl apply -f "$K8S_DIR/clawops/event-watcher/deployment.yaml" >> "$LOG_FILE" 2>&1
 ok "event-watcher" >> "$LOG_FILE" 2>&1
 ok "linux-mcp-server"
 
@@ -532,7 +532,7 @@ kubectl rollout status deployment/mcp-server -n clawops --timeout=120s >> "$LOG_
   && ok "mcp-server ready" || warn "mcp-server not ready yet"
 kubectl rollout status deployment/clawops-dashboard -n clawops --timeout=60s >> "$LOG_FILE" 2>&1 \
   && ok "dashboard ready" || warn "dashboard not ready yet"
-kubectl rollout status deployment/event-watcher -n workshop --timeout=60s >> "$LOG_FILE" 2>&1 \
+kubectl rollout status deployment/event-watcher -n clawops --timeout=60s >> "$LOG_FILE" 2>&1 \
   && ok "event-watcher ready" || warn "event-watcher not ready"
 kubectl rollout status deployment/linux-mcp-server -n clawops --timeout=60s >> "$LOG_FILE" 2>&1 \
   && ok "linux-mcp-server ready" || warn "linux-mcp-server not ready"
