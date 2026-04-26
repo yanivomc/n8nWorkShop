@@ -38,7 +38,7 @@ metadata:
   name: event-watcher-config
   namespace: workshop
 data:
-  WATCH_NAMESPACES:    "workshop,clawops"
+  WATCH_NAMESPACES:    "workshop"
   WATCH_LABELS:        ""
   WATCH_REASONS:       "OOMKilling,BackOff,Failed,Killing,Scheduled,Started,Pulled,Created,SuccessfulCreate,ScalingReplicaSet,FailedScheduling,Evicted,NodeNotReady,FailedMount,Unhealthy"
   N8N_WEBHOOK_URL:     "http://n8n.clawops.svc.cluster.local:5678/webhook/k8s-event-s6"
@@ -47,7 +47,7 @@ data:
   MAX_STORED_EVENTS:   "500"
   DB_PATH:             "/data/events.db"
   BATCH_WINDOW_SECONDS: "10"
-  COOLDOWN_SECONDS:     "300"
+  COOLDOWN_SECONDS:     "60"
 ---
 # ── PVC ───────────────────────────────────────────────────────────────────────
 apiVersion: v1
