@@ -869,17 +869,19 @@ function reloadTerminal() {
   var iframe = document.getElementById('terminal-iframe');
   iframe.src = iframe.src;
 }
+</script>
 
-// ════════════════════════════════════════════════════════════════════
+<script>
+// ═══════════════════════════════════════════════
 // MONITOR TAB
-// ════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════
 var _monInited = false;
 var _monESSE   = null;
 var _monEventCount = 0;
 var _monSelectedDeploy = null;
 var _monFilter = { ns: 'workshop', deploys: new Set(['all']) };
-var _monPods   = {};   // deploy → [{name,status,node,age}]
-var _monTlEvents = []; // last 8 lifecycle events
+var _monPods   = {};
+var _monTlEvents = [];
 
 function monInit() {
   if (_monInited) { monRefreshTopo(); return; }
@@ -892,59 +894,8 @@ function monInit() {
   monFetchEWStats();
 }
 
-function monLoadHistorical() {
-  // Fetch last 30 events from event-watcher DB to seed timeline + event feed
-  var ewBase = window.location.protocol + '//' + window.location.host + '/events-admin';
-  fetch(ewBase + '/events?limit=30')
-    .then(function(r){ return r.ok ? r.json() : []; })
-    .then(function(events) {
-      if (!Array.isArray(events)) return;
-      // Reverse so oldest first → prepend to feed, most recent at top
-      events.slice().reverse().forEach(function(ev) {
-        // Add to timeline
-        if (['Scheduled','Started','Pulled','OOMKilling','BackOff','Failed','Killing'].includes(ev.reason)) {
-          _monTlEvents.push(ev);
-        }
-        // Add to event feed (dimmed — historical)
-        monAddEventRow(ev, true);
-      });
-      if (_monTlEvents.length > 8) _monTlEvents = _monTlEvents.slice(-8);
-      monRenderTimeline();
-      var el = document.getElementById('mon-events');
-      // Add separator between historical and live
-      var sep = document.createElement('div');
-      sep.style.cssText = 'text-align:center;font-size:10px;color:#1E3A5F;padding:4px;border-bottom:1px solid #1E3A5F;font-family:Consolas,monospace;letter-spacing:1px';
-      sep.textContent = '─── LIVE ───';
-      el.insertBefore(sep, el.firstChild);
-    })
-    .catch(function(){});
-}
-
-function monShowErrors() {
-  // Switch to error filter in event feed
-  var ewBase = window.location.protocol + '//' + window.location.host + '/events-admin';
-  fetch(ewBase + '/events?limit=50&severity=error')
-    .then(function(r){ return r.ok ? r.json() : []; })
-    .then(function(events) {
-      var el = document.getElementById('mon-events');
-      el.innerHTML = '';
-      var hdr = document.createElement('div');
-      hdr.style.cssText = 'text-align:center;font-size:11px;color:#E24B4A;padding:6px;border-bottom:1px solid #1E3A5F;font-family:Consolas,monospace;letter-spacing:1px;display:flex;justify-content:space-between;align-items:center';
-      hdr.innerHTML = '<span>🔴 ERROR EVENTS (' + events.length + ')</span><span style="cursor:pointer;color:#8892A4" onclick="monLoadHistorical()">✕ clear</span>';
-      el.appendChild(hdr);
-      events.forEach(function(ev){ monAddEventRow(ev, false); });
-      if (!events.length) el.innerHTML += '<div style="color:#8892A4;text-align:center;padding:20px;font-size:13px">No error events stored</div>';
-    });
-}
-
-// ── SSE from event-watcher ────────────────────────────────────────
 function monConnectSSE() {
-  var cfg = window.CLAWOPS_CONFIG || {};
-  var ewBase = cfg.eventWatcherUrl || '';
-  if (!ewBase) {
-    // Try derive from current LB
-    ewBase = window.location.protocol + '//' + window.location.host + '/events-admin';
-  }
+  var ewBase = window.location.protocol + '//' + window.location.host + '/events-admin';
   try {
     _monESSE = new EventSource(ewBase + '/events/stream');
     _monESSE.onopen = function() {
@@ -956,27 +907,19 @@ function monConnectSSE() {
       document.getElementById('mon-live-txt').textContent = 'RECONNECTING';
     };
     _monESSE.onmessage = function(e) {
-      try {
-        var ev = JSON.parse(e.data);
-        if (ev.type === 'connected') return;
-        monHandleEvent(ev);
-      } catch(err) {}
+      try { var ev = JSON.parse(e.data); if (ev.type === 'connected') return; monHandleEvent(ev); } catch(err) {}
     };
-  } catch(e) {
-    document.getElementById('mon-live-txt').textContent = 'SSE ERROR';
-  }
+  } catch(e) { document.getElementById('mon-live-txt').textContent = 'SSE ERROR'; }
 }
 
 function monHandleEvent(ev) {
   _monEventCount++;
-  document.getElementById('mon-event-count').textContent = '(' + _monEventCount + ')';
-  // Only show if matches filter
+  var cnt = document.getElementById('mon-event-count');
+  if (cnt) cnt.textContent = '(' + _monEventCount + ')';
   var ns = document.getElementById('mon-ns').value;
   if (ns !== 'all' && ev.namespace !== ns) return;
   if (!_monFilter.deploys.has('all') && !_monFilter.deploys.has(ev.deploy)) return;
-
-  monAddEventRow(ev);
-  // Add to timeline if pod lifecycle event
+  monAddEventRow(ev, false);
   if (['Scheduled','Started','Pulled','OOMKilling','BackOff','Failed','Killing'].includes(ev.reason)) {
     _monTlEvents.unshift(ev);
     if (_monTlEvents.length > 8) _monTlEvents.pop();
@@ -987,61 +930,98 @@ function monHandleEvent(ev) {
 
 function monAddEventRow(ev, historical) {
   var container = document.getElementById('mon-events');
+  if (!container) return;
   var sev = ev.severity || 'info';
-  var icon = sev==='error'?'!':sev==='warn'?'~':ev.reason==='Started'||ev.reason==='Pulled'?'✓':'i';
-  var time = new Date(ev.ts).toLocaleTimeString('en',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  var icon = sev === 'error' ? '!' : sev === 'warn' ? '~' : (ev.reason === 'Started' || ev.reason === 'Pulled') ? '✓' : 'i';
+  var time = new Date(ev.ts).toLocaleTimeString('en', {hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
   var row = document.createElement('div');
   row.className = 'mon-ev-row';
   if (historical) row.style.opacity = '0.5';
-  row.innerHTML =
-    '<span style="font-family:Consolas,monospace;font-size:11px;color:#8892A4;flex-shrink:0;width:50px">' + time + '</span>' +
-    '<div class="mon-ev-icon ' + sev + '">' + icon + '</div>' +
-    '<div style="flex:1">' +
-      '<div style="font-weight:500;color:#e2e8f0;font-size:11px">' +
-        (ev.deploy||ev.name||'') +
-        '<span style="font-size:9px;padding:0 5px;border-radius:999px;background:#1E3A5F;color:#8892A4;margin-left:5px">' + (ev.reason||'') + '</span>' +
-      '</div>' +
-      '<div style="color:#8892A4;font-size:10px;margin-top:1px">' + (ev.message||'').substring(0,100) + '</div>' +
-    '</div>';
+  var deploySpan = document.createElement('span');
+  deploySpan.style.cssText = 'font-size:11px;padding:1px 7px;border-radius:999px;background:#1E3A5F;color:#8892A4;margin-left:5px';
+  deploySpan.textContent = ev.reason || '';
+  var nameEl = document.createElement('div');
+  nameEl.style.cssText = 'font-weight:500;color:#e2e8f0;font-size:13px';
+  nameEl.textContent = ev.deploy || ev.name || '';
+  nameEl.appendChild(deploySpan);
+  var msgEl = document.createElement('div');
+  msgEl.style.cssText = 'color:#8892A4;font-size:12px;margin-top:2px';
+  msgEl.textContent = (ev.message || '').substring(0, 100);
+  var body = document.createElement('div');
+  body.style.flex = '1';
+  body.appendChild(nameEl);
+  body.appendChild(msgEl);
+  var timeEl = document.createElement('span');
+  timeEl.style.cssText = 'font-family:Consolas,monospace;font-size:11px;color:#8892A4;flex-shrink:0;width:58px;padding-top:1px';
+  timeEl.textContent = time;
+  var iconEl = document.createElement('div');
+  iconEl.className = 'mon-ev-icon ' + sev;
+  iconEl.textContent = icon;
+  row.appendChild(timeEl);
+  row.appendChild(iconEl);
+  row.appendChild(body);
   container.insertBefore(row, container.firstChild);
-  // Keep max 60 rows
   while (container.children.length > 60) container.removeChild(container.lastChild);
 }
 
-// ── Topology from kubectl via MCP ────────────────────────────────
+function monLoadHistorical() {
+  var ewBase = window.location.protocol + '//' + window.location.host + '/events-admin';
+  fetch(ewBase + '/events?limit=30')
+    .then(function(r){ return r.ok ? r.json() : []; })
+    .then(function(events) {
+      if (!Array.isArray(events)) return;
+      events.slice().reverse().forEach(function(ev) {
+        if (['Scheduled','Started','Pulled','OOMKilling','BackOff','Failed','Killing'].includes(ev.reason)) {
+          _monTlEvents.push(ev);
+        }
+        monAddEventRow(ev, true);
+      });
+      if (_monTlEvents.length > 8) _monTlEvents = _monTlEvents.slice(-8);
+      monRenderTimeline();
+      var el = document.getElementById('mon-events');
+      if (el) {
+        var sep = document.createElement('div');
+        sep.style.cssText = 'text-align:center;font-size:10px;color:#1E3A5F;padding:4px;border-bottom:1px solid #1E3A5F;font-family:Consolas,monospace;letter-spacing:1px';
+        sep.textContent = '─── LIVE ───';
+        el.insertBefore(sep, el.firstChild);
+      }
+    }).catch(function(){});
+}
+
+function monShowErrors() {
+  var ewBase = window.location.protocol + '//' + window.location.host + '/events-admin';
+  fetch(ewBase + '/events?limit=50&severity=error')
+    .then(function(r){ return r.ok ? r.json() : []; })
+    .then(function(events) {
+      var el = document.getElementById('mon-events');
+      if (!el) return;
+      el.innerHTML = '';
+      var hdr = document.createElement('div');
+      hdr.style.cssText = 'text-align:center;font-size:11px;color:#E24B4A;padding:6px;border-bottom:1px solid #1E3A5F;font-family:Consolas,monospace;display:flex;justify-content:space-between;align-items:center';
+      hdr.innerHTML = '<span>🔴 ERROR EVENTS (' + events.length + ')</span><span style="cursor:pointer;color:#8892A4" onclick="monLoadHistorical()">✕ close</span>';
+      el.appendChild(hdr);
+      events.forEach(function(ev){ monAddEventRow(ev, false); });
+    });
+}
+
 function monRefreshTopo() {
   var cfg = window.CLAWOPS_CONFIG || {};
-  var ns = document.getElementById('mon-ns').value;
+  var ns = document.getElementById('mon-ns') ? document.getElementById('mon-ns').value : 'workshop';
   var namespaces = ns === 'all' ? ['workshop','clawops'] : [ns];
   _monPods = {};
-  // Also clear synthetic timeline entries so they get re-synthesized fresh
   _monTlEvents = _monTlEvents.filter(function(e){ return !e._synthetic; });
-
-  var fetchNs = function(nsName) {
-    return fetch((cfg.basePath||'') + '/api/kubectl', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({command: 'get pods -n ' + nsName + ' -o json'})
-    })
-    .then(function(r){return r.ok?r.json():null;})
-    .catch(function(){return null;});
-  };
-
-  // Use MCP directly
-  var mcpUrl = cfg.mcpInternal || 'http://mcp-server.clawops.svc.cluster.local:8000';
-  // From browser we can't hit internal — use dashboard proxy
   Promise.all(namespaces.map(function(nsName) {
-    return fetch((cfg.basePath||'') + '/api/pods/' + nsName)
-      .then(function(r){return r.ok?r.json():null;})
-      .catch(function(){return null;});
+    return fetch((cfg.basePath || '') + '/api/pods/' + nsName)
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .catch(function(){ return null; });
   })).then(function(results) {
     results.forEach(function(data, i) {
       if (!data) return;
-      var nsName = namespaces[i];
-      monParsePods(data, nsName);
+      monParsePods(data, namespaces[i]);
     });
     monRenderTopo();
     monRenderChips();
+    monRenderTimeline();
     monRefreshStats();
   });
 }
@@ -1049,20 +1029,16 @@ function monRefreshTopo() {
 function monParsePods(data, ns) {
   var items = (data && data.items) ? data.items : (Array.isArray(data) ? data : []);
   items.forEach(function(pod) {
-    var meta = pod.metadata || {};
-    var spec = pod.spec || {};
-    var status = pod.status || {};
-    // derive deploy from owner references
+    var meta = pod.metadata || {}, spec = pod.spec || {}, status = pod.status || {};
     var deploy = '';
     var owners = meta.ownerReferences || [];
     if (owners.length) {
-      var rs = owners.find(function(o){return o.kind==='ReplicaSet';});
+      var rs = owners.find(function(o){ return o.kind === 'ReplicaSet'; });
       if (rs) deploy = rs.name.replace(/-[a-z0-9]+$/, '');
-      var dep = owners.find(function(o){return o.kind==='Deployment';});
+      var dep = owners.find(function(o){ return o.kind === 'Deployment'; });
       if (dep) deploy = dep.name;
     }
     if (!deploy) deploy = meta.name;
-
     var phase = (status.phase || 'Unknown').toLowerCase();
     var cs = (status.containerStatuses || [])[0];
     var podStatus = phase;
@@ -1073,50 +1049,25 @@ function monParsePods(data, ns) {
     }
     if (status.phase === 'Pending') podStatus = 'pending';
     if (meta.deletionTimestamp) podStatus = 'terminating';
-    if (podStatus.includes('running') || podStatus === 'running') podStatus = 'running';
+    if (podStatus.includes('running')) podStatus = 'running';
     else if (podStatus.includes('backoff') || podStatus.includes('error') || podStatus === 'failed') podStatus = 'failed';
     else if (podStatus === 'terminating') podStatus = 'terminating';
     else if (podStatus === 'pending' || podStatus.includes('pull') || podStatus.includes('init')) podStatus = 'pending';
     else podStatus = 'unknown';
-
     var key = ns + ':' + deploy;
     if (!_monPods[key]) _monPods[key] = {deploy:deploy, ns:ns, pods:[]};
-    _monPods[key].pods.push({
-      name: meta.name,
-      shortName: meta.name.split('-').slice(-2).join('-'),
-      status: podStatus,
-      node: spec.nodeName || '',
-      age: monAge(meta.creationTimestamp)
-    });
-
-    // ── Synthesize timeline from pod conditions + container status ──
-    // Only add if not already in timeline (avoid duplicates on refresh)
+    _monPods[key].pods.push({name:meta.name, shortName:meta.name.split('-').slice(-2).join('-'), status:podStatus, node:spec.nodeName||'', age:monAge(meta.creationTimestamp)});
     var alreadyIn = _monTlEvents.find(function(e){ return e.name === meta.name && e._synthetic; });
     if (!alreadyIn && meta.creationTimestamp) {
       var conds = status.conditions || [];
-      var readyCond  = conds.find(function(c){ return c.type==='Ready'; });
-      var initCond   = conds.find(function(c){ return c.type==='Initialized'; });
-      var startedTs  = (readyCond && readyCond.lastTransitionTime) ? readyCond.lastTransitionTime : null;
-      var reason = podStatus === 'running' ? 'Started' :
-                   podStatus === 'failed'  ? 'Failed'  :
-                   podStatus === 'terminating' ? 'Killing' : 'Scheduled';
-      _monTlEvents.push({
-        _synthetic: true,
-        ts: startedTs || meta.creationTimestamp,
-        namespace: ns,
-        deploy: deploy,
-        name: meta.name,
-        reason: reason,
-        message: podStatus === 'running'
-          ? 'Running on ' + (spec.nodeName || 'unknown') + ' · age ' + monAge(meta.creationTimestamp)
-          : podStatus,
-        severity: podStatus === 'failed' ? 'error' : podStatus === 'terminating' ? 'warn' : 'info'
-      });
+      var readyCond = conds.find(function(c){ return c.type === 'Ready'; });
+      var startedTs = (readyCond && readyCond.lastTransitionTime) ? readyCond.lastTransitionTime : null;
+      var reason = podStatus === 'running' ? 'Started' : podStatus === 'failed' ? 'Failed' : podStatus === 'terminating' ? 'Killing' : 'Scheduled';
+      _monTlEvents.push({_synthetic:true, ts:startedTs||meta.creationTimestamp, namespace:ns, deploy:deploy, name:meta.name, reason:reason, message:podStatus === 'running' ? 'Running on ' + (spec.nodeName||'unknown') + ' · age ' + monAge(meta.creationTimestamp) : podStatus, severity:podStatus === 'failed' ? 'error' : podStatus === 'terminating' ? 'warn' : 'info'});
     }
   });
-  // Keep last 8, sorted newest first
   _monTlEvents.sort(function(a,b){ return new Date(b.ts) - new Date(a.ts); });
-  if (_monTlEvents.length > 8) _monTlEvents = _monTlEvents.slice(0, 8);
+  if (_monTlEvents.length > 8) _monTlEvents = _monTlEvents.slice(0,8);
 }
 
 function monAge(ts) {
@@ -1129,6 +1080,7 @@ function monAge(ts) {
 
 function monRenderChips() {
   var el = document.getElementById('mon-chips');
+  if (!el) return;
   el.innerHTML = '';
   function makeChip(label, key) {
     var s = document.createElement('span');
@@ -1149,10 +1101,7 @@ function monToggleDeploy(name) {
     else _monFilter.deploys.add(name);
   }
   _monSelectedDeploy = null;
-  monRenderTopo();
-  monRenderChips();
-  monRenderTimeline();
-  monRefreshStats();
+  monRenderTopo(); monRenderChips(); monRenderTimeline(); monRefreshStats();
 }
 
 function monApplyFilter() {
@@ -1165,37 +1114,50 @@ function monApplyFilter() {
 
 function monRenderTopo() {
   var el = document.getElementById('mon-topo');
+  if (!el) return;
+  var ns = document.getElementById('mon-ns') ? document.getElementById('mon-ns').value : 'all';
   var keys = Object.keys(_monPods).filter(function(k) {
     var d = _monPods[k];
-    var ns = document.getElementById('mon-ns').value;
     if (ns !== 'all' && d.ns !== ns) return false;
     if (!_monFilter.deploys.has('all') && !_monFilter.deploys.has(d.deploy)) return false;
     return true;
   });
   if (!keys.length) { el.innerHTML = '<div style="color:#8892A4;font-size:12px;text-align:center;padding:30px">No pods found — checking cluster...</div>'; return; }
-
-  el.innerHTML = keys.map(function(k) {
+  el.innerHTML = '';
+  keys.forEach(function(k) {
     var d = _monPods[k];
-    var running = d.pods.filter(function(p){return p.status==='running';}).length;
+    var running = d.pods.filter(function(p){ return p.status === 'running'; }).length;
     var total = d.pods.length;
-    var badgeColor = running===total?'#00C896':running===0?'#E24B4A':'#EF9F27';
+    var badgeColor = running === total ? '#00C896' : running === 0 ? '#E24B4A' : '#EF9F27';
     var sel = _monSelectedDeploy === k;
-    return '<div class="mon-deploy-row ' + (sel?'sel':'') + '" data-k="' + k + '" onclick="monSelectDeploy(this.dataset.k)">' +
-      '<div style="flex:1">' +
-        '<div style="font-size:12px;font-weight:500;color:#e2e8f0;font-family:Consolas,monospace">' + d.deploy + '</div>' +
-        '<div style="font-size:13px;color:#8892A4;margin-top:1px">' + d.ns + '</div>' +
-      '</div>' +
-      '<span style="font-size:12px;padding:1px 7px;border-radius:999px;background:' + badgeColor + '22;color:' + badgeColor + ';font-family:Consolas,monospace">' + running + '/' + total + '</span>' +
-      '<div style="display:flex;gap:3px;flex-wrap:wrap;max-width:120px">' +
-        d.pods.map(function(p) {
-          return '<div class="mon-pdot ' + p.status + '" title="' + p.name + ' · ' + p.status + ' · ' + p.age + '">' +
-            (p.status==='running'?'OK':p.status==='pending'?'…':p.status==='terminating'?'T':'!') +
-          '</div>';
-        }).join('') +
-      '</div>' +
-      '<svg width="8" height="8" viewBox="0 0 10 10" style="transform:' + (sel?'rotate(90deg)':'none') + ';transition:transform .2s;color:#8892A4"><path d="M3 1l4 4-4 4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>' +
-    '</div>';
-  }).join('');
+    var row = document.createElement('div');
+    row.className = 'mon-deploy-row' + (sel ? ' sel' : '');
+    row.dataset.k = k;
+    row.onclick = function(){ monSelectDeploy(this.dataset.k); };
+    var nameDiv = document.createElement('div');
+    nameDiv.style.flex = '1';
+    var nameEl = document.createElement('div');
+    nameEl.style.cssText = 'font-size:14px;font-weight:500;color:#e2e8f0;font-family:Consolas,monospace';
+    nameEl.textContent = d.deploy;
+    var nsEl = document.createElement('div');
+    nsEl.style.cssText = 'font-size:11px;color:#8892A4;margin-top:2px';
+    nsEl.textContent = d.ns;
+    nameDiv.appendChild(nameEl); nameDiv.appendChild(nsEl);
+    var badge = document.createElement('span');
+    badge.style.cssText = 'font-size:11px;padding:2px 9px;border-radius:999px;font-family:Consolas,monospace;background:' + badgeColor + '22;color:' + badgeColor;
+    badge.textContent = running + '/' + total;
+    var dots = document.createElement('div');
+    dots.style.cssText = 'display:flex;gap:3px;flex-wrap:wrap;max-width:120px';
+    d.pods.forEach(function(p) {
+      var dot = document.createElement('div');
+      dot.className = 'mon-pdot ' + p.status;
+      dot.title = p.name + ' · ' + p.status + ' · ' + p.age;
+      dot.textContent = p.status === 'running' ? 'OK' : p.status === 'pending' ? '…' : p.status === 'terminating' ? 'T' : '!';
+      dots.appendChild(dot);
+    });
+    row.appendChild(nameDiv); row.appendChild(badge); row.appendChild(dots);
+    el.appendChild(row);
+  });
 }
 
 function monSelectDeploy(key) {
@@ -1203,151 +1165,116 @@ function monSelectDeploy(key) {
   var d = _monPods[key];
   var drawer = document.getElementById('mon-drawer');
   var lbl = document.getElementById('mon-selected-deploy');
-  if (!_monSelectedDeploy || !d) {
-    drawer.style.display = 'none';
-    lbl.textContent = 'click deployment to inspect';
-    monRenderTopo(); return;
+  if (!_monSelectedDeploy || !d) { if(drawer) drawer.style.display='none'; if(lbl) lbl.textContent='click deployment to inspect'; monRenderTopo(); return; }
+  if(lbl) lbl.textContent = d.deploy;
+  if(drawer) {
+    drawer.style.display = 'block';
+    drawer.innerHTML = '';
+    var title = document.createElement('div');
+    title.style.cssText = 'font-size:13px;font-weight:600;color:#00D4FF;margin-bottom:8px;font-family:Consolas,monospace';
+    title.textContent = '▸ ' + d.deploy + ' — pods';
+    drawer.appendChild(title);
+    d.pods.forEach(function(p) {
+      var c = p.status === 'running' ? '#00C896' : p.status === 'failed' ? '#E24B4A' : p.status === 'terminating' ? '#AFA9EC' : '#EF9F27';
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:4px';
+      var kind = document.createElement('span');
+      kind.style.cssText = 'font-size:9px;padding:1px 6px;border-radius:999px;background:#1E3A5F;color:#8892A4;font-family:Consolas,monospace';
+      kind.textContent = 'Pod';
+      var name = document.createElement('span');
+      name.style.cssText = 'font-family:Consolas,monospace;font-size:12px;color:#8892A4';
+      name.textContent = p.shortName;
+      var status = document.createElement('span');
+      status.style.cssText = 'font-size:9px;color:' + c + ';margin-left:auto';
+      status.textContent = p.status;
+      var node = document.createElement('span');
+      node.style.cssText = 'font-size:9px;color:#8892A4';
+      node.textContent = p.node ? '→ ' + p.node : '';
+      row.appendChild(kind); row.appendChild(name); row.appendChild(status); row.appendChild(node);
+      drawer.appendChild(row);
+    });
   }
-  lbl.textContent = d.deploy;
-  drawer.style.display = 'block';
-  // Show pod details
-  drawer.innerHTML =
-    '<div style="font-size:13px;font-weight:600;color:#00D4FF;margin-bottom:6px;font-family:Consolas,monospace">▸ ' + d.deploy + ' — connected objects</div>' +
-    '<div style="display:flex;flex-direction:column;gap:4px">' +
-      '<div style="display:flex;align-items:center;gap:6px">' +
-        '<span style="font-size:12px;padding:1px 6px;border-radius:999px;background:rgba(0,212,255,0.12);color:#00D4FF;font-family:Consolas,monospace">Deployment</span>' +
-        '<span style="font-family:Consolas,monospace;font-size:13px;color:#e2e8f0">' + d.deploy + '</span>' +
-        '<span style="font-size:13px;color:#8892A4;margin-left:auto">' + d.ns + '</span>' +
-      '</div>' +
-      '<div style="padding-left:14px;border-left:1.5px solid #1E3A5F;display:flex;flex-direction:column;gap:3px;margin-left:6px;margin-top:2px">' +
-        d.pods.map(function(p) {
-          var c = p.status==='running'?'#00C896':p.status==='failed'?'#E24B4A':p.status==='terminating'?'#AFA9EC':'#EF9F27';
-          return '<div style="display:flex;align-items:center;gap:6px">' +
-            '<span style="font-size:12px;padding:1px 6px;border-radius:999px;background:#1E3A5F;color:#8892A4;font-family:Consolas,monospace">Pod</span>' +
-            '<span style="font-family:Consolas,monospace;font-size:13px;color:#8892A4">' + p.shortName + '</span>' +
-            '<span style="font-size:12px;color:' + c + ';margin-left:auto">' + p.status + '</span>' +
-            '<span style="font-size:12px;color:#8892A4">' + (p.node?'→ '+p.node:'') + '</span>' +
-          '</div>';
-        }).join('') +
-      '</div>' +
-    '</div>';
   monRenderTopo();
 }
 
-// ── Timeline ─────────────────────────────────────────────────────
 function monRenderTimeline() {
   var el = document.getElementById('mon-timeline');
-  // Filter by selected deployment
-  var ns = document.getElementById('mon-ns').value;
+  if (!el) return;
+  var ns = document.getElementById('mon-ns') ? document.getElementById('mon-ns').value : 'all';
   var filtered = _monTlEvents.filter(function(ev) {
     if (ns !== 'all' && ev.namespace !== ns) return false;
     if (!_monFilter.deploys.has('all') && !_monFilter.deploys.has(ev.deploy)) return false;
     return true;
   });
   if (!filtered.length) {
-    el.innerHTML = '<div style="color:#8892A4;font-size:13px;text-align:center;padding:14px">' +
-      (_monTlEvents.length ? 'No lifecycle events for selected deployment' : 'Waiting for lifecycle events...') +
-    '</div>';
+    el.innerHTML = '<div style="color:#8892A4;font-size:13px;text-align:center;padding:14px">' + (_monTlEvents.length ? 'No events for selected deployment yet' : 'Waiting for lifecycle events...') + '</div>';
     return;
   }
-  el.innerHTML = filtered.map(function(ev) {
+  el.innerHTML = '';
+  filtered.forEach(function(ev) {
     var sev = ev.severity || 'info';
-    var color = sev==='error'?'#E24B4A':sev==='warn'?'#EF9F27':'#00C896';
-    var time = new Date(ev.ts).toLocaleTimeString('en',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
-    return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
-      '<div style="font-family:Consolas,monospace;font-size:12px;color:#8892A4;width:50px;flex-shrink:0">' + time + '</div>' +
-      '<div style="font-family:Consolas,monospace;font-size:13px;color:#8892A4;width:100px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (ev.deploy||ev.name||'') + '</div>' +
-      '<div style="flex:1;height:16px;background:#080C18;border-radius:3px;position:relative;overflow:hidden">' +
-        '<div style="position:absolute;top:0;left:0;height:100%;width:100%;background:' + color + '22;border-left:3px solid ' + color + ';display:flex;align-items:center;padding:0 6px">' +
-          '<span style="font-family:Consolas,monospace;font-size:13px;color:' + color + '">' + (ev.reason||'') + '</span>' +
-        '</div>' +
-      '</div>' +
-      '<div style="font-size:13px;color:#8892A4;width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (ev.message||'').substring(0,60) + '</div>' +
-    '</div>';
-  }).join('');
+    var color = sev === 'error' ? '#E24B4A' : sev === 'warn' ? '#EF9F27' : '#00C896';
+    var time = new Date(ev.ts).toLocaleTimeString('en', {hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    var row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:6px';
+    var t = document.createElement('div'); t.style.cssText = 'font-family:Consolas,monospace;font-size:11px;color:#8892A4;width:58px;flex-shrink:0'; t.textContent = time;
+    var dep = document.createElement('div'); dep.style.cssText = 'font-family:Consolas,monospace;font-size:12px;color:#8892A4;width:120px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'; dep.textContent = ev.deploy || ev.name || '';
+    var bar = document.createElement('div'); bar.style.cssText = 'flex:1;height:20px;background:#080C18;border-radius:3px;position:relative;overflow:hidden';
+    var seg = document.createElement('div'); seg.style.cssText = 'position:absolute;top:0;left:0;height:100%;width:100%;background:' + color + '22;border-left:3px solid ' + color + ';display:flex;align-items:center;padding:0 6px';
+    var lbl = document.createElement('span'); lbl.style.cssText = 'font-family:Consolas,monospace;font-size:10px;color:' + color; lbl.textContent = ev.reason || '';
+    seg.appendChild(lbl); bar.appendChild(seg);
+    var msg = document.createElement('div'); msg.style.cssText = 'font-size:12px;color:#8892A4;width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'; msg.textContent = (ev.message||'').substring(0,60);
+    row.appendChild(t); row.appendChild(dep); row.appendChild(bar); row.appendChild(msg);
+    el.appendChild(row);
+  });
 }
 
-// ── Stats ─────────────────────────────────────────────────────────
 function monRefreshStats() {
-  var ns = document.getElementById('mon-ns').value;
-  var total=0, running=0;
+  var ns = document.getElementById('mon-ns') ? document.getElementById('mon-ns').value : 'all';
+  var total = 0, running = 0;
   Object.values(_monPods).forEach(function(d) {
     if (ns !== 'all' && d.ns !== ns) return;
     if (!_monFilter.deploys.has('all') && !_monFilter.deploys.has(d.deploy)) return;
     total += d.pods.length;
-    running += d.pods.filter(function(p){return p.status==='running';}).length;
+    running += d.pods.filter(function(p){ return p.status === 'running'; }).length;
   });
-  document.getElementById('mon-s-running').textContent = running || '—';
-  document.getElementById('mon-s-total').textContent = total || '—';
-  document.getElementById('mon-s-events').textContent = _monEventCount || '0';
+  var r = document.getElementById('mon-s-running'); if(r) r.textContent = running || '—';
+  var t = document.getElementById('mon-s-total');   if(t) t.textContent = total || '—';
+  var e = document.getElementById('mon-s-events');  if(e) e.textContent = _monEventCount || '0';
 }
 
-// Update errors from event-watcher stats
 function monFetchEWStats() {
-  var cfg = window.CLAWOPS_CONFIG || {};
   var ewBase = window.location.protocol + '//' + window.location.host + '/events-admin';
-  fetch(ewBase + '/stats').then(function(r){return r.json();}).then(function(s) {
-    document.getElementById('mon-s-errors').textContent = s.errors || '0';
+  fetch(ewBase + '/stats').then(function(r){ return r.json(); }).then(function(s) {
+    var el = document.getElementById('mon-s-errors'); if(el) el.textContent = s.errors || '0';
   }).catch(function(){});
 }
-setInterval(monFetchEWStats, 15000);
 
-
-function clearChat() {
-  var box = document.getElementById('chat-messages');
-  box.innerHTML = '<div class="chat-msg system"><div class="meta">SYSTEM</div>Chat cleared — ready for new incidents.<div class="ts">' + new Date().toISOString().substring(11,19) + '</div></div>';
-}
-
+// K8s Event Demo — fires crash, shows result in LAST API RESPONSE
 function runKubeEventScenario() {
-  // Get first registered instance key (same as selectedId in trigger())
-  var keys = Object.keys(instances || {});
-  if (!keys.length) {
-    var _b=document.getElementById('chat-messages'); if(_b){var _d=document.createElement('div');_d.className='chat-msg system';_d.innerHTML='<div class="meta">SYSTEM</div>⚠️ No target-app instances registered. Deploy target-app first, then refresh.<div class="ts">'+new Date().toISOString().substring(11,19)+'</div>';_b.appendChild(_d);_b.scrollTop=_b.scrollHeight;}
+  if (!selectedId || !instances[selectedId]) {
+    showResp('demo','k8s-event-demo','{"error":"No target-app instance selected. Click an instance first."}',true);
     return;
   }
-  var instId = keys[0];
-  var inst = instances[instId];
-
-  // Use global function or fallback to direct DOM append
-  var _chatBox = document.getElementById('chat-messages');
-  function _addMsg(txt) {
-    if (typeof addChatMsg === 'function') { addChatMsg('system', txt); return; }
-    if (!_chatBox) return;
-    var d = document.createElement('div');
-    d.className = 'chat-msg system';
-    d.innerHTML = '<div class="meta">SYSTEM</div>' + txt.replace(/\n/g,'<br>') + '<div class="ts">' + new Date().toISOString().substring(11,19) + '</div>';
-    _chatBox.appendChild(d);
-    _chatBox.scrollTop = _chatBox.scrollHeight;
-  }
-  _addMsg('🔴 **K8s Event Demo** — triggering CRASH scenario on `' + instId + '`\n\n**Pipeline:** pod crashes → K8s events fire → event-watcher catches in <1s → 10s batch window → S6 AI investigates → response appears here\n\n⏳ Watch the MONITOR tab live events panel...');
-
-  // Use the exact same path as trigger('crash') — goes through dashboard backend
-  var base = API_BASE + '/api/chaos/' + encodeURIComponent(instId) + '/action';
   var demoBtn = document.getElementById('btn-k8s-demo');
-  var demoSt = document.getElementById('st-k8s-demo');
+  var demoSt  = document.getElementById('st-k8s-demo');
   if(demoBtn) demoBtn.classList.add('running');
-  if(demoSt) demoSt.textContent = 'triggering...';
-  // Switch to chat to show pipeline messages
-  switchTab('chat');
+  if(demoSt)  demoSt.textContent = 'triggering...';
+  var base = API_BASE + '/api/chaos/' + encodeURIComponent(selectedId) + '/action';
   fetchJ(base + '/crash', 'POST', {delay_seconds: 5})
     .then(function(res) {
+      showResp(selectedId, 'k8s-event-demo', JSON.stringify(res,null,2), false);
       if(demoSt) demoSt.textContent = 'watching...';
-      _addMsg('✅ Crash triggered — pod SIGKILL in 5s\n📡 Watching for: Killing → BackOff → Failed → batch flush → S6 analysis (~15-20s total)');
-      // Switch to monitor tab to show live events
-      setTimeout(function(){ switchTab('monitor'); }, 1000);
-      setTimeout(function(){
-        if(demoBtn) demoBtn.classList.remove('running');
-        if(demoSt) demoSt.textContent = 'done';
-        setTimeout(function(){ if(demoSt) demoSt.textContent=''; }, 5000);
-      }, 25000);
+      log('ok','[k8s-event-demo] crash triggered — event-watcher forward to S6 in ~15s');
+      setTimeout(function(){ if(demoBtn) demoBtn.classList.remove('running'); if(demoSt) demoSt.textContent=''; }, 20000);
     })
     .catch(function(e) {
-      _addMsg('⚠️ Crash trigger failed: ' + e + ' — try clicking CRASH POD on the dashboard directly');
+      showResp(selectedId,'k8s-event-demo','{"error":"'+e+'"}',true);
+      if(demoBtn) demoBtn.classList.remove('running');
+      if(demoSt)  demoSt.textContent = 'error';
     });
 }
 
-// expose registered instances globally for scenario access
-var _registeredInstances = [];
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════════════════

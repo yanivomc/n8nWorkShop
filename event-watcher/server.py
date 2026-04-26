@@ -185,40 +185,38 @@ async def forward_to_n8n(ev: dict):
 
 # ── K8s event watcher (runs in thread) ───────────────────────────────────────
 def watch_namespace(ns: str, loop: asyncio.AbstractEventLoop):
-    v1 = k8s_client.CoreV1Api()
-    w = watch.Watch()
-    log.info(f"Watching namespace: {ns}")
-    field_selector = f"involvedObject.namespace={ns}" if ns != "*" else ""
-    try:
-        for raw in w.stream(v1.list_namespaced_event, namespace=ns,
-                            field_selector=field_selector if field_selector else None,
-                            timeout_seconds=0):
-            obj = raw["object"]
-            reason = obj.reason or ""
-
-            # filter by configured reasons
-            if WATCH_REASONS and reason not in WATCH_REASONS:
-                continue
-
-            involved = obj.involved_object
-            ev = {
-                "ts":        datetime.now(timezone.utc).isoformat(),
-                "namespace": obj.metadata.namespace or ns,
-                "kind":      involved.kind or "Unknown",
-                "name":      involved.name or "",
-                "reason":    reason,
-                "message":   (obj.message or "")[:300],
-                "severity":  get_severity(reason),
-                "source":    obj.source.component if obj.source else "",
-                "deploy":    extract_deploy(involved, ns),
-                "node":      obj.source.host if obj.source else "",
-            }
-            log.info(f"EVENT | {ev['namespace']} | {ev['severity'].upper()} | {ev['reason']} | {ev['name']}")
-            store_event(ev)
-            asyncio.run_coroutine_threadsafe(broadcast(ev), loop)
-            asyncio.run_coroutine_threadsafe(forward_to_n8n(ev), loop)
-    except Exception as e:
-        log.error(f"Watch error ({ns}): {e}")
+    """Watch K8s events for a namespace — auto-reconnects forever on any error."""
+    while True:
+        try:
+            v1 = k8s_client.CoreV1Api()
+            w = watch.Watch()
+            log.info(f"Watching namespace: {ns}")
+            for raw in w.stream(v1.list_namespaced_event, namespace=ns,
+                                timeout_seconds=0):
+                obj = raw["object"]
+                reason = obj.reason or ""
+                if WATCH_REASONS and reason not in WATCH_REASONS:
+                    continue
+                involved = obj.involved_object
+                ev = {
+                    "ts":        datetime.now(timezone.utc).isoformat(),
+                    "namespace": obj.metadata.namespace or ns,
+                    "kind":      involved.kind or "Unknown",
+                    "name":      involved.name or "",
+                    "reason":    reason,
+                    "message":   (obj.message or "")[:300],
+                    "severity":  get_severity(reason),
+                    "source":    obj.source.component if obj.source else "",
+                    "deploy":    extract_deploy(involved, ns),
+                    "node":      obj.source.host if obj.source else "",
+                }
+                log.info(f"EVENT | {ev['namespace']} | {ev['severity'].upper()} | {ev['reason']} | {ev['name']}")
+                store_event(ev)
+                asyncio.run_coroutine_threadsafe(broadcast(ev), loop)
+                asyncio.run_coroutine_threadsafe(forward_to_n8n(ev), loop)
+        except Exception as e:
+            log.warning(f"Watch stream lost ({ns}): {e} — reconnecting in 5s")
+            import time as _time; _time.sleep(5)
 
 # ── App startup ───────────────────────────────────────────────────────────────
 _loop: asyncio.AbstractEventLoop = None
