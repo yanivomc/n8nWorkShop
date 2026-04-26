@@ -1332,10 +1332,7 @@ function runKubeEventScenario() {
   fetchJ(base + '/crash', 'POST', {delay_seconds: 5})
     .then(function(res) {
       if(demoSt) demoSt.textContent = 'watching...';
-      addChatMsg('system',
-        '✅ Crash triggered — pod SIGKILL in 5s\n' +
-        '📡 Watching for: Killing → BackOff → Failed → batch flush → S6 analysis (~15-20s total)'
-      );
+      _addMsg('✅ Crash triggered — pod SIGKILL in 5s\n📡 Watching for: Killing → BackOff → Failed → batch flush → S6 analysis (~15-20s total)');
       // Switch to monitor tab to show live events
       setTimeout(function(){ switchTab('monitor'); }, 1000);
       setTimeout(function(){
