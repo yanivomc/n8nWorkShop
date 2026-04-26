@@ -1008,6 +1008,8 @@ function monRefreshTopo() {
   var ns = document.getElementById('mon-ns').value;
   var namespaces = ns === 'all' ? ['workshop','clawops'] : [ns];
   _monPods = {};
+  // Also clear synthetic timeline entries so they get re-synthesized fresh
+  _monTlEvents = _monTlEvents.filter(function(e){ return !e._synthetic; });
 
   var fetchNs = function(nsName) {
     return fetch((cfg.basePath||'') + '/api/kubectl', {
