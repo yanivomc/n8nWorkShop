@@ -252,6 +252,8 @@ case $CHOICE in
      [[ -n "$MCP_IP" ]] && check "mcp-server health" "curl -sf --max-time 5 http://${MCP_IP}:8000/health -o /dev/null"
 LINUX_MCP_IP=$(kubectl get svc linux-mcp-server -n clawops -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
 EW_IP=$(kubectl get svc event-watcher -n clawops -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
+CL_IP=$(kubectl get svc target-app -n workshop -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
+[[ -n "$CL_IP" ]] && check "chaos-loader sidecar health" "curl -sf --max-time 5 http://${CL_IP}:8003/health -o /dev/null"
 [[ -n "$EW_IP" ]] && check "event-watcher health" "curl -sf --max-time 5 http://${EW_IP}:8002/health -o /dev/null"
 [[ -n "$LINUX_MCP_IP" ]] && check "linux-mcp-server health" "curl -sf --max-time 5 http://${LINUX_MCP_IP}:8001/health -o /dev/null"
      check "ingress LB reachable" "curl -sf --max-time 10 http://${INGRESS_LB}/ -o /dev/null"
