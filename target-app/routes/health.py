@@ -1,51 +1,38 @@
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 from config import logger, APP_NAME, APP_VERSION, NAMESPACE, POD_NAME
-import time
+import time, os
 
 router = APIRouter()
 _start_time = time.time()
-_unhealthy = False
-
+_FLAG = "/tmp/.unhealthy"
 
 def set_unhealthy(state: bool):
-    global _unhealthy
-    _unhealthy = state
-    logger.warning(f"Health state set to {'UNHEALTHY' if state else 'HEALTHY'}")
-
+    if state:
+        open(_FLAG, "w").close()
+        logger.warning("Health state set to UNHEALTHY")
+    else:
+        try: os.remove(_FLAG)
+        except: pass
+        logger.warning("Health state set to HEALTHY")
 
 @router.get("/health")
 def health():
     try:
-        if _unhealthy:
+        if os.path.exists(_FLAG):
             logger.warning("Health check: UNHEALTHY")
-            return {"status": "unhealthy", "app": APP_NAME}, 500
+            return JSONResponse({"status": "unhealthy", "app": APP_NAME, "version": APP_VERSION}, status_code=500)
         return {"status": "ok", "app": APP_NAME, "version": APP_VERSION}
     except Exception as e:
         logger.error(f"Health check error: {e}")
-        return {"status": "error", "detail": str(e)}, 500
-
+        return JSONResponse({"status": "error", "detail": str(e)}, status_code=500)
 
 @router.get("/ready")
 def ready():
-    try:
-        if _unhealthy:
-            return {"status": "not ready"}, 503
-        return {"status": "ready"}
-    except Exception as e:
-        logger.error(f"Readiness check error: {e}")
-        return {"status": "error"}, 503
-
+    if os.path.exists(_FLAG):
+        return JSONResponse({"status": "not ready"}, status_code=503)
+    return {"status": "ready"}
 
 @router.get("/info")
 def info():
-    try:
-        return {
-            "app": APP_NAME,
-            "version": APP_VERSION,
-            "namespace": NAMESPACE,
-            "pod": POD_NAME,
-            "uptime_seconds": round(time.time() - _start_time),
-        }
-    except Exception as e:
-        logger.error(f"Info endpoint error: {e}")
-        return {"error": str(e)}, 500
+    return {"app": APP_NAME, "version": APP_VERSION, "namespace": NAMESPACE, "pod": POD_NAME, "uptime_seconds": round(time.time() - _start_time)}
