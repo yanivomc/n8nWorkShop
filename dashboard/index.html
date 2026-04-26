@@ -293,7 +293,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
           style="border-color:#00C896;background:rgba(0,200,150,0.06)">
           <div class="s-icon">&#x26A1;</div>
           <div class="s-name" style="color:#00C896">K8s Event Demo</div>
-          <div class="s-desc">Error loop → event-watcher<br>→ S6 AI → chat (sustained)</div>
+          <div class="s-desc">Memory leak → OOMKill → event-watcher<br>→ S6 AI → chat (sustained)</div>
           <div class="s-status" id="st-k8s-demo"></div>
         </button>
         <button class="scenario-btn stop-t" id="btn-stop" onclick="trigger('stop')">
@@ -1261,7 +1261,7 @@ function runKubeEventScenario() {
   if(demoBtn) demoBtn.classList.add('running');
   if(demoSt)  demoSt.textContent = 'triggering...';
   var base = API_BASE + '/api/chaos/' + encodeURIComponent(selectedId) + '/action';
-  fetchJ(base + '/error-loop', 'POST', {})
+  fetchJ(base + '/memory', 'POST', {mb_per_second: 50, max_mb: 400})
     .then(function(res) {
       showResp(selectedId, 'k8s-event-demo', JSON.stringify(res,null,2), false);
       if(demoSt) demoSt.textContent = 'watching...';
