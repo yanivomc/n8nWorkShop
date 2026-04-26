@@ -27,6 +27,20 @@ spec:
           env:
             - name: TARGET_URL
               value: "http://localhost:8080"
+            - name: TARGET_PORT
+              value: "8080"
+            - name: DASHBOARD_URL
+              value: "http://clawops-dashboard.clawops.svc.cluster.local:80"
+            - name: APP_NAME
+              value: "target-app"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
           resources:
             requests:
               cpu: "50m"
@@ -42,6 +56,8 @@ spec:
           env:
             - name: DASHBOARD_URL
               value: "http://clawops-dashboard.clawops.svc.cluster.local:80"
+            - name: SKIP_REGISTRATION
+              value: "true"
             - name: POD_NAME
               valueFrom:
                 fieldRef:
