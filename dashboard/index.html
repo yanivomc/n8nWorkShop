@@ -1291,35 +1291,37 @@ function clearChat() {
 }
 
 function runKubeEventScenario() {
-  // Trigger crash pod scenario → generates real K8s OOMKilling/BackOff events
-  // which event-watcher catches → batches → S6 AI analysis → chat
-  var cfg = window.CLAWOPS_CONFIG || {};
-  var instances = window._registeredInstances || [];
-  if (!instances.length) {
-    addChatMsg('system', '⚠️ No target-app instances registered. Deploy target-app first.');
+  // Get first registered instance key (same as selectedId in trigger())
+  var keys = Object.keys(instances || {});
+  if (!keys.length) {
+    addChatMsg('system', '⚠️ No target-app instances registered. Deploy target-app first, then refresh.');
     return;
   }
-  var inst = instances[0];
-  var base = inst.url || '';
-  addChatMsg('system', '🔴 K8s Event Demo starting — triggering crash scenario on ' + (inst.pod || 'target-app') + '...');
-  addChatMsg('system', '📡 Event-watcher will catch OOMKilling/BackOff events → batch → S6 AI analysis → response appears here (~15s)');
-  
-  fetch(base + '/chaos/crash', { method: 'POST' })
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
-      addChatMsg('system', '✅ Crash scenario triggered — pod will restart → K8s events firing → watching...');
+  var instId = keys[0];
+  var inst = instances[instId];
+
+  addChatMsg('system',
+    '🔴 **K8s Event Demo** — triggering CRASH scenario on `' + instId + '`\n\n' +
+    '**Pipeline:** pod crashes → K8s events fire → event-watcher catches in <1s → ' +
+    '10s batch window → S6 AI investigates → response appears here\n\n' +
+    '⏳ Watch the MONITOR tab live events panel...'
+  );
+
+  // Use the exact same path as trigger('crash') — goes through dashboard backend
+  var base = API_BASE + '/api/chaos/' + encodeURIComponent(instId) + '/action';
+  fetchJ(base + '/crash', 'POST', {delay_seconds: 5})
+    .then(function(res) {
+      addChatMsg('system',
+        '✅ Crash triggered — pod SIGKILL in 5s\n' +
+        '📡 Watching for: Killing → BackOff → Failed → batch flush → S6 analysis (~15-20s total)'
+      );
+      // Switch to monitor tab to show live events
+      setTimeout(function(){ switchTab('monitor'); }, 1000);
+      // Switch back to chat when S6 should have responded
+      setTimeout(function(){ switchTab('chat'); }, 22000);
     })
     .catch(function(e) {
-      // Try via MCP proxy
-      var mcpUrl = (cfg.mcpInternal || 'http://mcp-server.clawops.svc.cluster.local:8000');
-      addChatMsg('system', '⚡ Triggering via kubectl scale to force pod restart...');
-      fetch((cfg.basePath||'') + '/api/kubectl', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({command: 'rollout restart deployment/target-app -n workshop'})
-      }).then(function(r){ return r.json(); }).then(function(d){
-        addChatMsg('system', '✅ Deployment restarted — K8s events firing → event-watcher catching → S6 running...');
-      }).catch(function(){ addChatMsg('system', '⚠️ Could not trigger via kubectl. Try manually: kubectl rollout restart deployment/target-app -n workshop'); });
+      addChatMsg('system', '⚠️ Crash trigger failed: ' + e + ' — try clicking CRASH POD on the dashboard directly');
     });
 }
 
