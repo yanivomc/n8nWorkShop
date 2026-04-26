@@ -146,9 +146,10 @@ async def chaos_loader_proxy(inst_id: str, action: str, request: Request):
     if not inst:
         return JSONResponse({"error": f"instance not found: {inst_id}"}, status_code=404)
     # chaos-loader sidecar shares the pod — same host, port 8003
-    svc_url = inst.get("url", "").replace(":8080", ":8003")
-    if not svc_url:
-        return JSONResponse({"error": "no url for instance"}, status_code=400)
+    internal_url = inst.get("internal_url", "")
+    if not internal_url:
+        return JSONResponse({"error": "no internal_url for instance"}, status_code=400)
+    svc_url = internal_url.replace(":8080", ":8003")
     try:
         body = await request.body()
         params = dict(request.query_params)
