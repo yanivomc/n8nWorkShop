@@ -19,6 +19,21 @@ spec:
         prometheus.io/port: "8080"
     spec:
       containers:
+        - name: chaos-loader
+          image: yanivomc/chaos-loader:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8003
+          env:
+            - name: TARGET_URL
+              value: "http://localhost:8080"
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+            limits:
+              cpu: "100m"
+              memory: "64Mi"
         - name: target-app
           image: yanivomc/target-app:latest
           imagePullPolicy: Always
