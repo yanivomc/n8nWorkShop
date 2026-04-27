@@ -18,7 +18,7 @@ WRITE_TOKEN    = os.getenv("WRITE_APPROVAL_TOKEN", "")  # fallback static token
 
 WRITE_VERBS = {
     "delete","apply","create","replace","patch","run",
-    "rollout","scale","cordon","drain","taint","label","annotate"
+    "rollout","scale","cordon","drain","taint","label","annotate","exec"
 }
 
 class KubectlRequest(BaseModel):
