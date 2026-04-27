@@ -20,6 +20,8 @@ WATCH_REASONS      = [r.strip() for r in os.getenv("WATCH_REASONS",
     "SuccessfulCreate,ScalingReplicaSet,FailedScheduling,Evicted,NodeNotReady"
 ).split(",") if r.strip()]
 N8N_WEBHOOK_URL    = os.getenv("N8N_WEBHOOK_URL", "")        # blank = disabled
+N8N_WEBHOOK_S8_URL = os.getenv("N8N_WEBHOOK_S8_URL", "")       # S8 secured endpoint (JWT)
+JWT_SECRET         = os.getenv("JWT_SECRET", "")                # shared secret for HS256 JWT
 N8N_SERIOUS_REASONS = [r.strip() for r in os.getenv("N8N_SERIOUS_REASONS",
     "OOMKilling,BackOff,Failed,Killing,Evicted,FailedScheduling,NodeNotReady"
 ).split(",") if r.strip()]
@@ -79,6 +81,19 @@ def get_severity(reason: str) -> str:
     return "info"
 
 # ── Extract deployment name from owner references ────────────────────────────
+
+def make_jwt(payload: dict) -> str:
+    """Generate HS256 JWT — pure stdlib, no external libs."""
+    import base64, hashlib, hmac, json as _json, time as _time
+    secret = JWT_SECRET.encode()
+    now = int(_time.time())
+    claims = {**payload, "iat": now, "exp": now + 30}   # 30s expiry
+    def b64(d): return base64.urlsafe_b64encode(d).rstrip(b"=").decode()
+    header  = b64(_json.dumps({"alg":"HS256","typ":"JWT"}).encode())
+    body    = b64(_json.dumps(claims).encode())
+    sig     = b64(hmac.new(secret, f"{header}.{body}".encode(), hashlib.sha256).digest())
+    return f"{header}.{body}.{sig}"
+
 def extract_deploy(involved: k8s_client.V1ObjectReference, ns: str) -> str:
     name = involved.name or ""
     kind = involved.kind or ""
@@ -149,6 +164,30 @@ async def _flush_batch(key: str):
             log.info(f"Forwarded batch to n8n: {key} (cooldown {COOLDOWN_S}s)")
         except Exception as e:
             log.warning(f"n8n batch forward failed: {e}")
+    # S8 secured endpoint — fire and forget (retries internally)
+    if N8N_WEBHOOK_S8_URL and JWT_SECRET:
+        asyncio.ensure_future(forward_to_s8(summary))
+
+
+async def forward_to_s8(summary: dict):
+    """Forward to S8 secured endpoint with JWT — retries forever until n8n is up."""
+    if not N8N_WEBHOOK_S8_URL or not JWT_SECRET:
+        return
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            token = make_jwt({"ns": summary["namespace"], "deploy": summary["deploy"], "reason": summary["reason"]})
+            async with httpx.AsyncClient(timeout=10) as cli:
+                r = await cli.post(N8N_WEBHOOK_S8_URL, json=summary,
+                                   headers={"Authorization": f"Bearer {token}"})
+            if r.status_code < 300:
+                log.info(f"S8 JWT forward OK: {summary['deploy']} (attempt {attempt})")
+                return
+            log.warning(f"S8 JWT forward HTTP {r.status_code} — retry in 5s")
+        except Exception as e:
+            log.warning(f"S8 JWT forward failed (attempt {attempt}): {e} — retry in 5s")
+        await asyncio.sleep(5)
 
 async def forward_to_n8n(ev: dict):
     """Buffer event into a batch keyed by namespace+name, flush after BATCH_WINDOW."""
@@ -303,6 +342,8 @@ def get_config():
         "watch_labels":        WATCH_LABELS,
         "watch_reasons":       WATCH_REASONS,
         "n8n_webhook_url":     N8N_WEBHOOK_URL or "(not set)",
+        "n8n_webhook_s8_url":   N8N_WEBHOOK_S8_URL or "(not set)",
+        "jwt_secret_set":      bool(JWT_SECRET),
         "n8n_serious_reasons": N8N_SERIOUS_REASONS,
         "max_stored_events":   MAX_STORED_EVENTS,
         "batch_window_s":      BATCH_WINDOW,

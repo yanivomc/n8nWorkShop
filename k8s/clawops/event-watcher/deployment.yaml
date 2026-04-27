@@ -42,6 +42,8 @@ data:
   WATCH_LABELS:        ""
   WATCH_REASONS:       "OOMKilling,BackOff,Failed,Killing,Scheduled,Started,Pulled,Created,SuccessfulCreate,ScalingReplicaSet,FailedScheduling,Evicted,NodeNotReady,FailedMount,Unhealthy"
   N8N_WEBHOOK_URL:     "http://n8n.clawops.svc.cluster.local:5678/webhook/k8s-event-s6"
+  N8N_WEBHOOK_S8_URL:  "http://n8n.clawops.svc.cluster.local:5678/webhook/k8s-event-s8"
+  JWT_SECRET:          "clawops-workshop-secret-change-in-prod"
   N8N_SERIOUS_REASONS: "OOMKilling,BackOff,Failed,Killing,Evicted,FailedScheduling,NodeNotReady"
   DASHBOARD_SSE_URL:   "http://clawops-dashboard.clawops.svc.cluster.local:80/api/k8s-events"
   MAX_STORED_EVENTS:   "500"

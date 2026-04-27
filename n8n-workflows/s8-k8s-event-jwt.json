@@ -1,0 +1,492 @@
+{
+  "name": "S8 - K8s Event Intelligence (JWT Secured)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "k8s-event-s8",
+        "responseMode": "onReceived",
+        "options": {},
+        "responseData": "firstEntryJson"
+      },
+      "id": "webhook-s6",
+      "name": "Webhook (JWT Secured)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        400
+      ],
+      "webhookId": "k8s-event-s6"
+    },
+    {
+      "id": "c31f575d-db3d-4e21-b073-7b5d67e04553",
+      "name": "Validate JWT",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        400
+      ],
+      "parameters": {
+        "jsCode": "// \u2500\u2500 JWT Validation (HS256, pure JS \u2014 no external libs) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\nconst SECRET = 'clawops-workshop-secret-change-in-prod';\n\n// Get token from Authorization header or body\nconst headers = $input.first().json.headers || {};\nconst authHeader = headers['authorization'] || headers['Authorization'] || '';\nconst token = authHeader.startsWith('Bearer ') \n  ? authHeader.slice(7)\n  : ($input.first().json.body?.jwt || '');\n\nif (!token) throw new Error('No JWT token provided \u2014 request rejected');\n\n// Split token\nconst parts = token.split('.');\nif (parts.length !== 3) throw new Error('Invalid JWT format');\nconst [headerB64, payloadB64, sigB64] = parts;\n\n// Verify signature (HS256)\nconst crypto = require('crypto');\nconst expected = crypto.createHmac('sha256', SECRET)\n  .update(`${headerB64}.${payloadB64}`)\n  .digest('base64url');\n\nif (expected !== sigB64) throw new Error('Invalid JWT signature \u2014 request rejected');\n\n// Verify expiry\nconst payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString());\nif (!payload.exp || payload.exp < Math.floor(Date.now() / 1000)) {\n  throw new Error(`JWT expired at ${new Date(payload.exp*1000).toISOString()} \u2014 replay attack prevented`);\n}\n\n// JWT valid \u2014 pass body to next node\nconst body = $input.first().json.body || $input.first().json;\nreturn [{ json: { ...body, _jwt_verified: true, _jwt_claims: payload } }];"
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst ev = body.event || body;\n\n// Skip info events\nif (!['error','warn'].includes(ev.severity)) {\n  return [];  // empty = stop flow\n}\n\n// Validate we have real event data\nif (!ev.deploy && !ev.name && !ev.reason) {\n  return [];  // malformed event \u2014 stop\n}\n\n// Deduplicate by deploy (not pod name \u2014 pod names change on restart)\nconst store = $getWorkflowStaticData('global');\nif (!store.dedup) store.dedup = {};\nconst key = `${ev.reason}:${ev.deploy || ev.name}:${ev.namespace}`;\nconst now = Date.now();\nif (store.dedup[key] && (now - store.dedup[key]) < 300000) {\n  return [];  // deduplicated \u2014 stop flow silently\n}\nstore.dedup[key] = now;\n\n// Cleanup\nObject.keys(store.dedup).forEach(k => {\n  if (now - store.dedup[k] > 600000) delete store.dedup[k];\n});\n\nreturn [{ json: {\n  skip: false,\n  severity: ev.severity,\n  namespace: ev.namespace || 'workshop',\n  kind: ev.kind || 'Pod',\n  name: ev.name || '',\n  reason: ev.reason || '',\n  message: ev.message || '',\n  deploy: ev.deploy || (ev.name || '').split('-').slice(0,-2).join('-') || ev.name || '',\n  node: ev.node || '',\n  ts: ev.ts || new Date().toISOString(),\n  count: ev.count || 1,\n  reasons: ev.reasons || [ev.reason]\n}}];"
+      },
+      "id": "filter-dedup",
+      "name": "Filter + Dedup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=K8s event detected:\n- Reason: {{ $json.reason }}\n- Object: {{ $json.kind }}/{{ $json.name }}\n- Namespace: {{ $json.namespace }}\n- Deployment: {{ $json.deploy }}\n- Node: {{ $json.node }}\n- Message: {{ $json.message }}\n- Severity: {{ $json.severity }}\n- Time: {{ $json.ts }}\n\nInvestigate this event and provide a concise SRE assessment.",
+        "options": {
+          "systemMessage": "You are a Kubernetes SRE assistant analyzing real-time K8s API events (detected in <1s, before Prometheus even sees them).\n\nYou have these tools:\n1. kubectl_read \u2014 investigate pods, deployments, events, and LOGS\n2. promql \u2014 check current metrics\n\n## Investigation protocol (ALWAYS follow this order):\n1. Get pod status: `kubectl get pods -n <namespace> -l app=<deploy> -o wide`\n2. **Pull recent logs** (REQUIRED when there are errors): `kubectl logs deployment/<deploy> -n <namespace> --tail=50 2>&1`\n3. If sidecar present, pull sidecar logs: `kubectl logs deployment/<deploy> -n <namespace> -c chaos-loader --tail=20 2>&1`  \n4. Check recent events: `kubectl get events -n <namespace> --sort-by=.lastTimestamp --field-selector involvedObject.name=<podname> 2>&1 | tail -15`\n5. If memory/CPU: check promql metrics\n\n## Log analysis:\n- Look for ERROR, WARNING, CRITICAL, exception, traceback in logs\n- If chaos-loader logs show \"error-loop triggered\" \u2192 this is a controlled chaos test\n- If chaos-loader logs show \"OOMKill\" or \"memory leak\" \u2192 resource exhaustion chaos\n- Identify: is this a real outage or a chaos engineering test?\n\n## Output format (under 200 words):\n\ud83d\udd34/\ud83d\udfe1 **<reason>** on `<deploy>`\n\n**What happened:** one sentence\n\n**Log evidence:** key error lines found (or \"no errors in logs\")\n\n**Assessment:** real outage OR chaos test \u2014 explain which and why\n\n**Recommended action:** \n- If chaos test: stop via chaos-loader sidecar:\n  `kubectl exec <pod> -n workshop -c chaos-loader -- curl -X DELETE http://localhost:8003/chaos/all`\n  OR tell user to click STOP ALL on the dashboard\n- If real issue: `kubectl <command>`\n\nIf action needed, end with:\nSRE_ACTION: kubectl <exact command>\n\nNote: kubectl exec IS a supported write command \u2014 use it to stop chaos via the sidecar."
+        }
+      },
+      "id": "ai-agent-s6",
+      "name": "K8s Event Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        1340,
+        520
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "gemini-s6",
+      "name": "Gemini",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        700,
+        600
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "GQ1hkgYO7ltcNZw8",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Run read-only kubectl commands. Examples: get pods -n workshop, describe pod <name> -n <ns>, get events -n workshop --sort-by=.lastTimestamp, logs <pod> -n <ns> --tail=20",
+        "method": "POST",
+        "url": "http://mcp-server.clawops.svc.cluster.local:8000/tools/kubectl-read",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"command\": \"{command}\"}"
+      },
+      "id": "kubectl-read-s6",
+      "name": "kubectl_read",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        800,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Run PromQL queries for live metrics. Examples: container_memory_working_set_bytes{pod='<pod>'}, rate(container_cpu_usage_seconds_total[5m])",
+        "method": "POST",
+        "url": "http://mcp-server.clawops.svc.cluster.local:8000/tools/promql",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"query\": \"{query}\"}"
+      },
+      "id": "promql-s6",
+      "name": "promql",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1000,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const agentOut = $input.first().json.output || $input.first().json.error || 'Agent returned no output';\nconst ev = $('Filter + Dedup').first().json;\n\n// Extract SRE_ACTION if present\nconst actionMatch = agentOut.match(/SRE_ACTION:\\s*(.+)/);\nconst hasAction = !!actionMatch;\nconst action = actionMatch ? actionMatch[1].trim() : null;\n\n// Severity icon\nconst icon = ev.severity === 'error' ? '\ud83d\udd34' : '\ud83d\udfe1';\n\n// Build dashboard message\nconst msg = `${icon} **K8s Event** \u2014 \\`${ev.reason}\\` on \\`${ev.deploy}\\`\\n\\n${agentOut}${hasAction ? '\\n\\n\ud83d\udd10 Awaiting approval \u2014 store and approve via TOTP' : ''}`;\n\nreturn [{ json: {\n  message: msg,\n  hasAction,\n  action,\n  severity: ev.severity,\n  deploy: ev.deploy,\n  namespace: ev.namespace,\n  reason: ev.reason,\n  agentOutput: agentOut\n}}];"
+      },
+      "id": "format-message",
+      "name": "Format Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.hasAction }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "needs-action",
+      "name": "Needs Action?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://mcp-server.clawops.svc.cluster.local:8000/incidents",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ alertname: 'K8s Event: ' + $json.reason, namespace: $json.namespace, pod: $('Filter + Dedup').first().json.name, command: $json.action }) }}"
+      },
+      "id": "store-incident-s6",
+      "name": "Store Incident",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2000,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://clawops-dashboard.clawops.svc.cluster.local:80/api/chat/send",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ role: 'agent', content: $('Format Message').first().json.message + '\\n\\n\ud83d\udd10 To approve: /approve <totp> ' + $json.key }) }}"
+      },
+      "id": "send-chat-action",
+      "name": "Send Chat (with action)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2220,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://clawops-dashboard.clawops.svc.cluster.local:80/api/chat/send",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ role: 'agent', content: $('Format Message').first().json.message }) }}"
+      },
+      "id": "send-chat-info",
+      "name": "Send Chat (info only)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2000,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://mcp-server.clawops.svc.cluster.local:8000/incidents?limit=20",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "check-existing",
+      "name": "Check Existing Incidents",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ev = $('Filter + Dedup').first().json;\nconst incidents = $input.first().json;\n\n// Find open incident for same deploy \u2014 from ANY workflow (S5 or S6)\nconst list = Array.isArray(incidents) ? incidents : (incidents.incidents || []);\nconst twoHoursAgo = Date.now() - 7200000;\n\nconst open = list.find(function(i) {\n  if (i.status !== 'pending') return false;\n  if (!i.created_at || new Date(i.created_at).getTime() < twoHoursAgo) return false;\n  // Match by deploy name in alertname or pod field\n  var deploy = ev.deploy || '';\n  var alertDeploy = (i.alertname || '').toLowerCase();\n  var podDeploy = (i.pod || '').toLowerCase();\n  var deployLower = deploy.toLowerCase();\n  return alertDeploy.includes(deployLower) || podDeploy.includes(deployLower) || deployLower.includes(alertDeploy.replace('k8s event: ','').split(':')[0]);\n});\n\nif (open) {\n  return [{ json: {\n    alreadyOpen: true,\n    existingKey: open.key,\n    existingSince: open.created_at,\n    existingAlertname: open.alertname,\n    deploy: ev.deploy,\n    reason: ev.reason,\n    namespace: ev.namespace,\n    severity: ev.severity,\n    count: ev.count || 1,\n    reasons: ev.reasons || [ev.reason]\n  }}];\n}\n\nreturn [{ json: {\n  alreadyOpen: false,\n  deploy: ev.deploy,\n  reason: ev.reason,\n  namespace: ev.namespace,\n  severity: ev.severity,\n  name: ev.name,\n  message: ev.message,\n  node: ev.node,\n  kind: ev.kind,\n  ts: ev.ts,\n  count: ev.count || 1,\n  reasons: ev.reasons || [ev.reason]\n}}];"
+      },
+      "id": "already-open-check",
+      "name": "Already Open?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.alreadyOpen }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "route-open",
+      "name": "Route on Open?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://clawops-dashboard.clawops.svc.cluster.local:80/api/chat/send",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ role: 'agent', content: ($json.severity === 'error' ? '\ud83d\udd34' : '\ud83d\udfe1') + ' **Still ongoing** \u2014 `' + ($json.reasons || [$json.reason]).join(', ') + '` on `' + $json.deploy + '` (' + ($json.count || 1) + ' new events)\\n\\n\u2197 Related to incident **#' + $json.existingKey + '** (' + $json.existingAlertname + ')\\n\\nPod continues to fail. Use `/approve <totp> ' + $json.existingKey + '` to act.' }) }}"
+      },
+      "id": "send-ongoing",
+      "name": "Send Ongoing Notice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        280
+      ]
+    }
+  ],
+  "connections": {
+    "K8s Event Webhook": {
+      "main": [
+        [
+          {
+            "node": "Filter + Dedup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter + Dedup": {
+      "main": [
+        [
+          {
+            "node": "Check Existing Incidents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Worth Processing?": {
+      "main": [
+        [
+          {
+            "node": "K8s Event Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Gemini": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "K8s Event Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "kubectl_read": {
+      "ai_tool": [
+        [
+          {
+            "node": "K8s Event Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "promql": {
+      "ai_tool": [
+        [
+          {
+            "node": "K8s Event Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "K8s Event Agent": {
+      "main": [
+        [
+          {
+            "node": "Format Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Message": {
+      "main": [
+        [
+          {
+            "node": "Needs Action?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Action?": {
+      "main": [
+        [
+          {
+            "node": "Store Incident",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Chat (info only)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Incident": {
+      "main": [
+        [
+          {
+            "node": "Send Chat (with action)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Chat (with action)": {
+      "main": [
+        []
+      ]
+    },
+    "Send Chat (info only)": {
+      "main": [
+        []
+      ]
+    },
+    "Check Existing Incidents": {
+      "main": [
+        [
+          {
+            "node": "Already Open?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already Open?": {
+      "main": [
+        [
+          {
+            "node": "Route on Open?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route on Open?": {
+      "main": [
+        [
+          {
+            "node": "Send Ongoing Notice",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "K8s Event Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook (JWT Secured)": {
+      "main": [
+        [
+          {
+            "node": "Validate JWT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate JWT": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "tags": [],
+  "id": "a84ce9d0-6c2d-4588-9e10-63436c9ba7bd"
+}
