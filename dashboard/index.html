@@ -500,7 +500,15 @@ async function trigger(type){
     else if(type==='crash')res=await fetchJ(base+'/crash','POST',{delay_seconds:5});
     else if(type==='error-rate')res=await fetchJ(base+'/error-rate','POST',{rate:1.0});
     else if(type==='latency')res=await fetchJ(base+'/latency','POST',{latency_ms:3000});
-    else if(type==='stop')res=await fetchJ(base+'/all','DELETE');
+    else if(type==='stop'){
+      // Stop chaos-loader sidecar FIRST (always alive even when target-app is restarting)
+      const clBase=API_BASE+'/api/chaos-loader/'+encodeURIComponent(selectedId);
+      try{ await fetchJ(clBase+'/stop','POST',{}); log('ok','['+selectedId+'] chaos-loader stopped'); }
+      catch(e2){ log('warn','chaos-loader stop: '+e2.message); }
+      // Then stop target-app chaos (may fail if pod is restarting — that's ok)
+      try{ res=await fetchJ(base+'/all','DELETE'); }
+      catch(e2){ res={status:'chaos-loader stopped, target-app unreachable (restarting)'}; }
+    }
     showResp(selectedId,type,JSON.stringify(res,null,2),false);
     if(st)st.textContent='OK: '+(res.status||'done');
     setTimeout(()=>{if(btn)btn.classList.remove('running');},3000);
