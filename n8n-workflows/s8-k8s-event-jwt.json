@@ -41,7 +41,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        460,
+        680,
         400
       ]
     },
@@ -58,7 +58,7 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 1.7,
       "position": [
-        1340,
+        1560,
         520
       ],
       "onError": "continueErrorOutput"
@@ -72,7 +72,7 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        700,
+        920,
         600
       ],
       "credentials": {
@@ -96,7 +96,7 @@
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
       "typeVersion": 1.1,
       "position": [
-        800,
+        1020,
         600
       ]
     },
@@ -114,7 +114,7 @@
       "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
       "typeVersion": 1.1,
       "position": [
-        1000,
+        1220,
         600
       ]
     },
@@ -127,7 +127,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1560,
+        1780,
         520
       ]
     },
@@ -157,7 +157,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        1780,
+        2000,
         520
       ]
     },
@@ -174,7 +174,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2000,
+        2220,
         400
       ]
     },
@@ -191,7 +191,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2220,
+        2440,
         400
       ]
     },
@@ -208,7 +208,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2000,
+        2220,
         640
       ]
     },
@@ -229,7 +229,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        680,
+        900,
         400
       ]
     },
@@ -242,7 +242,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        900,
+        1120,
         400
       ]
     },
@@ -272,7 +272,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        1120,
+        1340,
         400
       ]
     },
@@ -289,9 +289,26 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1340,
+        1560,
         280
       ]
+    },
+    {
+      "id": "1dc43c4b-b756-4ac9-ba19-fe8f9e580f74",
+      "name": "Send JWT Debug",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        680,
+        400
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://clawops-dashboard.clawops.svc.cluster.local:80/api/chat/send",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify({ role: 'agent', content: '\ud83d\udd10 **JWT Validated** \u2014 request authenticated\\n\\n' + '**Deploy:** `' + $json.deploy + '`  |  **Namespace:** `' + $json.namespace + '`\\n' + '**Reason:** `' + $json.reason + '`\\n' + '**Token issued:** ' + new Date($json._jwt_claims.iat * 1000).toISOString().substring(11,19) + ' UTC  |  **Expires:** ' + new Date($json._jwt_claims.exp * 1000).toISOString().substring(11,19) + ' UTC  *(30s window)*\\n\\n' + '\u23e9 Forwarding to AI investigation...' }) }}"
+      }
     }
   ],
   "connections": {
@@ -475,6 +492,17 @@
       ]
     },
     "Validate JWT": {
+      "main": [
+        [
+          {
+            "node": "Send JWT Debug",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send JWT Debug": {
       "main": [
         [
           {
