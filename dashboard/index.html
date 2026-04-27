@@ -786,31 +786,36 @@ var _activeTab = 'dashboard';
 
 function switchTab(tab) {
   _activeTab = tab;
-  var dash = document.getElementById('panel-dashboard');
-  var term = document.getElementById('panel-terminal');
-  var btnD = document.getElementById('btn-dashboard');
-  var btnT = document.getElementById('btn-terminal');
 
-  var btnC = document.getElementById('btn-chat');
-  var panelC = document.getElementById('panel-chat');
-  if (panelC) panelC.style.display = 'none';
-  if (btnC)   { btnC.style.opacity='0.6'; btnC.style.background='rgba(0,212,255,0.06)'; }
+  // Hide ALL panels first — clean slate
+  var allPanels = ['panel-dashboard','panel-terminal','panel-chat','panel-monitor'];
+  allPanels.forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
 
-  if (tab === 'chat') {
-    dash.style.display = 'none';
-    term.style.display = 'none';
-    panelC.style.display = 'flex';
-    if(btnD) { btnD.style.opacity='0.45'; }
-    if(btnT) { btnT.style.opacity='0.45'; }
-    if(btnC) { btnC.style.opacity='1'; btnC.style.background='rgba(0,212,255,0.18)'; }
-    return;
-  }
+  // Reset ALL tab buttons
+  var btnStyles = {
+    'btn-dashboard': 'rgba(0,212,255,0.06)',
+    'btn-terminal':  'rgba(0,200,150,0.04)',
+    'btn-chat':      'rgba(0,212,255,0.06)',
+    'btn-monitor':   'rgba(0,200,150,0.04)'
+  };
+  Object.keys(btnStyles).forEach(function(id) {
+    var b = document.getElementById(id);
+    if (b) { b.style.opacity='0.5'; b.style.background=btnStyles[id]; }
+  });
 
-  if (tab === 'terminal') {
-    dash.style.display = 'none';
-    term.style.display = 'block';
-    if(btnD) { btnD.style.opacity='0.45'; btnD.style.background='rgba(0,212,255,0.04)'; }
-    if(btnT) { btnT.style.opacity='1';    btnT.style.background='rgba(0,200,150,0.18)'; }
+  // Show target panel + highlight its button
+  if (tab === 'dashboard') {
+    document.getElementById('panel-dashboard').style.display = 'block';
+    var b = document.getElementById('btn-dashboard');
+    if (b) { b.style.opacity='1'; b.style.background='rgba(0,212,255,0.14)'; }
+
+  } else if (tab === 'terminal') {
+    document.getElementById('panel-terminal').style.display = 'block';
+    var b = document.getElementById('btn-terminal');
+    if (b) { b.style.opacity='1'; b.style.background='rgba(0,200,150,0.18)'; }
     var iframe = document.getElementById('terminal-iframe');
     if (!iframe.src || iframe.src === window.location.href || iframe.src === 'about:blank') {
       var cfg = window.CLAWOPS_CONFIG || {};
@@ -819,26 +824,19 @@ function switchTab(tab) {
       if (!ip) { alert('MASTER_IP not configured in dashboard ConfigMap'); switchTab('dashboard'); return; }
       iframe.src = 'http://' + ip + ':' + port;
     }
+    var b = document.getElementById('btn-terminal');
+    if (b) { b.style.opacity='1'; b.style.background='rgba(0,200,150,0.18)'; }
+
+  } else if (tab === 'chat') {
+    document.getElementById('panel-chat').style.display = 'flex';
+    var b = document.getElementById('btn-chat');
+    if (b) { b.style.opacity='1'; b.style.background='rgba(0,212,255,0.18)'; }
+
   } else if (tab === 'monitor') {
-    dash.style.display = 'none';
-    term.style.display = 'none';
-    var pm = document.getElementById('panel-monitor');
-    if(pm) pm.style.display = 'flex';
-    if(btnD) { btnD.style.opacity='0.45'; btnD.style.background='rgba(0,212,255,0.04)'; }
-    if(btnT) { btnT.style.opacity='0.45'; btnT.style.background='rgba(0,200,150,0.04)'; }
-    var bM = document.getElementById('btn-monitor');
-    if(bM) { bM.style.opacity='1'; bM.style.background='rgba(0,200,150,0.18)'; }
+    document.getElementById('panel-monitor').style.display = 'flex';
+    var b = document.getElementById('btn-monitor');
+    if (b) { b.style.opacity='1'; b.style.background='rgba(0,200,150,0.18)'; }
     monInit();
-    return;
-  } else {
-    var pm2 = document.getElementById('panel-monitor');
-    if(pm2) pm2.style.display = 'none';
-    var bM2 = document.getElementById('btn-monitor');
-    if(bM2) { bM2.style.opacity='0.45'; bM2.style.background='rgba(0,200,150,0.04)'; }
-    term.style.display = 'none';
-    dash.style.display = 'block';
-    if(btnD) { btnD.style.opacity='1';    btnD.style.background='rgba(0,212,255,0.08)'; }
-    if(btnT) { btnT.style.opacity='0.45'; btnT.style.background='rgba(0,200,150,0.04)'; }
   }
 }
 
