@@ -13,7 +13,7 @@ metadata:
 rules:
   # Read-only across cluster
   - apiGroups: [""]
-    resources: ["pods", "services", "endpoints", "namespaces", "nodes",
+    resources: ["pods", "pods/log", "pods/exec", "services", "endpoints", "namespaces", "nodes",
                  "events", "configmaps", "persistentvolumeclaims"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]
