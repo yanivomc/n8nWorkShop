@@ -306,8 +306,8 @@
         "method": "POST",
         "url": "http://clawops-dashboard.clawops.svc.cluster.local:80/api/chat/send",
         "sendBody": true,
-        "contentType": "json",
-        "body": "={{ JSON.stringify({ role: 'agent', content: '\ud83d\udd10 **JWT Validated** \u2014 request authenticated\\n\\n' + '**Deploy:** `' + $json.deploy + '`  |  **Namespace:** `' + $json.namespace + '`\\n' + '**Reason:** `' + $json.reason + '`\\n' + '**Token issued:** ' + new Date($json._jwt_claims.iat * 1000).toISOString().substring(11,19) + ' UTC  |  **Expires:** ' + new Date($json._jwt_claims.exp * 1000).toISOString().substring(11,19) + ' UTC  *(30s window)*\\n\\n' + '\u23e9 Forwarding to AI investigation...' }) }}"
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ role: 'agent', content: '\ud83d\udd10 **JWT Validated** \u2014 request authenticated\\n\\n**Deploy:** `' + $json.deploy + '`  |  **Namespace:** `' + $json.namespace + '`\\n**Reason:** `' + $json.reason + '`\\n**Issued:** ' + new Date($json._jwt_claims.iat * 1000).toISOString().substring(11,19) + ' UTC  |  **Expires:** ' + new Date($json._jwt_claims.exp * 1000).toISOString().substring(11,19) + ' UTC *(30s replay window)*\\n\\n\u23e9 Forwarding to AI investigation...' }) }}"
       }
     }
   ],
