@@ -1,147 +1,110 @@
 # ClawOps n8n Workshop — Handoff Document
-**Last updated:** 2026-04-26  
+**Last updated:** 2026-04-27  
 **Repo:** https://github.com/yanivomc/n8nWorkShop  
-**Branch:** main
 
 ---
 
 ## Architecture
 
 ```
-Namespaces:
-  clawops:   n8n | mcp-server | clawops-dashboard | event-watcher | linux-mcp-server
-  workshop:  target-app (+ chaos-loader sidecar)
-  monitoring: prometheus | grafana | alertmanager
-  ingress-nginx: nginx LB
-
-Ingress (single LB):
-  /           → n8n:5678
-  /dashboard/ → clawops-dashboard:80
-  /mcp/       → mcp-server:8000
-  /prometheus → prometheus:9090
-  /grafana    → grafana:3000
-  /alertmanager/ → alertmanager:9093
-  /events-admin/ → event-watcher:8002  (clawops ns)
+clawops ns:  n8n | mcp-server | clawops-dashboard | event-watcher | linux-mcp-server
+workshop ns: target-app (+ chaos-loader sidecar)
+monitoring:  prometheus | grafana | alertmanager
+ingress:     single LB → /, /dashboard/, /mcp/, /prometheus, /grafana, /alertmanager/, /events-admin/
 ```
 
 ---
 
 ## Services
 
-### clawops-dashboard
-- Port 80 | image: `yanivomc/clawops-dashboard:latest`
-- Tabs: DASHBOARD (chaos scenarios) | TERMINAL | CHAT | MONITOR | VSCODE
-- Key env: `DASHBOARD_URL`, `MCP_URL`, `N8N_URL`, `PROMETHEUS_URL`
+### event-watcher (clawops ns, port 8002)
+- Watches `workshop` namespace only
+- Batches events 10s → sends ONE payload per deployment to n8n S6
+- Cooldown: 60s between batches per deployment
+- Admin UI: `/events-admin/`  |  SSE: `/events-admin/events/stream`
 
-### event-watcher  ← clawops namespace
-- Port 8002 | image: `yanivomc/event-watcher:latest`
-- Watches: `workshop` namespace only (`WATCH_NAMESPACES=workshop`)
-- Cooldown: 60s between batches per deployment (`COOLDOWN_SECONDS=60`)
-- Batches events for 10s then sends ONE payload to n8n S6 webhook
-- Admin UI: `/events-admin/`
-- SSE stream: `/events-admin/events/stream`
+### target-app + chaos-loader sidecar (workshop ns)
+- target-app port 8080 — `SKIP_REGISTRATION=true` (sidecar handles registration)
+- chaos-loader port 8003 — always alive, survives target-app restarts
+  - Registers pod with dashboard every 20s
+  - `POST /start?mode=error` — starts pounding target-app with error-loop
+  - `POST /stop` — stops loop (call this to stop chaos, even when target-app is restarting)
+  - `GET /logs` — recent activity log for n8n AI
+- Health fix: `/tmp/.unhealthy` file flag — shared across all uvicorn workers
 
-### target-app + chaos-loader sidecar  ← workshop namespace
-- target-app port 8080 | image: `yanivomc/target-app:latest`
-- chaos-loader port 8003 | image: `yanivomc/chaos-loader:latest`
-- `SKIP_REGISTRATION=true` on target-app — sidecar handles registration
-- Sidecar survives target-app restarts → dashboard instance always registered
-- Chaos endpoints: `POST /chaos/error-loop` → `/tmp/.unhealthy` flag → all workers return 500
-- Health: file-based flag `/tmp/.unhealthy` (shared across all uvicorn workers)
-
-### linux-mcp-server  ← clawops namespace
-- Port 8001 | image: `yanivomc/linux-mcp-server:latest`
-- DNS: `linux-mcp-server.clawops.svc.cluster.local:8001`
-
-### mcp-server  ← clawops namespace
-- Port 8000 | SQLite incidents DB
-- Tools: kubectl-read, kubectl-write, promql, incidents CRUD
+### mcp-server (clawops ns, port 8000)
+- Tools: `kubectl-read`, `kubectl-write` (includes `exec`), `promql`, incidents CRUD
+- RBAC: `pods/log`, `pods/exec` allowed
 
 ---
 
 ## n8n Workflows
 
-| ID | Name | Webhook | Purpose |
-|----|------|---------|---------|
-| S2 | AI Agent MCP | `/webhook/ai-agent` | General kubectl/promql AI agent |
-| S2.5 | Linux Agent | `/webhook/linux-agent` | Linux MCP server agent |
-| S4 | Telegram Human Loop | `/webhook/telegram-*` | TOTP approval flow |
-| S5 | Alert Intelligence | `/webhook/prometheus-alert-s5` | Prometheus → AI → chat |
-| S6 | K8s Event Intelligence | `/webhook/k8s-event-s6` | event-watcher → AI → chat |
+| | Workflow | Trigger | Use |
+|--|---------|---------|-----|
+| S2 | AI Agent MCP | `/webhook/ai-agent` | kubectl/promql agent |
+| S2.5 | Linux Agent | `/webhook/linux-agent` | linux-mcp agent |
+| S4 | Human Loop | `/webhook/telegram-*` | TOTP approval |
+| S5 | Alert Intelligence | `/webhook/prometheus-alert-s5` | Prometheus alerts |
+| **S6** | **K8s Event Intelligence** | `/webhook/k8s-event-s6` | Real-time K8s events |
 
-**S6 flow:**  
-event-watcher batch → Filter+Dedup → Check open incidents → Already open? → one-liner OR full AI investigation → Store incident → Chat with `/approve <totp> <key>`
+**⚠️ Workshop instruction: use S5 OR S6, not both simultaneously** — they detect the same events from different sources and will create duplicate alerts.
+
+### S6 Flow
+```
+event-watcher batch → Filter+Dedup (empty=stop, deploy-keyed)
+  → Check MCP incidents (match by deploy across S5+S6)
+  → Already open? → "Still ongoing #key" (no AI re-run)
+  → New → K8s Event Agent (pulls pod logs + sidecar logs)
+         → Identifies: chaos test vs real outage
+         → SRE_ACTION: kubectl exec <pod> -c chaos-loader -- curl -X DELETE http://localhost:8003/chaos/all
+         → Store incident → Chat with /approve key
+```
 
 ---
 
 ## K8s Event Demo Pipeline
 
 ```
-K8s Event Demo button (dashboard CHAOS SCENARIOS)
-  → POST /api/chaos-loader/<id>/start?mode=error
-  → chaos-loader sidecar: POST localhost:8080/chaos/error-loop every 15s
-  → /tmp/.unhealthy created → all health checks return 500
-  → K8s liveness fails x3 (45s) → kills target-app container
-  → sidecar survives → immediately re-triggers on fresh container
-  → event-watcher catches Unhealthy/Killing events (<1s)
-  → 10s batch window → POST /webhook/k8s-event-s6
-  → S6: check open incidents → AI investigates → dashboard chat
-  → "SRE recommendation: run ./bootstrap-k8s.sh → Stop All"
+Click "K8s Event Demo" (chaos scenario card)
+  → chaos-loader /start?mode=error → error-loop every 15s
+  → /tmp/.unhealthy → all health checks = 500
+  → K8s liveness fails ×3 (45s) → kills target-app
+  → sidecar survives → re-triggers on fresh pod → repeat
+  → event-watcher: Unhealthy/Killing events < 1s detection
+  → 10s batch → S6 → AI investigates logs → chat
 
-Stop: click STOP ALL (chaos card) → DELETE /chaos/all → removes /tmp/.unhealthy
+Stop: STOP ALL button → chaos-loader /stop FIRST → target-app /chaos/all
 ```
-
-**chaos-loader /logs endpoint:** `GET /api/chaos-loader/<id>/logs`  
-Returns JSON with recent activity — usable by n8n AI agent to explain WHY the app is failing.
 
 ---
 
-## Bootstrap Menu
+## Dashboard Tabs
+- **DASHBOARD** — chaos scenarios + instance management
+- **TERMINAL** — ttyd shell
+- **CHAT** — incident chat (AI responses + approvals)
+- **MONITOR** — real-time K8s event stream + pod topology + lifecycle timeline
 
-```
-1) Full bootstrap    — install everything from scratch
-2) Update configs    — re-apply configmaps + restart all pods (clawops + workshop)
-3) Update ingress    — re-apply ingress rules
-4) Import workflows  — push S2/S4/S5/S6 to n8n (requires API key)
-5) Show TOTP QR      — instructor scans with Authy
-6) Validate          — health checks all services
-7) Delete ALL        — wipe cluster, fresh start
-q) Quit
-```
-
-**First-time setup after fresh cluster:**
-1. Run option `1` (full bootstrap)
-2. Visit `http://<LB>/` → complete n8n owner setup (or it auto-completes via configmap)
-3. Run option `4` to import workflows
-4. Run option `5` to set up TOTP
+Monitor connects to `/events-admin/events/stream` SSE. Tab switching fixed — all panels properly hidden on switch.
 
 ---
 
-## Images to Build/Push
+## Images to Build
 
 ```bash
-# target-app (health fix — file-based flag)
-cd target-app && docker build -t yanivomc/target-app:latest . && docker push yanivomc/target-app:latest
-
-# chaos-loader sidecar (registration + logs)
-cd chaos-loader && docker build -t yanivomc/chaos-loader:latest . && docker push yanivomc/chaos-loader:latest
-
-# event-watcher (auto-reconnect)
-cd event-watcher && docker build -t yanivomc/event-watcher:latest . && docker push yanivomc/event-watcher:latest
-
-# dashboard
-cd dashboard && docker build -t yanivomc/clawops-dashboard:latest . && docker push yanivomc/clawops-dashboard:latest
-
-# linux-mcp-server (if not yet built)
-cd linux-mcp-server && docker build -t yanivomc/linux-mcp-server:latest . && docker push yanivomc/linux-mcp-server:latest
+docker build -t yanivomc/target-app:latest ./target-app && docker push yanivomc/target-app:latest
+docker build -t yanivomc/chaos-loader:latest ./chaos-loader && docker push yanivomc/chaos-loader:latest
+docker build -t yanivomc/event-watcher:latest ./event-watcher && docker push yanivomc/event-watcher:latest
+docker build -t yanivomc/clawops-dashboard:latest ./dashboard && docker push yanivomc/clawops-dashboard:latest
+docker build -t yanivomc/mcp-server:latest ./mcp-server && docker push yanivomc/mcp-server:latest
+docker build -t yanivomc/linux-mcp-server:latest ./linux-mcp-server && docker push yanivomc/linux-mcp-server:latest
 ```
 
 ---
 
-## Known Issues / TODOs
+## Known Issues / TODO
 
 - [ ] S6 auto-resolve incident when pod recovers (Started/Pulled events)
-- [ ] Monitor tab: SSE event count resets on tab switch
-- [ ] Stop All should also call `/api/chaos-loader/<id>/stop`
+- [ ] Monitor SSE event count resets on tab switch  
 - [ ] Workshop lab docs (sessions 3-8)
-- [ ] Day 2 slides
+- [ ] **Day 2 slides** ← next
