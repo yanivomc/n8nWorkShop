@@ -47,8 +47,9 @@ ingress:     single LB → /, /dashboard/, /mcp/, /prometheus, /grafana, /alertm
 | S4 | Human Loop | `/webhook/telegram-*` | TOTP approval |
 | S5 | Alert Intelligence | `/webhook/prometheus-alert-s5` | Prometheus alerts |
 | **S6** | **K8s Event Intelligence** | `/webhook/k8s-event-s6` | Real-time K8s events |
+| **S8** | **JWT Secured Events** | `/webhook/k8s-event-s8` | S6 + JWT auth gate |
 
-**⚠️ Workshop instruction: use S5 OR S6, not both simultaneously** — they detect the same events from different sources and will create duplicate alerts.
+**⚠️ Workshop instruction: use S5 OR S6 (not both). S8 = S6 with JWT — use instead of S6 to teach security.** — they detect the same events from different sources and will create duplicate alerts.
 
 ### S6 Flow
 ```
@@ -60,6 +61,24 @@ event-watcher batch → Filter+Dedup (empty=stop, deploy-keyed)
          → SRE_ACTION: kubectl exec <pod> -c chaos-loader -- curl -X DELETE http://localhost:8003/chaos/all
          → Store incident → Chat with /approve key
 ```
+
+
+### S8 — JWT Secured Flow
+```
+event-watcher signs batch with HS256 JWT (30s exp, claims: ns/deploy/reason)
+  → POST /webhook/k8s-event-s8  Authorization: Bearer <token>
+  → Validate JWT (pure-JS HMAC-SHA256, no crypto module — works in n8n sandbox)
+      → invalid/expired → execution fails, nothing processed (replay attack prevented)
+      → valid → Send JWT Debug to chat (shows token claims)
+  → Filter + Dedup → same S6 AI investigation flow
+
+JWT_SECRET: "clawops-workshop-secret-change-in-prod" (in event-watcher configmap)
+```
+**Why manual validation (not n8n built-in JWT auth):**
+- n8n built-in = black box, students learn nothing
+- Our Code node validates exp claim (30s) → blocks replay attacks
+- Validates custom claims (ns, deploy) → ensures token is from event-watcher
+- n8n sandboxes crypto module → pure-JS SHA-256 implementation = extra lesson
 
 ---
 
