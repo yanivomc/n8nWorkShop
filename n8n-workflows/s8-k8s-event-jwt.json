@@ -476,7 +476,13 @@
     },
     "Validate JWT": {
       "main": [
-        []
+        [
+          {
+            "node": "Filter + Dedup",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
