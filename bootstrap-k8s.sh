@@ -274,7 +274,7 @@ case $CHOICE in
   4) import_workflows; exit 0 ;;
   5) show_totp; exit 0 ;;
   6) reset_incidents; exit 0 ;;
-  6) load_ingress_lb
+  7) load_ingress_lb
      N8N_IP=$(kubectl get svc n8n -n clawops -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
      MCP_IP=$(kubectl get svc mcp-server -n clawops -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
      PASS=0; FAIL=0
@@ -295,7 +295,7 @@ CL_IP=$(kubectl get svc target-app -n workshop -o jsonpath='{.spec.clusterIP}' 2
      check "dashboard accessible" "curl -sfL --max-time 10 http://${INGRESS_LB}/dashboard/ | grep -qi clawops"
      echo -e "\n  Tests: ${GREEN}${PASS} passed${NC}  ${FAIL} failed"
      exit 0 ;;
-  7) delete_all; exit 0 ;;
+  8) delete_all; exit 0 ;;
   q|Q) exit 0 ;;
   *) warn "Invalid — running full bootstrap" ;;
 esac
