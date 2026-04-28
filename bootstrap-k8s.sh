@@ -494,6 +494,7 @@ sed "s|INJECT_PROMETHEUS_URL|http://${INGRESS_LB}/prometheus|g; \
      s|INJECT_MASTER_IP|${MASTER_IP}|g" \
   "$CLAWOPS_DIR/dashboard/configmap.yaml" | kubectl apply -f - >> "$LOG_FILE" 2>&1
 kubectl apply -f "$CLAWOPS_DIR/dashboard/deployment.yaml" >> "$LOG_FILE" 2>&1
+kubectl apply -f "$CLAWOPS_DIR/dashboard/service.yaml" >> "$LOG_FILE" 2>&1
 ok "Dashboard"
 
 # Restart all clawops deployments to pick up any configmap changes
