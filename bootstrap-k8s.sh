@@ -145,9 +145,24 @@ restart_pods() {
 }
 
 apply_workshop_configmaps() {
-  info "Applying workshop configmaps..."
+  info "Applying workshop configmaps + deployments..."
+  # Ensure namespaces exist first
+  kubectl apply -f "$CLAWOPS_DIR/namespace.yaml" >> "$LOG_FILE" 2>&1 || true
+  kubectl apply -f "$WORKSHOP_DIR/namespace.yaml" >> "$LOG_FILE" 2>&1 || true
+  # Re-apply all clawops deployments + services
   kubectl apply -f "$K8S_DIR/clawops/event-watcher/deployment.yaml" >> "$LOG_FILE" 2>&1 || true
-  ok "Workshop configmaps applied"
+  kubectl apply -f "$K8S_DIR/clawops/event-watcher/service.yaml" >> "$LOG_FILE" 2>&1 || true
+  kubectl apply -f "$K8S_DIR/clawops/linux-mcp-server/deployment.yaml" >> "$LOG_FILE" 2>&1 || true
+  kubectl apply -f "$K8S_DIR/clawops/linux-mcp-server/service.yaml" >> "$LOG_FILE" 2>&1 || true
+  kubectl apply -f "$K8S_DIR/clawops/dashboard/deployment.yaml" >> "$LOG_FILE" 2>&1 || true
+  kubectl apply -f "$K8S_DIR/clawops/dashboard/service.yaml" >> "$LOG_FILE" 2>&1 || true
+  # Restart to pick up configmap changes
+  kubectl rollout restart deployment/event-watcher -n clawops >> "$LOG_FILE" 2>&1 || true
+  kubectl rollout restart deployment/clawops-dashboard -n clawops >> "$LOG_FILE" 2>&1 || true
+  # Workshop
+  kubectl apply -f "$WORKSHOP_DIR/target-app/deployment.yaml" >> "$LOG_FILE" 2>&1 || true
+  kubectl rollout restart deployment/target-app -n workshop >> "$LOG_FILE" 2>&1 || true
+  ok "All deployments + configmaps applied"
 }
 
 show_totp() {
