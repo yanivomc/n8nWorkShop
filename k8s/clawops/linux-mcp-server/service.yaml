@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: linux-mcp-server
+  namespace: clawops
+spec:
+  selector:
+    app: linux-mcp-server
+  ports:
+    - port: 8001
+      targetPort: 8001
+  type: ClusterIP

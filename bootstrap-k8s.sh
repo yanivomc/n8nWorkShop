@@ -507,9 +507,11 @@ sleep 30
 
 # Linux MCP server
 kubectl apply -f "$K8S_DIR/clawops/linux-mcp-server/deployment.yaml" >> "$LOG_FILE" 2>&1
+kubectl apply -f "$K8S_DIR/clawops/linux-mcp-server/service.yaml" >> "$LOG_FILE" 2>&1
 
 # Event watcher
 kubectl apply -f "$K8S_DIR/clawops/event-watcher/deployment.yaml" >> "$LOG_FILE" 2>&1
+kubectl apply -f "$K8S_DIR/clawops/event-watcher/service.yaml" >> "$LOG_FILE" 2>&1
 ok "event-watcher" >> "$LOG_FILE" 2>&1
 ok "linux-mcp-server"
 
