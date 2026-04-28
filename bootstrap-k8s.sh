@@ -89,7 +89,7 @@ update_configs() {
 load_ingress_lb() {
   INGRESS_LB=$(kubectl get svc ingress-nginx-controller -n ingress-nginx     -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
   [[ -z "$INGRESS_LB" ]] && INGRESS_LB=$(kubectl get svc ingress-nginx-controller -n ingress-nginx     -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null)
-  [[ -z "$INGRESS_LB" ]] && die "Ingress LB not found — run full bootstrap first"
+  [[ -z "$INGRESS_LB" ]] && warn "Ingress LB not found — continuing without LB URL"
   ok "Ingress LB: $INGRESS_LB"
 }
 
@@ -162,6 +162,8 @@ apply_workshop_configmaps() {
   # Workshop
   kubectl apply -f "$WORKSHOP_DIR/target-app/deployment.yaml" >> "$LOG_FILE" 2>&1 || true
   kubectl rollout restart deployment/target-app -n workshop >> "$LOG_FILE" 2>&1 || true
+  info "Checking event-watcher deployment..."
+  kubectl get deployment event-watcher -n clawops 2>&1 | head -3
   ok "All deployments + configmaps applied"
 }
 
