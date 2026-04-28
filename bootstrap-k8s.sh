@@ -167,6 +167,23 @@ apply_workshop_configmaps() {
   ok "All deployments + configmaps applied"
 }
 
+
+reset_incidents() {
+  hdr "Reset Incidents"
+  MCP_IP=$(kubectl get svc mcp-server -n clawops -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
+  if [[ -z "$MCP_IP" ]]; then
+    die "mcp-server not found — is the cluster running?"
+  fi
+  echo ""
+  warn "This will DELETE all incidents from the MCP store."
+  read -rp "  Type 'yes' to confirm: " CONFIRM
+  if [[ "$CONFIRM" != "yes" ]]; then
+    info "Cancelled."; return
+  fi
+  RESULT=$(curl -sf -X DELETE "http://${MCP_IP}:8000/incidents" 2>/dev/null)
+  ok "Incidents cleared: $RESULT"
+}
+
 show_totp() {
   hdr "TOTP Secret"
   TOTP_SECRET=$(kubectl get secret mcp-secrets -n clawops \
@@ -256,6 +273,7 @@ case $CHOICE in
   3) load_ingress_lb; update_ingress; exit 0 ;;
   4) import_workflows; exit 0 ;;
   5) show_totp; exit 0 ;;
+  6) reset_incidents; exit 0 ;;
   6) load_ingress_lb
      N8N_IP=$(kubectl get svc n8n -n clawops -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
      MCP_IP=$(kubectl get svc mcp-server -n clawops -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
