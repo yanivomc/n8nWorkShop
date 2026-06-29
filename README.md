@@ -121,7 +121,7 @@ n8nWorkShop/
 ├── n8n-workflows/
 │   ├── s2-ai-agent-mcp.json
 │   ├── s2.5-linux-agent.json     # Linux + K8s agent
-│   ├── s4-telegram-human-loop.json
+│   ├── s4-dashboard-human-loop.json
 │   └── s5-alert-intelligence.json
 └── labs/
     ├── lab-linux-mcp-server.md   # Student lab spec

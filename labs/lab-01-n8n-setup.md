@@ -87,7 +87,7 @@ This exposes your n8n workflows as MCP tools that external AI clients (Claude De
 
 ## Step 5 — Add Telegram Credential
 
-You'll need this for Session 4. Get your bot token first (see `labs/telegram-bot-setup.md`).
+You'll need this for Session 4. Get your bot token first (see `labs/_archive/telegram-bot-setup.md`).
 
 1. Go to **Credentials** → **Create credential**
 2. Search for `Telegram`

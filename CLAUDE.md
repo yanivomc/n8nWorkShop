@@ -82,7 +82,7 @@ dashboard/
 n8n-workflows/
   s2-ai-agent-mcp.json        # Chat trigger → K8s + PromQL agent
   s2.5-linux-agent.json       # Chat trigger → K8s + Linux + PromQL agent
-  s4-telegram-human-loop.json # Webhook → AI → TOTP → kubectl-write
+  s4-dashboard-human-loop.json # Webhook → AI → TOTP → kubectl-write
   s5-alert-intelligence.json  # Alert webhook → AI enrich → dashboard chat
 labs/
   lab-linux-mcp-server.md     # Student lab: build Linux MCP server

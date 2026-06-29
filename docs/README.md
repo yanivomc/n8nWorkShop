@@ -10,8 +10,8 @@
 |---|---|
 | [Setup Guide](./setup-guide.md) | Full setup from scratch: EC2, Docker, n8n, ngrok, credentials |
 | [MCP Server](./mcp-server.md) | How the MCP server works, all endpoints, TOTP 2FA, audit logging |
-| [S3 — Alert Webhook + AI Triage](./workflow-s3.md) | Alert pipeline: Alertmanager → LLM Parser → AI Agent → Telegram |
-| [S4 — Telegram Human Loop](./workflow-s4.md) | Conversational K8s assistant + approval gate with TOTP 2FA |
+| [S3 — Alert Webhook + AI Triage](./_archive/workflow-s3.md) | Alert pipeline: Alertmanager → LLM Parser → AI Agent → Telegram |
+| [S4 — Telegram Human Loop](./_archive/workflow-s4.md) | Conversational K8s assistant + approval gate with TOTP 2FA |
 | [Handoff](../HANDOFF.md) | Session state, credentials, what's done, what's next |
 
 ---

@@ -159,7 +159,7 @@ with open('/tmp/s3.json','w') as f: json.dump(d,f)
 # Import S4
 python3 -c "
 import json
-with open('n8n-workflows/s4-telegram-human-loop.json') as f: d=json.load(f)
+with open('n8n-workflows/s4-dashboard-human-loop.json') as f: d=json.load(f)
 d['settings']={'executionOrder':'v1','saveManualExecutions':True,'saveDataErrorExecution':'all','saveDataSuccessExecution':'all'}
 with open('/tmp/s4.json','w') as f: json.dump(d,f)
 " && curl -s -X POST http://localhost:5678/api/v1/workflows \
