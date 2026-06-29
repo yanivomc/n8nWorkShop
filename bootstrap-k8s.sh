@@ -119,8 +119,7 @@ apply_configmaps() {
   PROM_INTERNAL="http://monitoring-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090/prometheus"
 
   sed "s|INJECT_N8N_HOST|${INGRESS_LB}|g; \
-       s|INJECT_N8N_PASSWORD|changeme123|g; \
-       s|INJECT_PROMETHEUS_URL|${PROM_INTERNAL}|g" \
+       s|INJECT_N8N_PASSWORD|changeme123|g" \
     "$CLAWOPS_DIR/n8n/configmap.yaml" | kubectl apply -f - >> "$LOG_FILE" 2>&1
 
   sed "s|INJECT_PROMETHEUS_URL|${PROM_INTERNAL}|g" \
@@ -510,8 +509,7 @@ ok "PVCs created"
 
 # n8n
 sed "s|INJECT_N8N_HOST|$INGRESS_LB|g; \
-     s|INJECT_N8N_PASSWORD|changeme123|g; \
-     s|INJECT_PROMETHEUS_URL|${PROMETHEUS_URL:-http://prometheus-pending}|g" \
+     s|INJECT_N8N_PASSWORD|changeme123|g" \
   "$CLAWOPS_DIR/n8n/configmap.yaml" | kubectl apply -f - >> "$LOG_FILE" 2>&1
 kubectl apply -f "$CLAWOPS_DIR/n8n/pvc.yaml" >> "$LOG_FILE" 2>&1
 kubectl apply -f "$CLAWOPS_DIR/n8n/deployment.yaml" >> "$LOG_FILE" 2>&1

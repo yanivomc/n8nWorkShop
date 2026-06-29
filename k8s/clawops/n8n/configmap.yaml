@@ -14,6 +14,5 @@ data:
   N8N_BASIC_AUTH_PASSWORD: "INJECT_N8N_PASSWORD"
   N8N_USER_FOLDER: "/home/node/.n8n"
   MCP_URL: "http://mcp-server.clawops.svc.cluster.local:8000"
-  PROMETHEUS_URL: "INJECT_PROMETHEUS_URL"
   N8N_SECURE_COOKIE: "false"
   DASHBOARD_URL: "http://clawops-dashboard.clawops.svc.cluster.local:80"
