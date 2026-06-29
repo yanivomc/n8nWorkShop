@@ -1,6 +1,24 @@
 # kube-prometheus-stack values — ClawOps Workshop
 # All services ClusterIP — nginx ingress handles external access
 
+# ── Default rules: silence kops control-plane + cluster noise ───────────
+# On kops the control-plane components (scheduler / controller-manager /
+# proxy / etcd) are NOT scrapeable, so their "…Down" alerts fire forever.
+# coredns also runs 1-of-2 ready on a 2-node cluster, which trips the
+# generic kubernetesApps alerts, and grafana's /metrics target is down
+# (general → TargetDown). None of this is workshop-relevant — it just
+# clutters /prometheus/alerts and makes the demo look broken. The workshop
+# ships its own scoped rules below, so turn the noisy defaults off.
+#   general = Watchdog + InfoInhibitor + TargetDown (grafana)
+defaultRules:
+  rules:
+    kubeControllerManager: false
+    kubeScheduler: false
+    kubeProxy: false
+    etcd: false
+    kubernetesApps: false
+    general: false
+
 # ── Prometheus ─────────────────────────────────────────────────────────
 prometheus:
   prometheusSpec:
@@ -108,8 +126,10 @@ additionalPrometheusRulesMap:
     groups:
       - name: workshop.pods
         rules:
+          # NOTE: scoped to namespace="workshop" — these carry workshop="true"
+          # and route to n8n, so they must NOT fire on system pods (coredns etc.)
           - alert: PodCrashLooping
-            expr: rate(kube_pod_container_status_restarts_total[5m]) * 60 > 0
+            expr: rate(kube_pod_container_status_restarts_total{namespace="workshop"}[5m]) * 60 > 0
             for: 1m
             labels:
               severity: critical
@@ -118,7 +138,7 @@ additionalPrometheusRulesMap:
               summary: "Pod {{ $labels.pod }} is crash looping"
               description: "Pod {{ $labels.pod }} in {{ $labels.namespace }} restarted {{ $value | humanizePercentage }} times/min"
           - alert: PodOOMKilled
-            expr: kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1
+            expr: kube_pod_container_status_last_terminated_reason{namespace="workshop", reason="OOMKilled"} == 1
             for: 0m
             labels:
               severity: critical
@@ -127,7 +147,7 @@ additionalPrometheusRulesMap:
               summary: "Pod {{ $labels.pod }} OOMKilled"
               description: "Container {{ $labels.container }} in {{ $labels.namespace }}/{{ $labels.pod }} was OOMKilled"
           - alert: PodNotReady
-            expr: kube_pod_status_ready{condition="true"} == 0
+            expr: kube_pod_status_ready{namespace="workshop", condition="true"} == 0
             for: 2m
             labels:
               severity: warning
@@ -136,7 +156,7 @@ additionalPrometheusRulesMap:
               summary: "Pod {{ $labels.pod }} not ready"
               description: "Pod {{ $labels.pod }} in {{ $labels.namespace }} not ready for 2+ minutes"
           - alert: DeploymentReplicasMismatch
-            expr: kube_deployment_spec_replicas != kube_deployment_status_available_replicas
+            expr: kube_deployment_spec_replicas{namespace="workshop"} != kube_deployment_status_available_replicas{namespace="workshop"}
             for: 3m
             labels:
               severity: warning
