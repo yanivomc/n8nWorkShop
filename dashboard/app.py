@@ -29,6 +29,16 @@ def _chat_event(msg: dict):
         try: _chat_subscribers.remove(q)
         except: pass
 
+def _post_chat_error(content: str):
+    """Surface a backend / n8n error into the dashboard chat (role=error)."""
+    _chat_event({
+        "id": int(_time.time() * 1000),
+        "role": "error",
+        "content": content,
+        "meta": {},
+        "ts": _time.strftime("%H:%M:%S"),
+    })
+
 MCP_URL = os.getenv("MCP_INTERNAL_URL", os.getenv("MCP_URL", "http://mcp-server.clawops.svc.cluster.local:8000"))
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
@@ -278,12 +288,32 @@ async def chat_message(request: Request):
         r = await _client.post(
             f"{n8n_url}{webhook_path}",
             json={"text": text, "chatId": "dashboard", "from": "student"},
-            timeout=5.0
+            timeout=15.0
         )
+        if r.status_code >= 400:
+            detail = ""
+            try:
+                j = r.json()
+                detail = (j.get("message") or j.get("hint") or "").strip()
+            except Exception:
+                detail = (r.text or "").strip()[:300]
+            if r.status_code == 404 and "not registered" in detail.lower():
+                content = ("⚠️ The chat workflow isn't active in n8n, so your message wasn't "
+                           "processed.\n\nActivate **S4 - Dashboard Human Loop** in n8n "
+                           "(the toggle at the top-right of the editor), then resend.")
+            else:
+                content = "⚠️ n8n returned an error (HTTP " + str(r.status_code) + ")."
+                if detail:
+                    content += "\n" + detail
+            logger.warning(f"n8n webhook error {r.status_code}: {detail}")
+            _post_chat_error(content)
+            return {"ok": False, "forwarded": r.status_code, "error": detail}
         return {"ok": True, "forwarded": r.status_code}
     except Exception as e:
         logger.warning(f"Could not forward to n8n: {e}")
-        return {"ok": True, "forwarded": False}
+        _post_chat_error("⚠️ Couldn't reach n8n (the workflow engine). It may be down or "
+                         "still starting — wait a moment and try again.")
+        return {"ok": False, "forwarded": False, "error": str(e)}
 
 @app.get("/api/chat/history")
 async def chat_history():

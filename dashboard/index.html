@@ -147,6 +147,12 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 #chat-input      { flex:1; background:#080C18; border:1px solid #1E3A5F; color:#fff; font-family:Consolas,monospace; font-size:13px; padding:8px 12px; border-radius:4px; outline:none; }
 #chat-input:focus{ border-color:#00D4FF; }
 #chat-send-btn   { background:#00D4FF; border:none; color:#080C18; font-family:Consolas,monospace; font-size:12px; font-weight:bold; padding:8px 18px; cursor:pointer; border-radius:4px; letter-spacing:1px; }
+.chat-msg.error    { background:#2A0D0D; border:1px solid #FF4D4D; align-self:flex-start; color:#FF8080; }
+.chat-msg.thinking { opacity:.9; }
+.chat-msg.thinking .dots span { animation:chatBlink 1.4s infinite both; }
+.chat-msg.thinking .dots span:nth-child(2){ animation-delay:.2s; }
+.chat-msg.thinking .dots span:nth-child(3){ animation-delay:.4s; }
+@keyframes chatBlink { 0%,80%,100%{opacity:.2;} 40%{opacity:1;} }
   #terminal-iframe { width:100%; height:100%; border:none; background:#000; }
 
 #panel-dashboard { display:block; }
@@ -761,9 +767,11 @@ function initChat() {
 function appendChatMessage(msg) {
   var box = document.getElementById('chat-messages');
   if (!box) return;
+  // Any non-user message means the workflow responded — clear the waiting indicator
+  if (msg.role && msg.role !== 'user') hideChatThinking();
   var div = document.createElement('div');
   div.className = 'chat-msg ' + (msg.role || 'agent');
-  var meta = msg.meta && msg.meta.alertname ? msg.meta.alertname : msg.role.toUpperCase();
+  var meta = msg.meta && msg.meta.alertname ? msg.meta.alertname : (msg.role || 'agent').toUpperCase();
   div.innerHTML = '<div class="meta">' + meta + '</div>' +
     '<div class="content">' + (msg.content || '').replace(/\n/g,'<br>') + '</div>' +
     '<div class="ts">' + (msg.ts||'') + '</div>';
@@ -772,7 +780,31 @@ function appendChatMessage(msg) {
     div.querySelector('.meta').innerHTML += ' <span style="color:#FFD700;font-size:11px;">#' + msg.meta.key + '</span>';
   }
   box.appendChild(div);
+  // Keep the "working…" indicator pinned below the latest user message
+  var t = document.getElementById('chat-thinking');
+  if (t && msg.role === 'user') box.appendChild(t);
   box.scrollTop = box.scrollHeight;
+}
+
+var _chatThinkingTimer = null;
+function showChatThinking() {
+  var box = document.getElementById('chat-messages');
+  if (!box) return;
+  hideChatThinking();
+  var div = document.createElement('div');
+  div.className = 'chat-msg agent thinking';
+  div.id = 'chat-thinking';
+  div.innerHTML = '<div class="meta">AGENT</div>' +
+    '<div class="content"><span class="dots"><span>&#9679;</span><span>&#9679;</span><span>&#9679;</span></span> working…</div>';
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+  // Safety: clear after 90s so it never spins forever
+  _chatThinkingTimer = setTimeout(hideChatThinking, 90000);
+}
+function hideChatThinking() {
+  var el = document.getElementById('chat-thinking');
+  if (el && el.parentNode) el.parentNode.removeChild(el);
+  if (_chatThinkingTimer) { clearTimeout(_chatThinkingTimer); _chatThinkingTimer = null; }
 }
 
 function sendChatMessage() {
@@ -781,10 +813,15 @@ function sendChatMessage() {
   if (!text) return;
   input.value = '';
   var base = (window.CLAWOPS_CONFIG && window.CLAWOPS_CONFIG.basePath) || '';
+  showChatThinking();
   fetch(base + '/api/chat/message', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
     body: JSON.stringify({text: text})
+  }).catch(function() {
+    // Could not even reach the dashboard server (SSE is down too) — surface locally
+    hideChatThinking();
+    appendChatMessage({role:'error', content:'⚠️ Could not reach the dashboard server. Check your connection and try again.', ts:''});
   });
 }
 
