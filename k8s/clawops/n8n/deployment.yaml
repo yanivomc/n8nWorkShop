@@ -19,8 +19,11 @@ spec:
         fsGroup: 1000
       containers:
         - name: n8n
-          image: n8nio/n8n:latest
-          imagePullPolicy: Always
+          # Pinned: n8nio/n8n:latest rolled to 2.27.5 which ships a broken
+          # editor index.html (0-byte templated cache → blank UI). 1.123.62 is
+          # the latest 1.x stable and matches the node versions in n8n-workflows/.
+          image: n8nio/n8n:1.123.62
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5678
           envFrom:
