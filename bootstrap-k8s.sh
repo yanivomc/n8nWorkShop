@@ -405,7 +405,11 @@ fi
 if true; then  # always upgrade
   info "Installing kube-prometheus-stack (2-3 min)..."
   # Alertmanager → n8n via internal K8s DNS — never needs IP update!
-  sed "s|EC2_PUBLIC_IP_PLACEHOLDER|n8n.clawops.svc.cluster.local|g" \
+  # INJECT_INGRESS_LB → the real LB host (grafana root_url + prometheus/
+  # alertmanager externalUrl). Without this, Grafana's GF_SERVER_ROOT_URL stays
+  # a literal placeholder, breaking its subpath UI and its /metrics scrape.
+  sed "s|EC2_PUBLIC_IP_PLACEHOLDER|n8n.clawops.svc.cluster.local|g; \
+       s|INJECT_INGRESS_LB|${INGRESS_LB}|g" \
     "$MONITORING_DIR/prometheus-values.yaml" > /tmp/prom-values.yaml
 
   helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
