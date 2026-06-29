@@ -152,12 +152,12 @@ apply_workshop_configmaps() {
   kubectl apply -f "$CLAWOPS_DIR/namespace.yaml" >> "$LOG_FILE" 2>&1 || true
   kubectl apply -f "$WORKSHOP_DIR/namespace.yaml" >> "$LOG_FILE" 2>&1 || true
   # Re-apply all clawops deployments + services
-  kubectl apply -f "$K8S_DIR/clawops/event-watcher/deployment.yaml" >> "$LOG_FILE" 2>&1 || true
-  kubectl apply -f "$K8S_DIR/clawops/event-watcher/service.yaml" >> "$LOG_FILE" 2>&1 || true
-  kubectl apply -f "$K8S_DIR/clawops/linux-mcp-server/deployment.yaml" >> "$LOG_FILE" 2>&1 || true
-  kubectl apply -f "$K8S_DIR/clawops/linux-mcp-server/service.yaml" >> "$LOG_FILE" 2>&1 || true
-  kubectl apply -f "$K8S_DIR/clawops/dashboard/deployment.yaml" >> "$LOG_FILE" 2>&1 || true
-  kubectl apply -f "$K8S_DIR/clawops/dashboard/service.yaml" >> "$LOG_FILE" 2>&1 || true
+  kubectl apply -f "$CLAWOPS_DIR/event-watcher/deployment.yaml" >> "$LOG_FILE" 2>&1 || true
+  kubectl apply -f "$CLAWOPS_DIR/event-watcher/service.yaml" >> "$LOG_FILE" 2>&1 || true
+  kubectl apply -f "$CLAWOPS_DIR/linux-mcp-server/deployment.yaml" >> "$LOG_FILE" 2>&1 || true
+  kubectl apply -f "$CLAWOPS_DIR/linux-mcp-server/service.yaml" >> "$LOG_FILE" 2>&1 || true
+  kubectl apply -f "$CLAWOPS_DIR/dashboard/deployment.yaml" >> "$LOG_FILE" 2>&1 || true
+  kubectl apply -f "$CLAWOPS_DIR/dashboard/service.yaml" >> "$LOG_FILE" 2>&1 || true
   # Restart to pick up configmap changes
   kubectl rollout restart deployment/event-watcher -n clawops >> "$LOG_FILE" 2>&1 || true
   kubectl rollout restart deployment/clawops-dashboard -n clawops >> "$LOG_FILE" 2>&1 || true
@@ -549,12 +549,12 @@ info "Waiting 30s for pods to restart..."
 sleep 30
 
 # Linux MCP server
-kubectl apply -f "$K8S_DIR/clawops/linux-mcp-server/deployment.yaml" >> "$LOG_FILE" 2>&1
-kubectl apply -f "$K8S_DIR/clawops/linux-mcp-server/service.yaml" >> "$LOG_FILE" 2>&1
+kubectl apply -f "$CLAWOPS_DIR/linux-mcp-server/deployment.yaml" >> "$LOG_FILE" 2>&1
+kubectl apply -f "$CLAWOPS_DIR/linux-mcp-server/service.yaml" >> "$LOG_FILE" 2>&1
 
 # Event watcher
-kubectl apply -f "$K8S_DIR/clawops/event-watcher/deployment.yaml" >> "$LOG_FILE" 2>&1
-kubectl apply -f "$K8S_DIR/clawops/event-watcher/service.yaml" >> "$LOG_FILE" 2>&1
+kubectl apply -f "$CLAWOPS_DIR/event-watcher/deployment.yaml" >> "$LOG_FILE" 2>&1
+kubectl apply -f "$CLAWOPS_DIR/event-watcher/service.yaml" >> "$LOG_FILE" 2>&1
 ok "event-watcher" >> "$LOG_FILE" 2>&1
 ok "linux-mcp-server"
 
