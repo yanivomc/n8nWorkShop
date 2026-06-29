@@ -929,14 +929,61 @@ var _monPods   = {};
 var _monTlEvents = [];
 
 function monInit() {
-  if (_monInited) { monRefreshTopo(); return; }
+  if (_monInited) { monRefreshTopo(); monRefreshAlerts(); return; }
   _monInited = true;
   monConnectSSE();
   monRefreshTopo();
   monLoadHistorical();
+  monRefreshAlerts();
   setInterval(monRefreshTopo, 30000);
   setInterval(monFetchEWStats, 15000);
+  setInterval(monRefreshAlerts, 10000);
   monFetchEWStats();
+}
+
+// Surface ALL chaos as "problems" — firing workshop alerts from Prometheus.
+// (The K8s event panel only catches pod-level events; CPU/error/latency chaos
+//  are app metrics that never produce events, so they only show up here.)
+function monRefreshAlerts() {
+  var cfg = window.CLAWOPS_CONFIG || {};
+  var box = document.getElementById('mon-alerts');
+  var cnt = document.getElementById('mon-alert-count');
+  if (!box) return;
+  fetch(cfg.prom + '/api/v1/alerts', { signal: AbortSignal.timeout(5000) })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var alerts = (d.data && d.data.alerts) || [];
+      var firing = alerts.filter(function(a){
+        return a.state === 'firing' && a.labels && a.labels.workshop === 'true';
+      });
+      if (cnt) cnt.textContent = firing.length ? '(' + firing.length + ')' : '';
+      if (!firing.length) {
+        box.innerHTML = '<span style="color:#00C896;font-family:Consolas,monospace;font-size:13px">✓ No active problems — all workshop alerts clear</span>';
+        return;
+      }
+      box.innerHTML = firing.map(function(a){
+        var l = a.labels || {};
+        var col = l.severity === 'critical' ? '#E24B4A' : '#EF9F27';
+        var pod = l.pod || l.deployment || l.namespace || '';
+        var dur = monAlertAge(a.activeAt);
+        return '<div style="border:1px solid '+col+';background:rgba(226,75,74,0.08);border-radius:6px;padding:6px 10px;min-width:175px">'
+          + '<div style="color:'+col+';font-weight:600;font-family:Consolas,monospace;font-size:13px">● '+(l.alertname||'alert')+'</div>'
+          + (pod ? '<div style="color:#8892A4;font-size:12px;margin-top:2px">'+pod+'</div>' : '')
+          + '<div style="color:#5C6B82;font-size:11px;margin-top:2px">'+(l.severity||'warning')+' · firing '+dur+'</div>'
+          + '</div>';
+      }).join('');
+    })
+    .catch(function(){
+      if (cnt) cnt.textContent = '';
+      box.innerHTML = '<span style="color:#E24B4A;font-family:Consolas,monospace;font-size:12px">⚠ cannot reach Prometheus ('+(cfg.prom||'?')+')</span>';
+    });
+}
+function monAlertAge(ts){
+  if(!ts) return '';
+  var s = Math.max(0, Math.round((Date.now() - new Date(ts).getTime())/1000));
+  if (s < 60) return s+'s';
+  if (s < 3600) return Math.floor(s/60)+'m';
+  return Math.floor(s/3600)+'h';
 }
 
 function monConnectSSE() {
@@ -1367,6 +1414,16 @@ function runKubeEventScenario() {
       <div id="mon-s-speed" style="font-size:26px;font-weight:600;color:#00D4FF">&lt;1s</div>
       <div style="font-size:12px;color:#8892A4;margin-top:3px">detect time</div>
     </div>
+  </div>
+
+  <!-- Active problems (firing Prometheus alerts — surfaces ALL chaos types) -->
+  <div style="margin:0 16px 8px;background:#0F1729;border:1px solid #1E3A5F;border-radius:8px;overflow:hidden">
+    <div style="padding:7px 12px;border-bottom:1px solid #1E3A5F;font-size:12px;font-weight:600;color:#8892A4;font-family:Consolas,monospace;letter-spacing:1px;display:flex;align-items:center;gap:8px">
+      ⚠ ACTIVE PROBLEMS
+      <span id="mon-alert-count" style="color:#8892A4;font-size:12px"></span>
+      <span style="margin-left:auto;font-size:11px;color:#5C6B82">firing alerts · Prometheus</span>
+    </div>
+    <div id="mon-alerts" style="display:flex;gap:8px;flex-wrap:wrap;padding:9px 12px;min-height:30px;align-items:center"></div>
   </div>
 
   <!-- Main panels -->
