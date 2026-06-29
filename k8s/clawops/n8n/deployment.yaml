@@ -32,6 +32,14 @@ spec:
           volumeMounts:
             - name: n8n-data
               mountPath: /home/node/.n8n
+            # n8n templates its ~1MB frontend bundles into .cache on startup.
+            # On some EBS CSI volumes (kops-csi) a large single-file write gets
+            # truncated at a 64KB boundary → the editor JS is cut off mid-file →
+            # blank UI. The cache is regenerable (not real data), so keep it on a
+            # node-local emptyDir, which handles big files fine. The SQLite DB
+            # stays on the PVC (it writes in small pages, unaffected).
+            - name: n8n-cache
+              mountPath: /home/node/.n8n/.cache
           resources:
             requests:
               cpu: "250m"
@@ -55,3 +63,5 @@ spec:
         - name: n8n-data
           persistentVolumeClaim:
             claimName: n8n-data
+        - name: n8n-cache
+          emptyDir: {}
