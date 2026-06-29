@@ -69,10 +69,14 @@ spec:
           resources:
             requests:
               cpu: "100m"
-              memory: "128Mi"
+              memory: "256Mi"
             limits:
               cpu: "1000m"
-              memory: "512Mi"
+              # 768Mi gives headroom for the memory-leak chaos (max_mb=500 + app
+              # baseline). At 512Mi the leak OOMKilled the pod before
+              # target_chaos_memory_active could sustain, so TargetAppMemoryLeak /
+              # MemoryCritical never fired — it only tripped PodCrashLooping.
+              memory: "768Mi"
           livenessProbe:
             httpGet:
               path: /health
