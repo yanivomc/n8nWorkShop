@@ -113,8 +113,10 @@ detect_master_ip() {
 apply_configmaps() {
   info "Applying configmaps with fresh values..."
   # Internal Prometheus ClusterIP for n8n + mcp (backend access)
-  PROM_INTERNAL=$(kubectl get svc monitoring-kube-prometheus-prometheus -n monitoring \
-    -o jsonpath='http://{.spec.clusterIP}:9090' 2>/dev/null || echo "http://prometheus-pending")
+  # Stable internal DNS + routePrefix. ClusterIP lookups were racy (empty ->
+  # "http://:9090") and Prometheus serves its API under routePrefix=/prometheus,
+  # so the MCP (which appends /api/v1/query) needs the /prometheus suffix.
+  PROM_INTERNAL="http://monitoring-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090/prometheus"
 
   sed "s|INJECT_N8N_HOST|${INGRESS_LB}|g; \
        s|INJECT_N8N_PASSWORD|changeme123|g; \
@@ -415,8 +417,10 @@ if true; then  # always upgrade
 fi
 
 # Fetch LB hostnames
-PROMETHEUS_URL=$(kubectl get svc monitoring-kube-prometheus-prometheus -n monitoring \
-  -o jsonpath='http://{.status.loadBalancer.ingress[0].hostname}:9090' 2>/dev/null)
+# Prometheus is a ClusterIP service (no LB hostname -> this used to resolve to
+# the broken "http://:9090") and serves under routePrefix=/prometheus. Use the
+# stable internal DNS name + suffix for n8n + mcp backend access.
+PROMETHEUS_URL="http://monitoring-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090/prometheus"
 GRAFANA_URL=$(kubectl get svc monitoring-grafana -n monitoring \
   -o jsonpath='http://{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
 ALERTMANAGER_URL=$(kubectl get svc monitoring-kube-prometheus-alertmanager -n monitoring \
