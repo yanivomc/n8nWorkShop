@@ -1,6 +1,6 @@
-# n8n DevOps Workshop — Documentation
+# ClawOps Workshop — Documentation
 
-**AI-Assisted Incident Command with Kubernetes, n8n, Gemini & Telegram**
+**AI-Assisted Incident Command with Kubernetes, n8n, Gemini & the ClawOps dashboard**
 
 ---
 
@@ -8,61 +8,64 @@
 
 | Document | Description |
 |---|---|
-| [Setup Guide](./setup-guide.md) | Full setup from scratch: EC2, Docker, n8n, ngrok, credentials |
-| [MCP Server](./mcp-server.md) | How the MCP server works, all endpoints, TOTP 2FA, audit logging |
-| [S3 — Alert Webhook + AI Triage](./_archive/workflow-s3.md) | Alert pipeline: Alertmanager → LLM Parser → AI Agent → Telegram |
-| [S4 — Telegram Human Loop](./_archive/workflow-s4.md) | Conversational K8s assistant + approval gate with TOTP 2FA |
-| [Handoff](../HANDOFF.md) | Session state, credentials, what's done, what's next |
+| [Setup Guide](./setup-guide.md) | Full K8s setup via `bootstrap-k8s.sh`: install, configure n8n, import workflows, TOTP gate |
+| [MCP Server](./mcp-server.md) | The execution layer — `kubectl-read`, `promql`, `kubectl-write` (TOTP-gated), incidents, audit logging |
+| [S5 — Alert Intelligence](./workflow-s5.md) | Alert enrichment + confidence scoring → dashboard chat |
+| [Handoff](../HANDOFF.md) | Current architecture, services, workflow status |
+| [CLAUDE.md](../CLAUDE.md) | Full project context + implementation gotchas |
+
+> **Archived (old Telegram / EC2 / Docker-Compose design):** `docs/_archive/`
+> (S3, S4 Telegram docs), `labs/_archive/`, and `_archive/student-env/`.
 
 ---
 
-## Architecture Overview
+## Architecture
 
 ```
-Kubernetes Cluster (kops, 2 nodes, v1.29)
-  + Prometheus + Grafana (AWS LoadBalancers)
-  + Alertmanager → n8n webhook (workshop alerts only)
-          ↓
-n8n (Docker on EC2)
-  S3: Alert Webhook → LLM Parser → AI Agent → Telegram
-  S4: Telegram Bot → K8s Assistant → Approval Gate
-          ↓
-MCP Server (Docker, same EC2)
-  kubectl-read  → free
-  promql        → free
-  kubectl-write → GATED: TOTP 2FA required
-          ↓
-Telegram Bot (field interface for on-call engineers)
-```
+Kubernetes cluster (kops, AWS, 2 nodes)
+  clawops ns:    n8n | mcp-server | clawops-dashboard | event-watcher | linux-mcp-server
+  workshop ns:   target-app (+ chaos-loader sidecar)
+  monitoring ns: Prometheus | Grafana | Alertmanager  (all ClusterIP)
 
----
+ONE nginx ingress LB:
+  / → n8n   /dashboard/ → dashboard   /mcp/ → mcp-server
+  /prometheus  /grafana  /alertmanager/  /events-admin/
 
-## Quick Start Checklist
-
-```
-□ 1. EC2 running, Docker installed
-□ 2. git clone https://github.com/yanivomc/n8nWorkShop.git
-□ 3. cd student-env && cp .env.example .env
-□ 4. ./setup.sh → option 3  (configure API keys + generate TOTP secret)
-□ 5. ./setup.sh → option 4  (install Prometheus + Grafana)
-□ 6. ./setup.sh → option 5  (start n8n + MCP)
-□ 7. ./setup.sh → option 10 (start ngrok for Telegram webhook)
-□ 8. Open n8n → add Gemini + Telegram credentials
-□ 9. Import S3 + S4 workflows
-□ 10. Activate workflows → test
+Alert flow (workshop=true only):
+  target-app chaos → Prometheus alert → Alertmanager
+    → n8n S5 webhook → AI enriches (kubectl + promql via MCP)
+    → dashboard chat (SSE) with incident key
+    → engineer replies /approve <totp> <key>
+    → S4 validates TOTP → MCP kubectl-write → confirmation back to chat
 ```
 
 ---
 
-## Sessions Status
+## Quick Start
 
-| # | Session | Status |
-|---|---------|--------|
-| S1 | Security Foundation | ❌ not built |
-| S2 | n8n AI Agent + Gemini + MCP | ✅ READY |
-| S3 | Alert Webhook + AI Triage + Telegram | ✅ READY |
-| S4 | Telegram Human Loop + TOTP Approval | 🔜 95% |
-| S5 | Prometheus Alert Intelligence | ❌ |
-| S6 | Stateful Incident Handling | ❌ |
-| S7 | Controlled Remediation | ❌ |
-| S8 | End-to-End Capstone | ❌ |
+```bash
+git clone https://github.com/yanivomc/n8nWorkShop.git
+cd n8nWorkShop
+./bootstrap-k8s.sh run     # install everything (or run with no args for the menu)
+```
+
+Then: open `http://<LB>/` (n8n) to add the Gemini credential + an API key →
+bootstrap option 4 to import workflows → option 5 for the TOTP secret →
+drive it from `http://<LB>/dashboard/`. Full details in the
+[Setup Guide](./setup-guide.md).
+
+---
+
+## Sessions
+
+| # | Session | Trigger | Output | Status |
+|---|---------|---------|--------|--------|
+| S2 | AI Agent + MCP | n8n Chat UI | n8n chat | ✅ |
+| S2.5 | Linux + K8s Agent | n8n Chat UI | n8n chat | ✅ |
+| S4 | Dashboard Human Loop + TOTP | `/webhook/dashboard-chat` | dashboard chat | ✅ |
+| S5 | Alert Intelligence | Alertmanager webhook | dashboard chat | ✅ |
+| S6 | K8s Event Intelligence | event-watcher webhook | dashboard chat | ✅ |
+| S8 | JWT-Secured Events | event-watcher + JWT | dashboard chat | ✅ |
+
+> Use **S5 _or_ S6**, not both. **S8 = S6 + JWT** — use it instead of S6 to teach
+> the security gate.

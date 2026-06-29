@@ -7,7 +7,7 @@
 #   ./force-s5-test.sh TargetAppMemoryCritical test-003
 
 # Load from .env if not set in environment
-[ -f "$(dirname "$0")/../../student-env/.env" ] && source "$(dirname "$0")/../../student-env/.env"
+[ -f "$(dirname "$0")/../../_archive/student-env/.env" ] && source "$(dirname "$0")/../../_archive/student-env/.env"
 NGROK_URL="${WEBHOOK_URL:-${NGROK_URL:-}}"
 ALERTNAME="${1:-TargetAppCPUStress}"
 RUN_ID="${2:-test-$(date +%s)}"

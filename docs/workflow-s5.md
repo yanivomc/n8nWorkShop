@@ -2,20 +2,26 @@
 
 ## Purpose
 
-S5 is the **production-grade upgrade of S3**. Where S3 reacts immediately to any alert, S5 first enriches the alert with live PromQL data, scores confidence based on correlated signals, and only escalates if multiple signals agree. Low-confidence alerts are logged and dropped — no Telegram noise.
+S5 is the production-grade alert handler. Instead of reacting to every raw alert,
+it first enriches the alert with live PromQL data (via the MCP `promql` tool),
+scores confidence from correlated signals, and only escalates when multiple
+signals agree. Low-confidence alerts are logged and dropped — no chat noise.
+
+> S5 replaced the archived Telegram-based **S3** (`docs/_archive/workflow-s3.md`).
+> All output now goes to the ClawOps **dashboard chat** (SSE), not Telegram.
 
 ---
 
-## Key Difference from S3
+## What makes S5 different
 
-| | S3 | S5 |
-|--|----|----|
-| Single signal | ✅ Escalates | ❌ Drops (low confidence) |
-| Correlated signals | ✅ Escalates | ✅ Escalates with evidence |
+| | Naive alerting | S5 |
+|--|----------------|----|
+| Single signal | Escalates | Drops (low confidence) |
+| Correlated signals | Escalates | Escalates with evidence |
 | PromQL enrichment | ❌ | ✅ CPU + memory + restarts |
 | Confidence score | ❌ | ✅ LOW / MEDIUM / HIGH |
-| Duration check | ❌ | ✅ Spike vs sustained |
-| Telegram message | Basic | Elegant with signal bars |
+| Duration check | ❌ | ✅ spike vs sustained |
+| Output | Basic message | Structured incident card in dashboard chat |
 
 ---
 
@@ -28,27 +34,24 @@ Extract Brief + Signal Plan
   (maps alertname to relevant PromQL queries)
     ↓
 PromQL Enrichment + Confidence Scoring
-  (runs all signals, counts active, scores confidence)
+  (runs all signals via MCP /tools/promql, counts active, scores confidence)
     ↓
 Worth Escalating? (IF node)
   ├── LOW confidence → Log only (silent drop)
-  └── MEDIUM/HIGH → AI Agent (Gemini + kubectl_read + promql)
+  └── MEDIUM/HIGH → AI Agent (Gemini + kubectl_read + promql via MCP)
                         ↓
-                   Format elegant Telegram message
+                   Store incident in MCP  →  4-char key
                         ↓
-                   Send (same chat as S4)
+                   POST /api/chat/send  →  dashboard chat (with key)
 ```
 
 ---
 
-## Telegram Message Format
+## What the engineer sees (dashboard CHAT tab)
 
 ```
-🚨 INCIDENT DETECTED
-━━━━━━━━━━━━━━━━━━━━
-📍 target-app-xyz / workshop
-🏷 TargetAppCPUStress — 🔥 FIRING
-⏱ Duration: 4m 12s
+🚨 INCIDENT DETECTED — TargetAppCPUStress
+📍 target-app-xyz / workshop   ⏱ 4m 12s   🔥 FIRING
 
 📊 Signal Correlation
   🔴 CPU Stress        ████████  1.0
@@ -57,59 +60,60 @@ Worth Escalating? (IF node)
 Confidence: 🔴 HIGH (2/3 signals active)
 
 🧠 AI Assessment
-CPU stress scenario is active and sustained.
-Memory is also increasing suggesting combined load test.
-No crashes yet but trajectory is concerning.
+CPU stress scenario is active and sustained. Memory is also rising —
+combined load test. No crashes yet but trajectory is concerning.
 
 ✅ Recommended Action
 kubectl rollout restart deployment/target-app -n workshop
 
-💬 Reply /approve <totp> to execute via S4
-━━━━━━━━━━━━━━━━━━━━
-🕐 2026-04-12 09:14:32 UTC
+🔐 To approve: /approve <totp> k42a
 ```
 
 ---
 
-## S4 Integration (Shared Context)
+## S4 integration (shared context)
 
-S5 sends to the **same Telegram chat** as S4. S4's `Chat Memory` window (last 10 messages) already contains S5's analysis. The on-call engineer can simply reply:
+S5 posts to the same dashboard chat as S4 and stores the incident in the MCP with
+a 4-char key. The engineer approves with:
 
 ```
-do it
+/approve <totp> <key>
 ```
 
-S4's K8s Assistant understands "it" = the `SRE_ACTION` from S5's message. No re-explanation needed.
+S4 picks it up from the chat, fetches the incident command by key from the MCP,
+validates the TOTP, and runs the `kubectl-write`. The key is the audit trail —
+who approved what, when.
 
 ---
 
-## Confidence Scoring
+## Confidence scoring
 
-| Active Signals | Confidence | Action |
+| Active signals | Confidence | Action |
 |---------------|-----------|--------|
 | 0/3 | LOW | Silent drop |
 | 1/3 | LOW | Silent drop |
 | 2/3 | MEDIUM | Escalate |
 | 3/3 | HIGH | Escalate |
 
-Thresholds: `< 33%` = LOW, `33-66%` = MEDIUM, `>= 66%` = HIGH
+Thresholds: `< 33%` = LOW, `33–66%` = MEDIUM, `>= 66%` = HIGH.
 
 ---
 
-## Signal Maps
+## Signal maps
 
 Each alert type has a predefined set of PromQL signals to check:
 
-**TargetAppCPUStress:** cpu_active + memory_active + restarts
-**TargetAppMemoryLeak:** memory_active + memory_bytes + cpu_active
-**TargetAppCrashLooping:** restarts + pod_ready + memory_active
+- **TargetAppCPUStress:** cpu_active + memory_active + restarts
+- **TargetAppMemoryLeak:** memory_active + memory_bytes + cpu_active
+- **TargetAppCrashLooping:** restarts + pod_ready + memory_active
 
 ---
 
-## Webhook URL
+## Webhook
 
 ```
-http://<EC2_IP>:5678/webhook/prometheus-alert-s5
+http://n8n.clawops.svc.cluster.local:5678/webhook/prometheus-alert-s5
 ```
 
-Update Alertmanager to route workshop alerts to S5 instead of S3, or run both in parallel (different receivers).
+Alertmanager routes only `workshop="true"` alerts to this receiver. Use **S5 or
+S6**, not both — they would otherwise raise duplicate incidents for the same event.

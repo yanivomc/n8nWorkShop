@@ -1,16 +1,24 @@
 # Lab 01 — n8n Initial Setup & Gemini Configuration
 
-**Session:** Pre-workshop / Session 2 setup  
-**Time:** ~20 minutes  
-**Goal:** Configure n8n with Gemini credentials, enable Chat and Instance-level MCP
+**Session:** Pre-workshop / Session 2 setup
+**Time:** ~15 minutes
+**Goal:** Create the n8n owner account, add the Gemini credential, and create an
+n8n API key so workflows can be imported.
 
 ---
 
 ## Prerequisites
 
-- n8n running at `http://<EC2_IP>:5678` (verify with `setup.sh` option 1)
-- Gemini API key from instructor (also in your `.env` as `GEMINI_API_KEY`)
-- Validation passing 17/17 (setup.sh option 7)
+- The stack is bootstrapped (`./bootstrap-k8s.sh run`) and pods are healthy
+  (`./bootstrap-k8s.sh` → option 7)
+- The ingress LB hostname:
+  ```bash
+  kubectl get svc ingress-nginx-controller -n ingress-nginx \
+    -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+  ```
+- A Gemini API key from the instructor — <https://aistudio.google.com/app/apikey>
+
+> n8n is served at the LB **root `/`**, not `/n8n/`.
 
 ---
 
@@ -18,111 +26,89 @@
 
 The first time n8n starts it shows a setup wizard.
 
-1. Open `http://<EC2_IP>:5678` in your browser
-2. Fill in the form:
-   - **Email** — use any email (e.g. `student@workshop.local`)
-   - **First Name / Last Name** — your name
-   - **Password** — minimum 8 chars, 1 number, 1 capital (e.g. `Workshop1`)
-3. Click **Next** and skip the optional steps
-4. You land on the n8n home screen — setup complete
+1. Open `http://<LB>/` in your browser.
+   - A basic-auth prompt appears first — `admin` / `changeme123` (from `n8n-config`).
+2. Fill in the owner form:
+   - **Email** — any email (e.g. `student@workshop.local`)
+   - **First / Last Name** — your name
+   - **Password** — min 8 chars, 1 number, 1 capital (e.g. `Workshop1`)
+3. Click **Next** and skip the optional steps. You land on the n8n home screen.
 
-> ⚠️ If you see a "Secure cookie" warning in the browser, it's expected — n8n is running over HTTP. The `N8N_SECURE_COOKIE=false` env var is already set in docker-compose.
-
----
-
-## Step 2 — Add Gemini API Credential
-
-1. In the left sidebar click **Overview** → **Credentials** tab (or navigate to `/home/credentials`)
-2. Click **Add first credential** (or **Create credential** top right)
-3. In the search box type `Google Gemini`
-4. Select **Google Gemini(PaLM) Api**
-5. Click **Continue**
-6. In the **API Key** field paste your Gemini API key
-   - Find it in your `CREDENTIALS.md` file, or run:
-     ```bash
-     grep GEMINI_API_KEY ~/n8nWorkShop/student-env/.env
-     ```
-7. Click **Save** — the credential appears as **Google Gemini(PaLM) Api account**
-
-**Verify:** The credential card shows `Last updated just now` — no error banner.
-
-> 🔑 **Important — credentials are NOT in the `.env` file.**  
-> The `GEMINI_API_KEY` in `.env` is only used by `setup.sh` to generate `CREDENTIALS.md`.  
-> n8n stores credentials in its **internal database** (the Docker volume).  
-> **If the EC2 instance is replaced or the volume is lost, you must re-enter this credential manually** — every time, on every new instance. This is the first thing to check if the AI Agent reports "Node does not have any credentials set".
+> ⚠️ A "secure cookie" browser warning is expected — n8n runs over HTTP and
+> `N8N_SECURE_COOKIE=false` is already set in the `n8n-config` ConfigMap.
 
 ---
 
-## Step 3 — Connect Gemini to n8n Chat
+## Step 2 — Add the Gemini API Credential
 
-1. Click **Chat** in the left sidebar (Beta label)
-2. Click **+ Start new chat**
-3. Click **Base models** tab
-4. Click **+ Add model**
-5. Select **Google Gemini** from the provider list
-6. Choose model: **gemini-1.5-pro** (or gemini-2.0-flash for faster responses)
-7. Select the credential you just created
-8. Click **Save**
+1. Sidebar → **Overview** → **Credentials** → **Add credential**.
+2. Search `Google Gemini` → select **Google Gemini(PaLM) Api** → **Continue**.
+3. Paste your Gemini API key in the **API Key** field.
+4. **Save.** It must appear as **`Google Gemini(PaLM) Api account`** — the
+   workflows reference this exact credential name.
 
-**Test it:** Type `hello, are you working?` in the chat and verify you get a response.
+**Verify:** the credential card shows `Last updated just now` with no error banner.
 
----
-
-## Step 4 — Enable Instance-level MCP
-
-This exposes your n8n workflows as MCP tools that external AI clients (Claude Desktop, Cursor) can call.
-
-1. Go to **Settings** → **Instance-level MCP** (bottom of sidebar)
-2. Click **Enable MCP access**
-3. The toggle turns green — **Enabled**
-4. Click **Access token** tab
-5. **Copy the token immediately** — you won't see it again
-6. Note the **Server URL**: `http://<EC2_IP>:5678/mcp-server/http`
-
-> ⚠️ Save your token somewhere safe now. If you lose it, you must regenerate it (this invalidates the old one).
-
-**What this gives you:** Any MCP-compatible AI client can now discover and trigger your n8n workflows. We'll use this in the Session 2 bonus demo.
+> 🔑 **Credentials live in n8n's database (the `n8n-data` PVC), not in any config
+> file.** If that PVC is wiped you must re-add this credential. This is the first
+> thing to check if the AI Agent reports "Node does not have any credentials set".
 
 ---
 
-## Step 5 — Add Telegram Credential
+## Step 3 — Connect Gemini to n8n Chat (S2/S2.5)
 
-You'll need this for Session 4. Get your bot token first (see `labs/_archive/telegram-bot-setup.md`).
-
-1. Go to **Credentials** → **Create credential**
-2. Search for `Telegram`
-3. Select **Telegram API**
-4. Paste your **Bot Token** (from @BotFather)
-5. Click **Save**
+1. Click **Chat** in the left sidebar → **+ Start new chat**.
+2. **Base models** tab → **+ Add model**.
+3. Select **Google Gemini**, choose a model (e.g. `gemini-2.5-flash`), and pick the
+   credential from Step 2.
+4. **Save**, then type `hello, are you working?` and confirm you get a response.
 
 ---
 
-## Step 6 — Add HTTP Request Credential for MCP Server
+## Step 4 — Create an n8n API Key
 
-Your n8n workflows will call the MCP server. Pre-configure the base URL:
+The bootstrap importer (option 4) pushes workflows over the n8n REST API.
 
-1. Go to **Credentials** → **Create credential**
-2. Search for `Header Auth`
-3. Select **Header Auth**
-4. Name it: `MCP Server`
-5. Header Name: `Content-Type`
-6. Header Value: `application/json`
-7. Click **Save**
+1. **Settings** → **API** → **Create API Key**.
+2. **Copy the key immediately** — you won't see it again.
+3. Run the importer and paste the key when prompted:
+   ```bash
+   ./bootstrap-k8s.sh    # option 4
+   ```
+   It saves the key into the `n8n-config` ConfigMap for future runs and imports
+   S2, S2.5, S4, S5, S6, S8.
 
-> Note: MCP server runs at `http://mcp-server:8000` inside the Docker network (the service name resolves automatically).
+> ⚠️ If you lose the key, regenerate it (this invalidates the old one).
+
+---
+
+## Step 5 — (Reference) MCP server endpoint
+
+Workflows call the MCP server over in-cluster DNS — no credential needed:
+
+```
+http://mcp-server.clawops.svc.cluster.local:8000
+```
+
+The langchain HTTP tool nodes already point here. Quick check from your machine:
+
+```bash
+kubectl exec -n clawops deployment/mcp-server -- curl -s http://localhost:8000/health
+# {"status": "ok", "tools": ["kubectl-read", "promql", "kubectl-write"]}
+```
 
 ---
 
 ## Verification Checklist
 
-Run setup.sh option 7 — all should be green. Then verify manually:
+Run `./bootstrap-k8s.sh` → option 7 (all green), then verify in the UI:
 
 | Check | Expected |
 |-------|----------|
 | n8n Chat → Base models | Gemini model listed and responds |
-| Credentials page | Google Gemini(PaLM), Telegram API, Header Auth all saved |
-| Settings → Instance MCP | Green "Enabled" toggle |
-| `curl http://localhost:5678/mcp-server/http` | Returns MCP server info |
+| Credentials page | `Google Gemini(PaLM) Api account` saved, no error |
+| Settings → API | An API key exists (saved to `n8n-config`) |
+| Imported workflows | S2 / S2.5 / S4 / S5 / S6 / S8 present after option 4 |
 
 ---
 
@@ -130,10 +116,13 @@ Run setup.sh option 7 — all should be green. Then verify manually:
 
 ```
 n8n (configured)
-├── Gemini credential → AI Agent node can call Gemini
-├── Telegram credential → Telegram trigger/send nodes
-├── Chat interface → Base models → Gemini connected
-└── Instance-level MCP → your workflows callable by AI clients
+├── Gemini credential → AI Agent nodes can call Gemini
+├── Chat interface → Base models → Gemini connected (S2 / S2.5)
+├── n8n API key → bootstrap option 4 can import workflows
+└── Workflows imported → set the Gemini credential on each AI Agent, toggle Active
 ```
 
-Next: **Lab 02 — Build the AI Agent + MCP workflow**
+> Human-in-the-loop (S4) and alerts (S5) happen in the **ClawOps dashboard chat**
+> (`http://<LB>/dashboard/` → CHAT tab) — no Telegram bot needed.
+
+Next: **Lab — Build the AI Agent + MCP workflow** (`lab-linux-mcp-server.md` extends it).

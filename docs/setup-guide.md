@@ -1,233 +1,170 @@
-# Setup Guide — n8n DevOps Workshop
+# Setup Guide — ClawOps Workshop (Kubernetes)
+
+Everything runs on a Kubernetes cluster (kops, AWS, 2 nodes) behind **one** nginx
+ingress LoadBalancer. The single `bootstrap-k8s.sh` script installs, configures,
+validates, and tears down the whole stack. There is no Docker Compose, no ngrok,
+and no Telegram — all human interaction happens in the ClawOps **dashboard chat**.
+
+> Looking for the old EC2 + Docker Compose + ngrok + Telegram guide? It's archived
+> under `_archive/student-env/` and `docs/_archive/`.
+
+---
 
 ## Prerequisites
 
-- AWS EC2 instance (Ubuntu 22.04, t3.medium or larger)
-- Docker + docker compose installed
-- Ports open: 5000 (ttyd), 5001 (VS Code), 5678 (n8n), 8000 (MCP server)
-- A Gemini API key (https://aistudio.google.com/app/apikey)
-- A Telegram bot token (from @BotFather) + your chat ID
+- A running Kubernetes cluster (kops on AWS, ~2 nodes) and a working `kubectl`
+  context pointing at it
+- `helm` (for the monitoring + ingress stacks)
+- `docker` + push access to the `yanivomc/*` images (only if you rebuild images)
+- A Gemini API key — <https://aistudio.google.com/app/apikey>
 
 ---
 
-## Step 1 — Clone the Repo
+## Step 1 — Clone and bootstrap
 
 ```bash
 git clone https://github.com/yanivomc/n8nWorkShop.git
-cd n8nWorkShop/student-env
-cp .env.example .env
+cd n8nWorkShop
+
+./bootstrap-k8s.sh run     # non-interactive: install/upgrade everything
+# or
+./bootstrap-k8s.sh         # interactive menu
 ```
+
+### Menu options
+
+| # | Action |
+|---|--------|
+| 1 | Full bootstrap — install/upgrade everything |
+| 2 | Update configs — re-apply configmaps + restart pods |
+| 3 | Update ingress — re-apply ingress rules |
+| 4 | Import workflows — push S2/S2.5/S4/S5/S6/S8 to n8n (prompts for n8n API key) |
+| 5 | Show TOTP / QR — display the approval-gate secret |
+| 6 | Reset incidents — clear all MCP incidents |
+| 7 | Validate — run health checks |
+| 8 | Delete ALL — wipe everything for a fresh start |
+
+The full bootstrap installs ingress-nginx, the kube-prometheus-stack
+(Prometheus + Grafana + Alertmanager, all ClusterIP), and all `clawops` /
+`workshop` workloads, then wires Alertmanager to the n8n S5 webhook.
 
 ---
 
-## Step 2 — Configure API Keys (setup.sh option 3)
+## Step 2 — Find the ingress URL
+
+Everything is served from one LoadBalancer:
 
 ```bash
-./setup.sh   # choose option 3
+kubectl get svc ingress-nginx-controller -n ingress-nginx \
+  -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
 ```
 
-This prompts for and saves to `.env`:
-- **Gemini API key** — for AI Agent and LLM Parser
-- **Telegram bot token** — for sending/receiving messages
-- **Telegram chat ID** — your personal or group chat ID
-- **ngrok static domain** — for HTTPS webhook (see ngrok section below)
-- **TOTP secret** — auto-generated for 2FA approval gate (see MCP docs)
-- **WRITE_APPROVAL_TOKEN** — fallback static token (auto-generated)
-- **n8n admin password**
+| Service | Path |
+|---------|------|
+| n8n | `http://<LB>/` |
+| ClawOps dashboard | `http://<LB>/dashboard/` |
+| MCP docs | `http://<LB>/mcp/docs` |
+| Prometheus | `http://<LB>/prometheus` |
+| Grafana | `http://<LB>/grafana` |
+| Alertmanager | `http://<LB>/alertmanager/` |
+| Event-watcher admin | `http://<LB>/events-admin/` |
 
-> ⚠️ **EC2 IP is auto-detected** from AWS metadata. If detection fails, enter manually.
+> n8n is at the **root `/`**, not `/n8n/`.
 
 ---
 
-## Step 3 — Install Prometheus + Grafana (option 4)
+## Step 3 — Configure n8n in the browser
+
+Open `http://<LB>/`.
+
+1. **Owner account** — first run shows a setup wizard; create any owner account
+   (basic auth `admin` / `changeme123` from `n8n-config` fronts it).
+2. **Gemini credential** — Settings → Credentials → Add → search `Google Gemini`
+   → **Google Gemini(PaLM) Api** → paste your key → save as
+   **`Google Gemini(PaLM) Api account`** (workflows reference this exact name).
+3. **n8n API key** — Settings → API → Create API Key (used by bootstrap option 4
+   to import workflows; it's saved into the `n8n-config` ConfigMap for reuse).
+
+> ⚠️ n8n stores credentials in its **PVC-backed database** (`n8n-data`), not in any
+> config file. If that PVC is wiped you must re-add the Gemini credential. This is
+> the first thing to check on "Node does not have any credentials set".
+
+> n8n is pinned to **`n8nio/n8n:1.123.62`**. Do **not** use `:latest` — the 2.x line
+> ships a broken editor (blank UI). See the root `CLAUDE.md` gotchas.
+
+---
+
+## Step 4 — Import workflows
 
 ```bash
-./setup.sh   # choose option 4
+./bootstrap-k8s.sh        # option 4
 ```
 
-This runs `helm upgrade --install` for `kube-prometheus-stack` with:
-- Prometheus on AWS LoadBalancer (port 9090)
-- Grafana on AWS LoadBalancer (port 80) — admin / workshop123
-- Alertmanager on AWS LoadBalancer (port 9093)
-- Alertmanager routing: only `workshop="true"` alerts go to n8n webhook
-- Auto-saves `PROMETHEUS_URL`, `GRAFANA_URL`, `ALERTMANAGER_URL` to `.env`
+It strips `id`/`versionId` and `POST`s each workflow to the n8n API
+(`s2-ai-agent-mcp`, `s2.5-linux-agent`, `s4-dashboard-human-loop`,
+`s5-alert-intelligence`, `s6-k8s-event-intelligence`, `s8-k8s-event-jwt`).
+After import, open each workflow, set the Gemini credential on the AI Agent
+nodes, and toggle **Active**.
 
-> ⚠️ **Must run option 4 before option 5.** The MCP server needs `PROMETHEUS_URL` at startup.
+> **Use S5 _or_ S6 — not both** (they detect the same events from different
+> sources and would create duplicate incidents). **S8 = S6 + JWT auth** — use it
+> instead of S6 to teach the security gate.
 
 ---
 
-## Step 4 — Start Stack (option 5)
+## Step 5 — TOTP approval gate
+
+The approval gate validates a TOTP code inside the MCP server (`pyotp`).
 
 ```bash
-./setup.sh   # choose option 5
+./bootstrap-k8s.sh        # option 5 — shows the secret + QR, generating it if missing
 ```
 
-Starts two Docker containers:
-- **n8n** on port 5678 — `WEBHOOK_URL` set to EC2 IP (or ngrok if configured)
-- **mcp-server** on port 8000 — reads `PROMETHEUS_URL`, `TOTP_SECRET`, `WRITE_APPROVAL_TOKEN`
-
-Stack won't start if `PROMETHEUS_URL` is missing — run option 4 first.
-
----
-
-## Step 5 — Configure n8n in the Browser
-
-Open `http://<EC2_IP>:5678`
-
-### Create Owner Account
-Fill in email, name, password on first run.
-
-### Add Gemini Credential
-
-> ⚠️ **Critical:** n8n stores credentials in its internal database (Docker volume), NOT in `.env`. If the EC2 is replaced or the volume is lost, you must re-add credentials manually. This is the first thing to check if you see "Node does not have any credentials set".
-
-1. Settings → Credentials → Add Credential
-2. Search: `Google Gemini`
-3. Select: **Google Gemini(PaLM) Api**
-4. Paste your Gemini API key
-5. Save as: **`Google Gemini(PaLM) Api account`** (exact name — workflows reference it)
-
-### Add Telegram Credential
-1. Settings → Credentials → Add Credential
-2. Search: `Telegram`
-3. Paste your Bot Token
-4. Save as: **`Telegram Bot`** (exact name)
-
-### Add WRITE_APPROVAL_TOKEN to Variables
-1. Settings → Variables → Add Variable
-2. Key: `WRITE_APPROVAL_TOKEN`
-3. Value: copy from `grep WRITE_APPROVAL_TOKEN ~/n8nWorkShop/student-env/.env`
-
----
-
-## Step 6 — ngrok HTTPS Tunnel (for Telegram Trigger)
-
-### Why ngrok?
-
-Telegram **requires HTTPS** for bot webhooks. n8n runs on HTTP. ngrok creates a secure HTTPS tunnel from a public URL to your local n8n port.
-
-### What is ngrok?
-
-ngrok is a reverse proxy tunnel tool. It creates a publicly accessible HTTPS URL that forwards to a port on your EC2. Without it, Telegram cannot call your n8n webhook.
-
-```
-Telegram → HTTPS → ngrok → HTTP → n8n:5678
-```
-
-### Free Static Domain (Recommended)
-
-ngrok free accounts get **one free static domain** — the URL never changes, even after restarts. Without it, the URL changes every restart and you must re-register the webhook.
-
-1. Go to https://dashboard.ngrok.com/domains
-2. Claim your free static domain (e.g. `yourname.ngrok-free.app`)
-3. Add to setup.sh option 3 as `NGROK_DOMAIN`
-
-### Start ngrok (option 10)
+Register the secret in Authy / Google Authenticator (Account: `ClawOps Workshop`,
+Time-based). If you rotate the secret manually:
 
 ```bash
-./setup.sh   # choose option 10
+# generate inside the MCP pod (the cluster master has no pip3)
+kubectl exec -n clawops deployment/mcp-server -- python3 -c "import pyotp; print(pyotp.random_base32())"
+# then restart so it picks up the new secret
+kubectl rollout restart deployment/mcp-server -n clawops
 ```
-
-This:
-1. Installs ngrok if missing
-2. Authenticates with your `NGROK_AUTH_TOKEN`
-3. Starts tunnel: `ngrok http 5678 --domain=$NGROK_DOMAIN`
-4. Saves HTTPS URL to `.env` as `WEBHOOK_URL`
-5. Restarts n8n so it picks up the new `WEBHOOK_URL`
-
-> ⚠️ After restarting ngrok, **deactivate + reactivate** any Telegram Trigger workflows in n8n so the webhook re-registers with Telegram.
 
 ---
 
-## Step 7 — Import Workflows
+## Step 6 — Run the loop
 
-```bash
-cd ~/n8nWorkShop
-export N8N_API_KEY="<your key>"   # from n8n Settings → API Keys
+1. Open the dashboard: `http://<LB>/dashboard/`.
+2. **DASHBOARD** tab → trigger a chaos scenario on `target-app`.
+3. Prometheus alert fires → Alertmanager → n8n **S5** → AI enriches → posts to the
+   **CHAT** tab with an incident key.
+4. Reply in chat: `/approve <totp> <key>` → S4 validates the TOTP → MCP runs the
+   `kubectl-write` → result posted back, incident marked resolved.
 
-# Import S3
-python3 -c "
-import json
-with open('n8n-workflows/s3-alert-webhook-telegram.json') as f: d=json.load(f)
-d['settings']={'executionOrder':'v1','saveManualExecutions':True,'saveDataErrorExecution':'all','saveDataSuccessExecution':'all'}
-with open('/tmp/s3.json','w') as f: json.dump(d,f)
-" && curl -s -X POST http://localhost:5678/api/v1/workflows \
-  -H "X-N8N-API-KEY: $N8N_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d @/tmp/s3.json | python3 -c "import sys,json; d=json.load(sys.stdin); print('S3 imported:', d.get('id','ERR'))"
-
-# Import S4
-python3 -c "
-import json
-with open('n8n-workflows/s4-dashboard-human-loop.json') as f: d=json.load(f)
-d['settings']={'executionOrder':'v1','saveManualExecutions':True,'saveDataErrorExecution':'all','saveDataSuccessExecution':'all'}
-with open('/tmp/s4.json','w') as f: json.dump(d,f)
-" && curl -s -X POST http://localhost:5678/api/v1/workflows \
-  -H "X-N8N-API-KEY: $N8N_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d @/tmp/s4.json | python3 -c "import sys,json; d=json.load(sys.stdin); print('S4 imported:', d.get('id','ERR'))"
-```
-
-After importing:
-1. Open each workflow in n8n
-2. Set credentials on any nodes showing a warning icon
-3. Toggle **Active** to publish
-
----
-
-## Step 8 — TOTP 2FA Setup (for S4 approval gate)
-
-The S4 workflow uses TOTP (Time-based One-Time Passwords) for approving write operations — the same standard used by Google Authenticator and Authy.
-
-### How it was generated
-
-When you ran setup.sh option 3, it:
-1. Built the MCP container (which has `pyotp` installed)
-2. Generated a valid base32 secret inside the container
-3. Saved it to `.env` as `TOTP_SECRET`
-4. Showed you the secret key and a QR code URL
-
-### Register in Authy or Google Authenticator
-
-1. Open Authy or Google Authenticator
-2. Add new account
-3. Enter manually:
-   - **Account name:** ClawOps Workshop
-   - **Key:** your `TOTP_SECRET` value from `.env`
-   - **Type:** Time-based
-
-Or scan the QR code shown after setup.sh option 3.
-
-### Using TOTP in S4
-
-When the AI suggests a write action, Telegram sends:
-```
-⚠️ SRE Action suggested:
-kubectl rollout restart deployment/payments-app -n prod
-
-🔐 Enter your 6-digit Authenticator code:
-✅ /approve <6-digit-code>
-❌ /deny
-```
-
-Reply with `/approve 123456` — the code is validated by the MCP server against `TOTP_SECRET`.
+The **MONITOR** tab shows the live K8s event stream (via the event-watcher SSE)
+and pod topology.
 
 ---
 
 ## Validation
 
 ```bash
-./setup.sh   # choose option 7
+./bootstrap-k8s.sh        # option 7
 ```
 
-Runs 17 checks covering:
-- Docker containers running
-- n8n reachable
-- MCP server reachable
-- Prometheus LB reachable
-- Grafana LB reachable
-- kubectl cluster access
-- All required env vars set
+Checks the `clawops` / `workshop` pods, n8n & MCP health, the chaos-loader,
+event-watcher, linux-mcp, ingress LB reachability, and the dashboard.
+
+---
+
+## Force a test alert (no real chaos)
+
+```bash
+N8N_IP=$(kubectl get svc n8n -n clawops -o jsonpath='{.spec.clusterIP}')
+curl -s -X POST http://${N8N_IP}:5678/webhook/prometheus-alert-s5 \
+  -H "Content-Type: application/json" \
+  -d '{"alerts":[{"labels":{"alertname":"TargetAppCPUStress","severity":"warning","workshop":"true","namespace":"workshop","pod":"target-app-xxx"},"status":"firing"}]}'
+```
 
 ---
 
@@ -235,77 +172,27 @@ Runs 17 checks covering:
 
 | Problem | Fix |
 |---|---|
-| "Node does not have any credentials set" | Re-add Gemini/Telegram creds in n8n UI |
-| MCP returns 503 Prometheus unreachable | Run option 4 to reinstall + update PROMETHEUS_URL, then option 5 to restart stack |
-| Telegram webhook 404 | Workflow not Active, or ngrok not running — check option 10 |
-| TOTP "invalid token" | Check TOTP_SECRET in container: `docker exec mcp-server env \| grep TOTP` |
-| force-alert.sh HTTP 404 | EC2_PUBLIC_IP not in .env — run option 3 |
-| Alertmanager still sending system alerts | Helm upgrade didn't apply — re-run option 4 |
+| n8n shows a blank page | Image must be `1.123.62`, not `:latest` (2.x writes a 0-byte editor). |
+| "Node does not have any credentials set" | Re-add the Gemini credential in the n8n UI (lives in the `n8n-data` PVC). |
+| MCP promql → 503 / "Prometheus unavailable" | `PROMETHEUS_URL` must be the internal DNS **with** the `/prometheus` routePrefix (option 2 re-applies it). |
+| `config.js` shows `INJECT_*` | Run bootstrap option 2 to re-apply configmaps. |
+| TOTP "invalid token" | Regenerate inside the MCP pod (has `pyotp`), then restart `mcp-server`. |
+| Alertmanager not reaching n8n | It must point to `http://n8n.clawops.svc.cluster.local:5678/webhook/prometheus-alert-s5`. |
+| Prometheus redirect loop | Don't add an nginx rewrite for Prometheus — Prefix path only. |
 
 ---
 
-## Step 9 — Import S5 Workflow (Production Alert Handler)
+## Workflow states (teaching → production)
 
-S5 replaces S3 as the production alert handler. S3 stays in n8n but **deactivated** — it's used only during the teaching session to explain how alert pipelines work. Once students understand S3, S5 takes over.
+| Workflow | Trigger | Output | Notes |
+|----------|---------|--------|-------|
+| S2 | n8n Chat UI | n8n chat | K8s + PromQL agent |
+| S2.5 | n8n Chat UI | n8n chat | adds the Linux MCP tool |
+| S4 | `/webhook/dashboard-chat` | dashboard chat | human loop + TOTP approval |
+| S5 | Alertmanager webhook | dashboard chat | alert enrichment + confidence |
+| S6 | event-watcher webhook | dashboard chat | K8s event intelligence (use S5 **or** S6) |
+| S8 | event-watcher webhook + JWT | dashboard chat | S6 with a JWT auth gate |
 
-```bash
-cd ~/n8nWorkShop && git pull
-export N8N_API_KEY="<your key>"
-
-python3 -c "
-import json
-with open('n8n-workflows/s5-alert-intelligence.json') as f: d=json.load(f)
-with open('/tmp/s5.json','w') as f: json.dump(d,f)
-" && curl -s -X POST http://localhost:5678/api/v1/workflows \
-  -H "X-N8N-API-KEY: $N8N_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d @/tmp/s5.json | python3 -c "import sys,json; d=json.load(sys.stdin); print('S5:', d.get('id','ERR'))"
-```
-
-After importing:
-1. Open S5 in n8n UI → set credentials on AI Agent + Telegram nodes
-2. Toggle **Active** on S5
-3. Deactivate S3 (toggle off) — keep it in n8n for reference
-
-### Apply updated Alertmanager config
-
-S5 uses a different webhook path (`/webhook/prometheus-alert-s5`). Re-run setup.sh option 3 to update Prometheus/Alertmanager:
-
-```bash
-./setup.sh  # option 3 (Install Prometheus + Grafana)
-```
-
-Or manually upgrade Helm:
-```bash
-source student-env/.env
-sed "s|EC2_PUBLIC_IP_PLACEHOLDER|${EC2_PUBLIC_IP}|g" k8s/monitoring/prometheus-values.yaml > /tmp/prom-values.yaml
-helm upgrade monitoring prometheus-community/kube-prometheus-stack \
-  -n monitoring -f /tmp/prom-values.yaml
-```
-
----
-
-## Session Flow (Production State)
-
-Once all workflows are imported and configured:
-
-| Workflow | State | Purpose |
-|----------|-------|---------|
-| S2 | ✅ Active | Manual K8s assistant (teaching) |
-| S3 | ⛔ Deactivated | Alert basics (teaching only, keep for demo) |
-| S4 | ✅ Active | Telegram bidirectional + TOTP approval |
-| S5 | ✅ Active | Production alert intelligence + enrichment |
-
-**The full loop:**
-```
-Dashboard trigger chaos
-  → Prometheus alert fires
-  → Alertmanager → S5 webhook
-  → S5 enriches + scores confidence
-  → Sends elegant Telegram message
-  → Engineer reads: signal bars, AI assessment, recommended action
-  → Engineer replies: /approve <totp>
-  → S4 picks up (same chat = shared context)
-  → MCP executes write command
-  → Confirmation sent
-```
+**The full loop:** dashboard chaos → Prometheus alert → Alertmanager → S5 → AI
+enriches + scores confidence → dashboard chat with incident key → engineer replies
+`/approve <totp> <key>` → S4 → MCP `kubectl-write` → confirmation back to chat.

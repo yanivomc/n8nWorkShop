@@ -665,7 +665,7 @@ if [[ -n "$N8N_IP" ]]; then
 fi
 N8N_KEY=$(kubectl get configmap n8n-config -n clawops   -o jsonpath='{.data.N8N_API_KEY}' 2>/dev/null || echo "")
 if [[ -z "$N8N_KEY" ]]; then
-  warn "N8N_API_KEY not in ConfigMap — skip workflow import. Set key in n8n UI then re-run: bash student-env/setup.sh"
+  warn "N8N_API_KEY not in ConfigMap — skip workflow import. Create a key in n8n (Settings → API), then re-run: ./bootstrap-k8s.sh (option 4)"
 else
   for wf in s2-ai-agent-mcp s2.5-linux-agent s4-dashboard-human-loop s5-alert-intelligence s6-k8s-event-intelligence s8-k8s-event-jwt; do
     python3 -c "

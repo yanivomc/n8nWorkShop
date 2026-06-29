@@ -6,7 +6,7 @@
 # =============================================================================
 
 # Source .env to pick up EC2_PUBLIC_IP and other vars
-ENV_FILE="$(dirname "$0")/../../student-env/.env"
+ENV_FILE="$(dirname "$0")/../../_archive/student-env/.env"
 [[ -f "$ENV_FILE" ]] && source "$ENV_FILE"
 
 # Auto-detect EC2 public IP from AWS metadata if not set in .env
@@ -17,7 +17,7 @@ fi
 # Final fallback — tell the student clearly
 if [[ -z "$EC2_PUBLIC_IP" ]]; then
   echo "❌ ERROR: EC2_PUBLIC_IP not set and could not auto-detect."
-  echo "   Run: cd ~/n8nWorkShop/student-env && ./setup.sh  → option 3"
+  echo "   Run: cd ~/n8nWorkShop && ./bootstrap-k8s.sh  → option 3"
   exit 1
 fi
 
