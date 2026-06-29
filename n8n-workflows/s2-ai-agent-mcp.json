@@ -70,7 +70,7 @@
             }
           ]
         },
-        "jsonBody": "={{ JSON.stringify({command: $fromAI('command', 'kubectl subcommand without kubectl prefix, e.g. get pods -n workshop', 'string')}) }}"
+        "jsonBody": "={{ ({ command: $fromAI('command', 'kubectl subcommand without kubectl prefix, e.g. get pods -n workshop', 'string') }) }}"
       },
       "id": "a1b2c3d4-0004-0004-0004-000000000004",
       "name": "kubectl_read",
