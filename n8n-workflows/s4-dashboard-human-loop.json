@@ -15,7 +15,7 @@
         6880,
         624
       ],
-      "webhookId": "telegram-bot"
+      "webhookId": "dashboard-chat-trigger"
     },
     {
       "parameters": {
