@@ -180,13 +180,7 @@
         -5264,
         -944
       ],
-      "webhookId": "0fd5bf29-2923-4ca7-b8ba-a3b1ed273a07",
-      "credentials": {
-        "telegramApi": {
-          "id": "jcA0ZMKocCJNhas2",
-          "name": "Telegram account"
-        }
-      }
+      "webhookId": "0fd5bf29-2923-4ca7-b8ba-a3b1ed273a07"
     },
     {
       "parameters": {
