@@ -110,13 +110,17 @@ Monitor connects to `/events-admin/events/stream` SSE. Tab switching fixed — a
 
 ## Images to Build
 
+> Nodes are **x86_64** — always build for `linux/amd64` (arm64 from a Mac
+> CrashLoops with `exec format error`). Use `docker buildx build --platform
+> linux/amd64 ... --push` or `podman build --platform linux/amd64`.
+
 ```bash
-docker build -t yanivomc/target-app:latest ./target-app && docker push yanivomc/target-app:latest
-docker build -t yanivomc/chaos-loader:latest ./chaos-loader && docker push yanivomc/chaos-loader:latest
-docker build -t yanivomc/event-watcher:latest ./event-watcher && docker push yanivomc/event-watcher:latest
-docker build -t yanivomc/clawops-dashboard:latest ./dashboard && docker push yanivomc/clawops-dashboard:latest
-docker build -t yanivomc/mcp-server:latest ./mcp-server && docker push yanivomc/mcp-server:latest
-docker build -t yanivomc/linux-mcp-server:latest ./linux-mcp-server && docker push yanivomc/linux-mcp-server:latest
+docker buildx build --platform linux/amd64 -t yanivomc/target-app:latest --push ./target-app
+docker buildx build --platform linux/amd64 -t yanivomc/chaos-loader:latest --push ./chaos-loader
+docker buildx build --platform linux/amd64 -t yanivomc/event-watcher:latest --push ./event-watcher
+docker buildx build --platform linux/amd64 -t yanivomc/clawops-dashboard:latest --push ./dashboard
+docker buildx build --platform linux/amd64 -t yanivomc/mcp-server:latest --push ./mcp-server
+docker buildx build --platform linux/amd64 -t yanivomc/linux-mcp-server:latest --push ./linux-mcp-server
 ```
 
 ---

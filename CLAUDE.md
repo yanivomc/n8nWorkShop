@@ -234,11 +234,19 @@ Key alerts:
 ## Common Tasks
 
 ### Rebuild and redeploy a service
+The cluster nodes are **x86_64 (amd64)**. Building on an Apple-Silicon Mac
+defaults to arm64 and the pod CrashLoops with `exec format error` —
+**always build for `linux/amd64`** (works with `docker buildx` or `podman`):
 ```bash
-cd dashboard && docker build -t yanivomc/clawops-dashboard:latest . && \
-  docker push yanivomc/clawops-dashboard:latest && \
-  kubectl rollout restart deployment/clawops-dashboard -n clawops
+# docker
+docker buildx build --platform linux/amd64 -t yanivomc/clawops-dashboard:latest --push ./dashboard
+# podman (build then push)
+podman build --platform linux/amd64 -t yanivomc/clawops-dashboard:latest ./dashboard && \
+  podman push localhost/yanivomc/clawops-dashboard:latest docker.io/yanivomc/clawops-dashboard:latest
+# then
+kubectl rollout restart deployment/clawops-dashboard -n clawops
 ```
+Verify arch before pushing: `podman inspect --format '{{.Architecture}}' <image>` → `amd64`.
 
 ### Re-apply configmaps with fresh values
 ```bash
