@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClawOps — Live Architecture</title>
+<style>
+  :root{
+    --bg:#080C18; --panel:#0F1729; --panel2:#0B1322; --border:#1E3A5F;
+    --cyan:#00D4FF; --green:#00C896; --orange:#FF6B35; --gold:#FFD700;
+    --text:#E6EDF7; --dim:#8892A4; --mono:'SF Mono',Consolas,'Roboto Mono',monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:
+      radial-gradient(1200px 600px at 70% -10%, rgba(0,212,255,.10), transparent 60%),
+      linear-gradient(180deg,#080C18,#070A12);
+    color:var(--text); font-family:'Trebuchet MS','Segoe UI',system-ui,sans-serif;
+    overflow:hidden;
+  }
+  /* faint grid */
+  body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.35;
+    background-image:linear-gradient(rgba(30,58,95,.18) 1px,transparent 1px),
+                     linear-gradient(90deg,rgba(30,58,95,.18) 1px,transparent 1px);
+    background-size:40px 40px;}
+
+  header{position:relative;z-index:5;display:flex;align-items:center;gap:18px;
+    padding:14px 22px;border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg,rgba(15,23,41,.9),rgba(8,12,24,.6));backdrop-filter:blur(6px)}
+  .logo{display:flex;align-items:center;gap:10px;font-weight:bold;letter-spacing:1px}
+  .logo .mark{width:26px;height:26px;display:grid;place-items:center;color:#061018;
+    background:linear-gradient(135deg,var(--cyan),var(--green));border-radius:7px;font-size:15px}
+  .logo .t1{color:#fff}.logo .t2{color:var(--cyan)}
+  .title-main{font-size:14px;color:var(--dim);font-family:var(--mono)}
+  .title-main b{color:var(--cyan)}
+  .tabs{display:flex;gap:6px;margin-left:8px}
+  .tab{font-family:var(--mono);font-size:12px;letter-spacing:.5px;color:var(--dim);
+    border:1px solid var(--border);background:var(--panel2);padding:7px 14px;border-radius:7px;cursor:pointer;transition:.18s}
+  .tab:hover{color:#fff;border-color:var(--cyan)}
+  .tab.active{color:#061018;background:linear-gradient(135deg,var(--cyan),var(--green));border-color:transparent;font-weight:bold}
+  .spacer{flex:1}
+  .ctrl{font-family:var(--mono);font-size:12px;color:#061018;background:var(--cyan);border:none;
+    padding:8px 16px;border-radius:7px;cursor:pointer;font-weight:bold;letter-spacing:.5px;transition:.15s}
+  .ctrl:hover{filter:brightness(1.12)}
+  .ctrl.ghost{background:var(--panel2);color:var(--cyan);border:1px solid var(--border)}
+  .ctrl:disabled{opacity:.4;cursor:default}
+
+  .stage-wrap{position:relative;z-index:1;height:calc(100vh - 60px);width:100%;
+    transition:width .32s cubic-bezier(.2,.7,.2,1)}
+  .stage-wrap.shift{width:calc(100% - 420px)}   /* reflow diagram when panel is open */
+  @media(max-width:880px){ .stage-wrap.shift{width:100%} }
+  svg.stage{width:100%;height:100%;display:none}
+  svg.stage.active{display:block}
+
+  .node{cursor:pointer}
+  .node .box{fill:var(--panel);stroke:var(--border);stroke-width:1.5;rx:12;
+    transition:stroke .2s, filter .2s}
+  .node:hover .box{stroke:var(--cyan)}
+  .node.hot .box{stroke:var(--cyan);stroke-width:2.5;filter:drop-shadow(0 0 14px rgba(0,212,255,.55))}
+  .node.dim{opacity:.32;transition:opacity .3s}
+  .node .ico{font-size:20px}
+  .node .lbl{fill:#fff;font-weight:bold;font-size:14px;font-family:'Trebuchet MS',sans-serif}
+  .node .sub{fill:var(--dim);font-size:11px;font-family:var(--mono)}
+  .node.accent2 .box{stroke:var(--green)} .node.accent3 .box{stroke:var(--orange)}
+
+  .edge{fill:none;stroke:var(--border);stroke-width:2;stroke-dasharray:5 6;opacity:.7}
+  .edge.lit{stroke:var(--cyan);opacity:1;filter:drop-shadow(0 0 6px rgba(0,212,255,.6))}
+  .elabel{fill:var(--dim);font-size:10px;font-family:var(--mono)}
+  .flowdot{fill:var(--cyan);filter:drop-shadow(0 0 5px var(--cyan))}
+
+  /* detail panel */
+  #panel{position:fixed;top:60px;right:0;width:420px;max-width:92vw;height:calc(100vh - 60px);z-index:20;
+    background:linear-gradient(180deg,rgba(15,23,41,.97),rgba(9,15,28,.97));border-left:1px solid var(--border);
+    backdrop-filter:blur(10px);transform:translateX(105%);transition:transform .32s cubic-bezier(.2,.7,.2,1);
+    display:flex;flex-direction:column;box-shadow:-20px 0 60px rgba(0,0,0,.45)}
+  #panel.open{transform:translateX(0)}
+  .p-head{padding:18px 20px 14px;border-bottom:1px solid var(--border)}
+  .p-tag{font-family:var(--mono);font-size:11px;letter-spacing:1px;color:var(--cyan)}
+  .p-title{font-size:21px;font-weight:bold;margin-top:4px;color:#fff}
+  .p-close{position:absolute;top:14px;right:16px;color:var(--dim);cursor:pointer;font-size:20px;line-height:1}
+  .p-close:hover{color:#fff}
+  .p-body{padding:18px 20px;overflow-y:auto}
+  .p-desc{color:#cfd8e6;font-size:14px;line-height:1.6}
+  .p-facts{list-style:none;margin:14px 0}
+  .p-facts li{padding:7px 0;border-bottom:1px dashed rgba(30,58,95,.5);font-size:13px;display:flex;gap:10px}
+  .p-facts b{color:var(--cyan);font-family:var(--mono);min-width:92px;display:inline-block}
+  .code-h{font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:1px;margin:16px 0 6px;text-transform:uppercase}
+  pre{background:#060A14;border:1px solid var(--border);border-radius:9px;padding:13px 14px;overflow-x:auto;
+    font-family:var(--mono);font-size:12px;line-height:1.55;color:#cdd6e3}
+  .k{color:#ff79c6}.s{color:#9ece6a}.c{color:#566175;font-style:italic}.n{color:#ffb86c}.f{color:#7dcfff}
+
+  /* caption bar (play mode) */
+  #caption{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(140%);z-index:15;
+    max-width:780px;width:90%;background:rgba(11,19,34,.96);border:1px solid var(--cyan);border-radius:12px;
+    padding:14px 20px;box-shadow:0 0 40px rgba(0,212,255,.25);transition:transform .35s;display:flex;align-items:center;gap:14px}
+  #caption.show{transform:translateX(-50%) translateY(0)}
+  #caption .step{font-family:var(--mono);font-size:12px;color:#061018;background:var(--cyan);border-radius:6px;
+    padding:4px 9px;font-weight:bold;white-space:nowrap}
+  #caption .txt{font-size:14px;color:#e8eef7;line-height:1.45}
+  .hint{position:fixed;left:22px;bottom:18px;z-index:6;color:var(--dim);font-family:var(--mono);font-size:11px}
+  .legend{position:fixed;right:22px;bottom:18px;z-index:6;color:var(--dim);font-family:var(--mono);font-size:11px;text-align:right}
+  .legend b{color:var(--cyan)}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><span class="mark">&#x2B21;</span><span class="t1">Claw</span><span class="t2">Ops</span></div>
+  <div class="title-main">Live Architecture &nbsp;·&nbsp; <b>click a node</b> to explain it</div>
+  <div class="tabs">
+    <div class="tab active" data-flow="agent">AGENT + MCP LOOP</div>
+    <div class="tab" data-flow="incident">INCIDENT LIFECYCLE</div>
+  </div>
+  <div class="spacer"></div>
+  <button class="ctrl" id="playBtn">&#9654; PLAY THE FLOW</button>
+  <button class="ctrl ghost" id="resetBtn">RESET</button>
+</header>
+
+<div class="stage-wrap">
+  <svg class="stage active" id="svg-agent" viewBox="0 0 1000 560" preserveAspectRatio="xMidYMid meet"></svg>
+  <svg class="stage" id="svg-incident" viewBox="0 0 1000 560" preserveAspectRatio="xMidYMid meet"></svg>
+</div>
+
+<div id="panel">
+  <div class="p-head"><div class="p-tag" id="pTag"></div><div class="p-title" id="pTitle"></div>
+    <div class="p-close" onclick="closePanel()">&times;</div></div>
+  <div class="p-body" id="pBody"></div>
+</div>
+
+<div id="caption"><span class="step" id="capStep"></span><span class="txt" id="capTxt"></span></div>
+<div class="hint">MOCK data · for teaching</div>
+<div class="legend">flow: <b>&#9679;</b> data moving &nbsp;|&nbsp; <b>&mdash;</b> a connection</div>
+
+<script>
+/* ---------- tiny syntax highlighter (lang-agnostic, safe) ---------- */
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function hl(code){
+  // single pass — alternation classifies each token; injected HTML is never re-scanned
+  return esc(code).replace(
+    /(#.*$|\/\/.*$)|("[^"\n]*"|'[^'\n]*')|\b(def|class|return|if|not|in|for|try|except|raise|await|async|import|from|const|let|true|false|True|False|None|POST|GET|PATCH|DELETE)\b|\b(\d+(?:\.\d+)?)\b/gm,
+    (m,cm,st,kw,nu)=>{
+      if(cm)return '<span class="c">'+cm+'</span>';
+      if(st)return '<span class="s">'+st+'</span>';
+      if(kw)return '<span class="k">'+kw+'</span>';
+      if(nu)return '<span class="n">'+nu+'</span>';
+      return m;
+    });
+}
+
+/* ---------- flow data ---------- */
+const FLOWS={
+ agent:{
+  vb:[1000,560],
+  nodes:[
+   {id:'you',x:40,y:248,w:120,h:64,icon:'&#128172;',label:'You',sub:'n8n chat',
+     tag:'INPUT',title:'You — the n8n Chat',
+     desc:'You type a plain-English question in n8n’s built-in chat. No webhook, no Telegram — n8n hosts the chat UI itself.',
+     facts:[['Node','Chat Trigger'],['Asks','“how many pods in workshop?”']],
+     codeH:'what you type',code:'how many pods are running in the workshop namespace?'},
+   {id:'trigger',x:210,y:248,w:140,h:64,icon:'&#9889;',label:'Chat Trigger',sub:'chatTrigger',
+     tag:'TRIGGER',title:'Chat Trigger',
+     desc:'The entry node. It starts the workflow on every chat message and passes your text to the AI Agent.',
+     facts:[['Type','chatTrigger v1'],['Out','→ AI Agent (main)']],
+     codeH:'connection',code:'Chat Trigger  --main-->  K8s + Linux Agent'},
+   {id:'agent',x:410,y:230,w:170,h:100,icon:'&#129302;',label:'AI Agent',sub:'the brain',accent:'',big:1,
+     tag:'AGENT',title:'K8s + Linux Agent',
+     desc:'The LangChain agent. It reads your question and decides which tool(s) to call, in what order — driven entirely by its system prompt.',
+     facts:[['Type','agent v1.7'],['Has','model + 3 tools + memory'],['Output','concise answer, names the tool used']],
+     codeH:'system prompt (excerpt)',
+     code:'You are a DevOps assistant...\n## When to use each tool:\n- K8s questions  -> kubectl_read\n- Metrics/graphs -> promql\n- OS-level       -> linux_read\n- Deep dives: use several and correlate'},
+   {id:'gemini',x:430,y:70,w:130,h:60,icon:'&#10024;',label:'Gemini',sub:'ai_languageModel',accent:'accent2',
+     tag:'MODEL',title:'Gemini (chat model)',
+     desc:'The LLM the agent thinks with. Connected to the agent on the ai_languageModel port.',
+     facts:[['Model','gemini-2.5-flash'],['Link','ai_languageModel'],['Cred','Google Gemini API']],
+     codeH:'node',code:'lmChatGoogleGemini  ->  agent.ai_languageModel'},
+   {id:'memory',x:430,y:430,w:130,h:60,icon:'&#129504;',label:'Chat Memory',sub:'ai_memory',accent:'accent3',
+     tag:'MEMORY',title:'Chat Memory',
+     desc:'A rolling window of the last 10 messages so follow-ups keep context (“and that pod?”).',
+     facts:[['Type','memoryBufferWindow'],['Window','10 messages'],['Link','ai_memory']],
+     codeH:'node',code:'Window Buffer Memory (k=10)  ->  agent.ai_memory'},
+   {id:'kubectl',x:650,y:120,w:150,h:58,icon:'&#9096;',label:'kubectl_read',sub:'ai_tool',
+     tag:'TOOL',title:'kubectl_read',
+     desc:'An HTTP Request Tool. The agent picks it from its description, fills {command}, and POSTs to the MCP server.',
+     facts:[['Type','HTTP Request Tool'],['Body','{ "command": "{command}" }'],['Link','ai_tool']],
+     codeH:'tool node body',code:'POST mcp-server:8000/tools/kubectl-read\n{ "command": "get pods -n workshop" }'},
+   {id:'promql',x:650,y:251,w:150,h:58,icon:'&#128202;',label:'promql',sub:'ai_tool',accent:'accent2',
+     tag:'TOOL',title:'promql',
+     desc:'The metrics tool. The agent writes PromQL; the MCP server runs it against Prometheus.',
+     facts:[['Type','HTTP Request Tool'],['Body','{ "query": "{query}" }'],['Link','ai_tool']],
+     codeH:'tool node body',code:'POST mcp-server:8000/tools/promql\n{ "query": "target_chaos_cpu_active" }'},
+   {id:'linux',x:650,y:382,w:150,h:58,icon:'&#128421;',label:'linux_read',sub:'ai_tool',accent:'accent3',
+     tag:'TOOL',title:'linux_read',
+     desc:'OS diagnostics tool — talks to the separate Linux MCP server (port 8001), guarded by an allowlist.',
+     facts:[['Type','HTTP Request Tool'],['Target','linux-mcp-server:8001'],['Allowlist','df, free, ps, uptime…']],
+     codeH:'tool node body',code:'POST linux-mcp-server:8001/tools/linux-read\n{ "command": "df -h" }'},
+   {id:'mcp',x:860,y:185,w:120,h:64,icon:'&#128295;',label:'MCP server',sub:'FastAPI',
+     tag:'EXECUTION',title:'MCP Server (FastAPI)',
+     desc:'Runs the real kubectl / PromQL and returns JSON the AI can read. In-cluster ServiceAccount — no kubeconfig.',
+     facts:[['App','mcp-server (clawops)'],['Returns','{ output, error, exit_code }'],['Auth','ServiceAccount RBAC']],
+     codeH:'server.py',code:'@app.post("/tools/kubectl-read")\ndef kubectl_read(req):\n    if is_write_command(req.command):\n        raise HTTPException(403)   # look, do not touch\n    return run_kubectl(req.command)'},
+   {id:'lmcp',x:860,y:382,w:120,h:58,icon:'&#128190;',label:'linux-mcp',sub:'FastAPI :8001',accent:'accent3',
+     tag:'EXECUTION',title:'Linux MCP Server',
+     desc:'A second MCP — proves the pattern repeats. Same response shape, guarded by an allowlist instead of a verb-block.',
+     facts:[['App','linux-mcp-server'],['Guard','is_allowed(): startswith prefix'],['Else','400']],
+     codeH:'server.py',code:'ALLOWED_PREFIXES = ["df","free","uptime",\n  "ps","top -bn1","netstat", ...]\ndef is_allowed(cmd):\n    return any(cmd.startswith(p) for p in ALLOWED_PREFIXES)'},
+  ],
+  edges:[
+   ['you','trigger'],['trigger','agent'],
+   ['gemini','agent','model'],['memory','agent','memory'],
+   ['agent','kubectl','tool'],['agent','promql','tool'],['agent','linux','tool'],
+   ['kubectl','mcp'],['promql','mcp'],['linux','lmcp'],
+  ],
+  play:[
+   ['you','You ask a question in plain English in the n8n chat.'],
+   ['trigger','The Chat Trigger fires and hands your text to the agent.'],
+   ['agent','The AI Agent reads it and consults its system prompt to choose a tool.'],
+   ['gemini','It reasons with Gemini (gemini-2.5-flash) — the model on the ai_languageModel port.'],
+   ['kubectl','“pods” → it picks kubectl_read and fills the command.'],
+   ['mcp','The MCP server runs real kubectl and returns JSON the AI can read.'],
+   ['agent','The agent reads the result, may call more tools, then writes the answer.'],
+   ['you','A concise answer comes back in the chat — it even says which tool it used.'],
+  ],
+ },
+ incident:{
+  vb:[1000,560],
+  nodes:[
+   {id:'app',x:40,y:90,w:150,h:64,icon:'&#127919;',label:'target-app',sub:'chaos injected',accent:'accent3',
+     tag:'TRIGGER',title:'target-app (chaos)',
+     desc:'The workshop app. A chaos scenario (CPU / memory / errors) flips a metric that Prometheus is watching.',
+     facts:[['Metric','target_chaos_cpu_active = 1'],['Namespace','workshop']],
+     codeH:'chaos metric',code:'target_chaos_cpu_active{namespace="workshop"} 1'},
+   {id:'prom',x:40,y:300,w:150,h:64,icon:'&#128200;',label:'Prometheus',sub:'evaluates rules',
+     tag:'MONITOR',title:'Prometheus',
+     desc:'Scrapes the metric and evaluates the alert rule. When it stays true, the alert fires.',
+     facts:[['Rule','TargetAppCPUStress'],['Fires when','metric == 1'],['Label','workshop="true"']],
+     codeH:'alert rule',code:'- alert: TargetAppCPUStress\n  expr: target_chaos_cpu_active == 1\n  labels: { workshop: "true" }'},
+   {id:'am',x:260,y:300,w:150,h:64,icon:'&#128276;',label:'Alertmanager',sub:'routes',
+     tag:'ROUTE',title:'Alertmanager',
+     desc:'Routes only workshop=true alerts to the n8n S5 webhook — everything else is dropped. Filter at the router.',
+     facts:[['Sends to','n8n S5 webhook'],['Filter','workshop="true" only']],
+     codeH:'receiver',code:'webhook_configs:\n  - url: http://n8n.clawops:5678/webhook/prometheus-alert-s5'},
+   {id:'s5',x:480,y:300,w:160,h:74,icon:'&#129302;',label:'n8n S5',sub:'AI investigates',big:1,
+     tag:'INVESTIGATE',title:'n8n S5 — Alert Intelligence',
+     desc:'The AI enriches the alert with live PromQL, scores confidence, and only escalates when signals agree.',
+     facts:[['Enriches','kubectl + promql via MCP'],['Scores','LOW / MED / HIGH'],['Low conf','silently dropped']],
+     codeH:'confidence',code:'active signals 2/3  ->  confidence: HIGH\nrecommend: rollout restart deployment/target-app -n workshop'},
+   {id:'mcp',x:480,y:100,w:160,h:62,icon:'&#128295;',label:'MCP tools',sub:'read the truth',
+     tag:'TOOLS',title:'MCP Server',
+     desc:'S5 calls kubectl_read + promql through the MCP to confirm real state before deciding anything.',
+     facts:[['kubectl-read','cluster state'],['promql','live metrics'],['Never','acts on one signal']],
+     codeH:'investigation',code:'kubectl get pods -n workshop\npromql: target_chaos_cpu_active'},
+   {id:'inc',x:710,y:100,w:160,h:62,icon:'&#128452;',label:'Incident store',sub:'4-char key',accent:'accent2',
+     tag:'AUDIT',title:'Incident Store (SQLite)',
+     desc:'S5 records the incident; the MCP returns a 4-char key. The key is the audit trail across the whole loop.',
+     facts:[['POST /incidents','-> key e.g. k42a'],['Stores','alertname, command, status'],['Status','pending']],
+     codeH:'server.py',code:'@app.post("/incidents")\ndef create_incident(req):\n    key = gen_key()   # 4 chars\n    return {"key": key, "status": "pending"}'},
+   {id:'dash',x:710,y:300,w:160,h:62,icon:'&#128421;',label:'Dashboard chat',sub:'SSE, real-time',
+     tag:'NOTIFY',title:'Dashboard Chat',
+     desc:'The AI report lands in the dashboard CHAT tab in real time with the incident key — no Telegram, no 3am cold start.',
+     facts:[['Shows','AI analysis + key'],['Approve with','/approve <totp> k42a']],
+     codeH:'chat message',code:'🚨 TargetAppCPUStress  (HIGH)\nRecommended: rollout restart deployment/target-app\n🔐 /approve <totp> k42a'},
+   {id:'you',x:910,y:300,w:70,h:62,icon:'&#129489;',label:'You',sub:'approve',accent:'accent2',
+     tag:'HUMAN',title:'You — the approval gate',
+     desc:'You read the AI’s diagnosis and approve with a 30-second TOTP code + the incident key. Human stays in the loop.',
+     facts:[['Reply','/approve 123456 k42a'],['TOTP','valid ±30s'],['Goes to','n8n S4']],
+     codeH:'approval',code:'/approve 123456 k42a'},
+   {id:'write',x:710,y:470,w:160,h:60,icon:'&#9999;',label:'kubectl-write',sub:'TOTP gated',accent:'accent3',
+     tag:'EXECUTE',title:'kubectl-write (gated)',
+     desc:'S4 validates the TOTP against the MCP, then — only then — the write runs and is logged to the audit trail.',
+     facts:[['Gate','validate_token() pyotp'],['Then','runs the write (60s)'],['Audit','WRITE_EXECUTED log']],
+     codeH:'server.py',code:'def validate_token(code):\n    return pyotp.TOTP(SECRET).verify(code, valid_window=1)  # ±30s\n# only then: run_kubectl(req.command)'},
+  ],
+  edges:[
+   ['app','prom'],['prom','am'],['am','s5'],
+   ['s5','mcp','investigate'],['s5','inc','store key'],
+   ['inc','dash'],['dash','you'],['you','write','/approve'],['write','app','fixed'],
+  ],
+  play:[
+   ['app','A chaos scenario flips target-app’s metric — CPU stress is now active.'],
+   ['prom','Prometheus evaluates the rule; the alert TargetAppCPUStress fires.'],
+   ['am','Alertmanager routes only the workshop=true alert to n8n S5.'],
+   ['s5','S5 enriches the alert with live data and scores confidence.'],
+   ['mcp','It confirms real state via the MCP (kubectl + promql) — never one signal.'],
+   ['inc','It records an incident and gets a 4-char key (k42a).'],
+   ['dash','The AI report + key appear in the dashboard chat in real time.'],
+   ['you','You read the diagnosis and approve with a 30-second TOTP code.'],
+   ['write','S4 validates the TOTP, then runs the gated kubectl-write — logged.'],
+   ['app','target-app is remediated. Full audit trail keyed by k42a.'],
+  ],
+ },
+};
+
+/* ---------- render ---------- */
+const SVGNS='http://www.w3.org/2000/svg';
+let current='agent', playTimer=null, playing=false;
+const nodeIndex={};
+
+function el(tag,attrs){const e=document.createElementNS(SVGNS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);return e;}
+function anchor(n,side){ // returns [x,y] on node edge
+  const cx=n.x+n.w/2, cy=n.y+n.h/2;
+  if(side==='r')return[n.x+n.w,cy]; if(side==='l')return[n.x,cy];
+  if(side==='t')return[cx,n.y]; if(side==='b')return[cx,n.y+n.h]; return[cx,cy];
+}
+function edgePath(a,b){
+  const A=nodeIndex[a], B=nodeIndex[b];
+  const ac=[A.x+A.w/2,A.y+A.h/2], bc=[B.x+B.w/2,B.y+B.h/2];
+  const horiz=Math.abs(bc[0]-ac[0])>=Math.abs(bc[1]-ac[1]);
+  let p1,p2;
+  if(horiz){ p1=anchor(A, bc[0]>=ac[0]?'r':'l'); p2=anchor(B, bc[0]>=ac[0]?'l':'r'); }
+  else { p1=anchor(A, bc[1]>=ac[1]?'b':'t'); p2=anchor(B, bc[1]>=ac[1]?'t':'b'); }
+  const mx=(p1[0]+p2[0])/2, my=(p1[1]+p2[1])/2;
+  // gentle curve
+  return {d:`M${p1[0]},${p1[1]} Q ${mx},${p1[1]} ${mx},${my} T ${p2[0]},${p2[1]}`, mid:[mx,my]};
+}
+
+function renderFlow(key){
+  const flow=FLOWS[key]; const svg=document.getElementById('svg-'+key);
+  svg.innerHTML='';
+  flow.nodes.forEach(n=>nodeIndex[n.id]=n);
+  // edges first (under nodes)
+  flow.edges.forEach((e,i)=>{
+    const[a,b,lab]=e; const pth=edgePath(a,b); const id=`${key}-edge-${i}`;
+    const path=el('path',{d:pth.d,class:'edge',id});
+    path.dataset.a=a; path.dataset.b=b; svg.appendChild(path);
+    // flowing dot
+    const dot=el('circle',{r:4,class:'flowdot'});
+    const am=el('animateMotion',{dur:(2.2+ (i%3)*0.4)+'s',repeatCount:'indefinite',rotate:'auto'});
+    const mp=el('mpath'); mp.setAttributeNS('http://www.w3.org/1999/xlink','href','#'+id); am.appendChild(mp);
+    dot.appendChild(am); svg.appendChild(dot);
+    if(lab){const t=el('text',{x:pth.mid[0],y:pth.mid[1]-7,class:'elabel','text-anchor':'middle'});t.textContent=lab;svg.appendChild(t);}
+  });
+  // nodes
+  flow.nodes.forEach(n=>{
+    const g=el('g',{class:'node '+(n.accent||''),id:`${key}-node-${n.id}`}); g.dataset.id=n.id;
+    g.appendChild(el('rect',{x:n.x,y:n.y,width:n.w,height:n.h,rx:12,class:'box'}));
+    const ic=el('text',{x:n.x+16,y:n.y+(n.big?34:30),class:'ico'}); ic.innerHTML=n.icon; g.appendChild(ic);
+    const lb=el('text',{x:n.x+(n.big?46:42),y:n.y+(n.big?32:27),class:'lbl'}); lb.textContent=n.label; g.appendChild(lb);
+    const sb=el('text',{x:n.x+(n.big?46:42),y:n.y+(n.big?50:44),class:'sub'}); sb.textContent=n.sub; g.appendChild(sb);
+    g.addEventListener('click',()=>{stopPlay();openNode(n.id);});
+    svg.appendChild(g);
+  });
+}
+
+/* ---------- panel ---------- */
+function openNode(id){
+  const n=nodeIndex[id]; if(!n)return;
+  highlight(id);
+  document.getElementById('pTag').textContent=n.tag||'';
+  document.getElementById('pTitle').textContent=n.title||n.label;
+  let facts=(n.facts||[]).map(f=>`<li><b>${f[0]}</b><span>${f[1]}</span></li>`).join('');
+  document.getElementById('pBody').innerHTML=
+    `<div class="p-desc">${n.desc||''}</div>`+
+    (facts?`<ul class="p-facts">${facts}</ul>`:'')+
+    (n.code?`<div class="code-h">${n.codeH||'code'}</div><pre><code>${hl(n.code)}</code></pre>`:'');
+  document.getElementById('panel').classList.add('open');
+  document.querySelector('.stage-wrap').classList.add('shift');   // reflow diagram so panel never covers nodes
+}
+function closePanel(){document.getElementById('panel').classList.remove('open');
+  document.querySelector('.stage-wrap').classList.remove('shift');clearHot();}
+
+/* ---------- highlight ---------- */
+function clearHot(){document.querySelectorAll('.node').forEach(g=>g.classList.remove('hot','dim'));
+  document.querySelectorAll('.edge').forEach(e=>e.classList.remove('lit'));}
+function highlight(id){
+  const svg=document.getElementById('svg-'+current);
+  svg.querySelectorAll('.node').forEach(g=>{g.classList.toggle('hot',g.dataset.id===id);g.classList.toggle('dim',g.dataset.id!==id);});
+  svg.querySelectorAll('.edge').forEach(e=>e.classList.toggle('lit', e.dataset.a===id||e.dataset.b===id));
+}
+
+/* ---------- play mode ---------- */
+function startPlay(){
+  stopPlay(); closePanel();           // keep the FULL diagram visible during the walkthrough
+  playing=true; document.getElementById('playBtn').disabled=true;
+  const steps=FLOWS[current].play; let i=0;
+  const cap=document.getElementById('caption'); cap.classList.add('show');
+  const tick=()=>{
+    if(i>=steps.length){ document.getElementById('capStep').textContent='✓ done';
+      document.getElementById('capTxt').innerHTML='That’s the full flow. <b style="color:var(--cyan)">Click any node</b> to dive into its code, or RESET.';
+      playing=false; document.getElementById('playBtn').disabled=false; return; }
+    const[id,txt]=steps[i];
+    const n=nodeIndex[id];
+    document.getElementById('capStep').textContent=`${i+1}/${steps.length}`;
+    // caption carries the narration (no side panel → nothing covers the diagram)
+    document.getElementById('capTxt').innerHTML=`<b style="color:var(--cyan)">${n?n.label:''}</b> &nbsp;${txt}`;
+    highlight(id);
+    i++; playTimer=setTimeout(tick,2600);
+  };
+  tick();
+}
+function stopPlay(){if(playTimer){clearTimeout(playTimer);playTimer=null;}playing=false;document.getElementById('playBtn').disabled=false;}
+function reset(){stopPlay();clearHot();closePanel();
+  document.getElementById('caption').classList.remove('show');}
+
+/* ---------- tabs + wiring ---------- */
+function switchFlow(key){
+  current=key; reset();
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.flow===key));
+  document.querySelectorAll('svg.stage').forEach(s=>s.classList.toggle('active',s.id==='svg-'+key));
+}
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>switchFlow(t.dataset.flow)));
+document.getElementById('playBtn').addEventListener('click',startPlay);
+document.getElementById('resetBtn').addEventListener('click',reset);
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closePanel();if(e.key===' '){e.preventDefault();playing?stopPlay():startPlay();}});
+
+renderFlow('agent'); renderFlow('incident');
+</script>
+</body>
+</html>

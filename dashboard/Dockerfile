@@ -9,6 +9,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py .
 COPY index.html /app/static/index.html
+COPY present.html /app/static/present.html
 
 EXPOSE 80
 
