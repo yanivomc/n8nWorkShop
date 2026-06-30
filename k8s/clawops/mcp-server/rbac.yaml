@@ -5,30 +5,41 @@ metadata:
   name: mcp-server
   namespace: clawops
 ---
-# ClusterRole — read everything + write to workshop namespace only
+# ClusterRole — read everything + create/manage normal objects cluster-wide.
+# NOTE: every write still passes through the MCP's TOTP-gated /tools/kubectl-write
+# endpoint (a human approves each one); kubectl-read rejects write verbs. So the
+# human-in-the-loop approval gate is intact — this just lets an APPROVED write
+# create/manage normal objects (namespaces, pods, deployments, …) in any namespace.
+# Intentionally excludes RBAC (roles/bindings), nodes, CRDs, and cluster config to
+# avoid privilege escalation / cluster-breaking changes.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: mcp-server-role
 rules:
-  # Read-only across cluster
-  - apiGroups: [""]
-    resources: ["pods", "pods/log", "pods/exec", "services", "endpoints", "namespaces", "nodes",
-                 "events", "configmaps", "persistentvolumeclaims"]
+  # ── Read-only across the whole cluster ──
+  - apiGroups: ["*"]
+    resources: ["*"]
     verbs: ["get", "list", "watch"]
-  - apiGroups: ["apps"]
-    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
-    verbs: ["get", "list", "watch"]
-  - apiGroups: ["metrics.k8s.io"]
-    resources: ["pods", "nodes"]
-    verbs: ["get", "list"]
-  # Write — workshop namespace only (chaos scenarios + restarts)
-  - apiGroups: ["apps"]
-    resources: ["deployments"]
-    verbs: ["patch", "update"]
+  # ── Write — create/update/patch/delete normal objects cluster-wide ──
   - apiGroups: [""]
-    resources: ["pods"]
-    verbs: ["delete"]
+    resources: ["pods", "pods/exec", "pods/portforward", "services", "configmaps",
+                 "secrets", "persistentvolumeclaims", "serviceaccounts",
+                 "namespaces", "endpoints", "resourcequotas", "limitranges"]
+    verbs: ["create", "update", "patch", "delete", "deletecollection"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/scale", "replicasets", "statefulsets",
+                 "statefulsets/scale", "daemonsets"]
+    verbs: ["create", "update", "patch", "delete", "deletecollection"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["create", "update", "patch", "delete", "deletecollection"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "networkpolicies"]
+    verbs: ["create", "update", "patch", "delete"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["create", "update", "patch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
