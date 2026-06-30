@@ -45,7 +45,7 @@ K8s Cluster (kops, AWS, 2 nodes)
 
 ```bash
 ./bootstrap-k8s.sh run     # non-interactive full bootstrap
-./bootstrap-k8s.sh         # interactive menu (8 options)
+./bootstrap-k8s.sh         # interactive menu (9 options)
 ```
 
 Menu options:
@@ -54,9 +54,10 @@ Menu options:
 - 3 = update ingress
 - 4 = import workflows (S2/S4/S5/S6/S8)
 - 5 = show TOTP + QR code (instructor — scan with Authy)
-- 6 = reset incidents (clear all MCP incidents)
-- 7 = validate health checks
-- 8 = delete ALL resources
+- 6 = reset OTP / TOTP (generate a NEW secret + restart MCP + re-scan QR — use when codes stop working)
+- 7 = reset incidents (clear all MCP incidents)
+- 8 = validate health checks
+- 9 = delete ALL resources
 
 A fresh `run` deploys **everything** (ingress-nginx, monitoring, n8n, mcp-server,
 dashboard, event-watcher, linux-mcp-server, target-app, ingress, + auto-imports

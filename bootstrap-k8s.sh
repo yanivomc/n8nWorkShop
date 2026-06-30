@@ -37,9 +37,10 @@ show_menu() {
   echo -e "  ${CYAN}3)${NC} Update ingress     (re-apply ingress rules)"
   echo -e "  ${CYAN}4)${NC} Import workflows   (push S2/S4/S5/S6/S8 to n8n)"
   echo -e "  ${CYAN}5)${NC} Show TOTP / QR code  (instructor — scan with Authy)"
-  echo -e "  ${CYAN}6)${NC} Reset incidents    (clear all MCP incidents)"
-  echo -e "  ${CYAN}7)${NC} Validate           (run health checks)"
-  echo -e "  ${RED}8)${NC} Delete ALL         (wipe everything — fresh start)"
+  echo -e "  ${CYAN}6)${NC} Reset OTP / TOTP   (new secret — re-scan the QR)"
+  echo -e "  ${CYAN}7)${NC} Reset incidents    (clear all MCP incidents)"
+  echo -e "  ${CYAN}8)${NC} Validate           (run health checks)"
+  echo -e "  ${RED}9)${NC} Delete ALL         (wipe everything — fresh start)"
   echo -e "  ${CYAN}q)${NC} Quit"
   echo ""
   echo -n "  Choice [1]: "
@@ -210,6 +211,44 @@ show_totp() {
   ok "Open QR in browser → scan with Authy / Google Authenticator"
 }
 
+reset_otp() {
+  hdr "Reset OTP / TOTP Secret"
+  if ! kubectl get deployment mcp-server -n clawops >/dev/null 2>&1; then
+    die "mcp-server not found — is the cluster running?"
+  fi
+  echo ""
+  warn "This generates a NEW TOTP secret. The OLD code/QR STOPS working —"
+  warn "you (and students) must re-scan the new QR in Authy / Google Authenticator."
+  read -rp "  Type 'yes' to confirm: " CONFIRM
+  if [[ "$CONFIRM" != "yes" ]]; then
+    info "Cancelled."; return
+  fi
+  # Generate a fresh, VALID base32 secret via pyotp (host first, then the mcp pod).
+  TOTP_SECRET=$(python3 -c "import pyotp; print(pyotp.random_base32())" 2>/dev/null \
+    || kubectl exec -n clawops deployment/mcp-server -- python3 -c "import pyotp; print(pyotp.random_base32())" 2>/dev/null)
+  if [[ -z "$TOTP_SECRET" ]]; then
+    die "Couldn't generate a TOTP secret (pyotp missing on host AND in the mcp-server pod)."
+  fi
+  # Preserve the existing write-approval fallback token (or make one).
+  WRITE_TOKEN=$(kubectl get secret mcp-secrets -n clawops \
+    -o jsonpath='{.data.WRITE_APPROVAL_TOKEN}' 2>/dev/null | base64 -d 2>/dev/null || echo "")
+  [[ -z "$WRITE_TOKEN" ]] && WRITE_TOKEN=$(openssl rand -hex 32)
+  kubectl create secret generic mcp-secrets \
+    --from-literal=TOTP_SECRET="$TOTP_SECRET" \
+    --from-literal=WRITE_APPROVAL_TOKEN="$WRITE_TOKEN" \
+    -n clawops --dry-run=client -o yaml | kubectl apply -f - >> "$LOG_FILE" 2>&1
+  info "Restarting mcp-server to load the new secret..."
+  kubectl rollout restart deployment/mcp-server -n clawops >> "$LOG_FILE" 2>&1 || true
+  kubectl rollout status deployment/mcp-server -n clawops --timeout=90s >> "$LOG_FILE" 2>&1 \
+    || warn "mcp-server still restarting — give it a few seconds before testing /approve"
+  ok "New TOTP secret generated + mcp-server restarted"
+  echo ""
+  echo -e "  ${BOLD}TOTP_SECRET=${TOTP_SECRET}${NC}"
+  echo -e "  📱  QR: https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=otpauth%3A%2F%2Ftotp%2FClawOps%2520Workshop%3Fsecret%3D${TOTP_SECRET}%26issuer%3Dn8nWorkshop"
+  echo ""
+  ok "Open the QR → DELETE the old ClawOps entry in your app, re-scan, then test /approve"
+}
+
 update_ingress() {
   hdr "Update Ingress Rules"
   kubectl delete ingress --all -n clawops 2>/dev/null || true
@@ -275,8 +314,9 @@ case $CHOICE in
   3) load_ingress_lb; update_ingress; exit 0 ;;
   4) import_workflows; exit 0 ;;
   5) show_totp; exit 0 ;;
-  6) reset_incidents; exit 0 ;;
-  7) load_ingress_lb
+  6) reset_otp; exit 0 ;;
+  7) reset_incidents; exit 0 ;;
+  8) load_ingress_lb
      N8N_IP=$(kubectl get svc n8n -n clawops -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
      MCP_IP=$(kubectl get svc mcp-server -n clawops -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
      PASS=0; FAIL=0
@@ -297,7 +337,7 @@ CL_IP=$(kubectl get svc target-app -n workshop -o jsonpath='{.spec.clusterIP}' 2
      check "dashboard accessible" "curl -sfL --max-time 10 http://${INGRESS_LB}/dashboard/ | grep -qi clawops"
      echo -e "\n  Tests: ${GREEN}${PASS} passed${NC}  ${FAIL} failed"
      exit 0 ;;
-  8) delete_all; exit 0 ;;
+  9) delete_all; exit 0 ;;
   q|Q) exit 0 ;;
   *) warn "Invalid — running full bootstrap" ;;
 esac
