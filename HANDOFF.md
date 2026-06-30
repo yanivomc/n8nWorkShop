@@ -1,6 +1,36 @@
 # ClawOps n8n Workshop — Handoff Document
-**Last updated:** 2026-04-27  
+**Last updated:** 2026-06-30  
 **Repo:** https://github.com/yanivomc/n8nWorkShop  
+
+---
+
+## Recent fixes (2026-06 — all on `main`, validated on a fresh cluster)
+
+Fresh-cluster bootstrap now comes up **complete with zero manual deploys** (only
+student steps left: attach the Gemini credential + activate the imported workflows).
+
+- **n8n blank UI** — EBS CSI PVC truncated n8n's 1MB frontend cache at 64KB on
+  first boot. `.cache` now mounts on a node-local **emptyDir** (regenerable),
+  off the PVC. (`k8s/clawops/n8n/deployment.yaml`)
+- **event-watcher + linux-mcp never deployed** — bootstrap used an **undefined
+  `$K8S_DIR`** for those applies (silent failure). Fixed → `$CLAWOPS_DIR`.
+- **Grafana subpath + TargetDown** — `GF_SERVER_ROOT_URL` shipped a literal
+  `INJECT_INGRESS_LB`; bootstrap now substitutes it. Fixed UI **and** the scrape.
+- **Memory-leak chaos** — target-app raised 512Mi → **768Mi** so the leak
+  sustains and fires `TargetAppMemoryLeak`/`MemoryCritical` instead of OOMing.
+- **kops alert noise** — `prometheus-values.yaml` disables the noisy default rule
+  groups; `workshop.pods` rules scoped to `namespace="workshop"`.
+- **S5 honest enrichment** — no more fake `CPU Stress=0`; the AI runs the signal
+  plan live; the `Worth Escalating?` gate is real (firing→AI, resolved→log).
+- **Dashboard** — MONITOR tab gained an **ACTIVE PROBLEMS** panel (firing
+  `workshop=true` alerts, so CPU/error/latency chaos shows); header decluttered;
+  **◆ ARCHITECTURE** link opens the ClawOps Live page (`present.html`).
+- **All chaos scenarios verified** end-to-end through S5 (CPU/memory/error/latency).
+- **Slides rebuilt & validated:** Section 1 (+ Learning-Flow map), 2, 3 (Alert
+  Intelligence), 4 (Human Approval), Monitoring (new), Security, S6. Decks use
+  role-names; the `Sx` numbers are kept everywhere in code (too widespread to
+  rename — see the Learning-Flow slide which explains "Sx = build order, not
+  teaching order").
 
 ---
 
@@ -44,7 +74,7 @@ ingress:     single LB → /, /dashboard/, /mcp/, /prometheus, /grafana, /alertm
 |--|---------|---------|-----|
 | S2 | AI Agent MCP | `/webhook/ai-agent` | kubectl/promql agent |
 | S2.5 | Linux Agent | `/webhook/linux-agent` | linux-mcp agent |
-| S4 | Human Loop | `/webhook/telegram-*` | TOTP approval |
+| S4 | Human Loop | `/webhook/dashboard-chat` | TOTP approval (dashboard chat, not Telegram) |
 | S5 | Alert Intelligence | `/webhook/prometheus-alert-s5` | Prometheus alerts |
 | **S6** | **K8s Event Intelligence** | `/webhook/k8s-event-s6` | Real-time K8s events |
 | **S8** | **JWT Secured Events** | `/webhook/k8s-event-s8` | S6 + JWT auth gate |
@@ -102,9 +132,13 @@ Stop: STOP ALL button → chaos-loader /stop FIRST → target-app /chaos/all
 - **DASHBOARD** — chaos scenarios + instance management
 - **TERMINAL** — ttyd shell
 - **CHAT** — incident chat (AI responses + approvals)
-- **MONITOR** — real-time K8s event stream + pod topology + lifecycle timeline
+- **MONITOR** — **ACTIVE PROBLEMS** (firing `workshop=true` Prometheus alerts, so
+  CPU/error/latency chaos surfaces) + pod topology + real-time K8s event stream +
+  lifecycle timeline
 
-Monitor connects to `/events-admin/events/stream` SSE. Tab switching fixed — all panels properly hidden on switch.
+Monitor connects to `/events-admin/events/stream` SSE (event-watcher) for events,
+`/api/pods/{ns}` for topology, and `/prometheus/api/v1/alerts` for ACTIVE PROBLEMS.
+Tab switching fixed — all panels properly hidden on switch.
 
 ---
 
@@ -128,6 +162,10 @@ docker buildx build --platform linux/amd64 -t yanivomc/linux-mcp-server:latest -
 ## Known Issues / TODO
 
 - [ ] S6 auto-resolve incident when pod recovers (Started/Pulled events)
-- [ ] Monitor SSE event count resets on tab switch  
+- [ ] Monitor SSE event count resets on tab switch
+- [ ] `linux-mcp-server` deploys into the **clawops** ns (manifest is under
+      `k8s/clawops/`), but some refs mention `linux-mcp-server.workshop.svc` —
+      reconcile the DNS the S2.5 workflow uses (cosmetic; service is healthy)
 - [ ] Workshop lab docs (sessions 3-8)
-- [ ] **Day 2 slides** ← next
+- [x] ~~Day 2 slides~~ — Section 1–4 + Monitoring + Security + S6 decks done & validated
+- [x] ~~Fresh-cluster bootstrap deploys everything~~ — validated (see Recent fixes)

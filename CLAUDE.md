@@ -45,17 +45,23 @@ K8s Cluster (kops, AWS, 2 nodes)
 
 ```bash
 ./bootstrap-k8s.sh run     # non-interactive full bootstrap
-./bootstrap-k8s.sh         # interactive menu (7 options)
+./bootstrap-k8s.sh         # interactive menu (8 options)
 ```
 
 Menu options:
-- 1 = full bootstrap (install everything)
-- 2 = update configs (re-apply configmaps + restart pods)
+- 1 = full bootstrap (install/upgrade everything)
+- 2 = update configs (refresh configmaps + restart pods)
 - 3 = update ingress
-- 4 = import workflows (prompts API key, saves to configmap)
-- 5 = show TOTP + QR code (generates if missing)
-- 6 = validate health checks
-- 7 = delete ALL resources
+- 4 = import workflows (S2/S4/S5/S6/S8)
+- 5 = show TOTP + QR code (instructor — scan with Authy)
+- 6 = reset incidents (clear all MCP incidents)
+- 7 = validate health checks
+- 8 = delete ALL resources
+
+A fresh `run` deploys **everything** (ingress-nginx, monitoring, n8n, mcp-server,
+dashboard, event-watcher, linux-mcp-server, target-app, ingress, + auto-imports
+workflows). Students still attach the **Gemini credential** + **activate** the
+imported workflows by hand (by design).
 
 ---
 
@@ -64,15 +70,18 @@ Menu options:
 ```
 bootstrap-k8s.sh              # The one script to rule them all
 k8s/
-  clawops/                    # n8n, mcp-server, dashboard manifests
+  clawops/                    # n8n, mcp-server, dashboard, event-watcher, linux-mcp
     mcp-server/rbac.yaml      # ServiceAccount for in-cluster K8s auth
+    n8n/deployment.yaml       # pinned 1.123.62; .cache on emptyDir (not the PVC)
+    event-watcher/            # K8s event watcher → dashboard SSE + S6/S8 webhooks
+    linux-mcp-server/         # Linux tools MCP (runs in clawops ns)
   workshop/
-    target-app/               # Chaos app deployment + ServiceMonitor
-    linux-mcp-server/         # Linux tools MCP deployment
+    target-app/               # Chaos app + chaos-loader sidecar (768Mi limit)
   ingress/
-    ingress.yaml              # All 6 named ingress resources
+    ingress.yaml              # All named ingress resources (incl. /events-admin/)
   monitoring/
-    prometheus-values.yaml    # Helm values — ClusterIP, alert rules, subpath config
+    prometheus-values.yaml    # Helm values — ClusterIP, alert rules, subpaths,
+                              # defaultRules noise-suppression, INJECT_INGRESS_LB
 mcp-server/server.py          # FastAPI: kubectl-read, promql, kubectl-write, /incidents
 linux-mcp-server/server.py    # FastAPI: linux-read (df, free, ps, etc.)
 target-app/                   # Chaos engineering app
@@ -80,10 +89,12 @@ dashboard/
   app.py                      # FastAPI: SSE chat, chaos proxy, incidents proxy
   index.html                  # Dashboard UI (vanilla JS)
 n8n-workflows/
-  s2-ai-agent-mcp.json        # Chat trigger → K8s + PromQL agent
-  s2.5-linux-agent.json       # Chat trigger → K8s + Linux + PromQL agent
-  s4-dashboard-human-loop.json # Webhook → AI → TOTP → kubectl-write
-  s5-alert-intelligence.json  # Alert webhook → AI enrich → dashboard chat
+  s2-ai-agent-mcp.json            # Chat trigger → K8s + PromQL agent
+  s2.5-linux-agent.json           # Chat trigger → K8s + Linux + PromQL agent
+  s4-dashboard-human-loop.json    # Dashboard chat → AI → TOTP → kubectl-write
+  s5-alert-intelligence.json      # Alert webhook → AI enrich → dashboard chat
+  s6-k8s-event-intelligence.json  # K8s-event webhook → AI investigate → chat
+  s8-k8s-event-jwt.json           # S6 + JWT-secured event webhook
 labs/
   lab-linux-mcp-server.md     # Student lab: build Linux MCP server
   linux-mcp-agent-prompt.md   # AI prompt students give to their AI
@@ -98,11 +109,19 @@ labs/
 | S2 | AI Agent + MCP | n8n Chat UI | n8n chat sidebar |
 | S2.5 | Linux + K8s Agent | n8n Chat UI | n8n chat sidebar |
 | S4 | Human Loop | Webhook `/dashboard-chat` | Dashboard chat |
-| S5 | Alert Intelligence | Alertmanager webhook | Dashboard chat |
+| S5 | Alert Intelligence | Alertmanager webhook `/prometheus-alert-s5` | Dashboard chat |
+| S6 | K8s Event Intelligence | event-watcher webhook `/k8s-event-s6` | Dashboard chat |
+| S8 | JWT-Secured Events | event-watcher webhook `/k8s-event-s8` (Bearer JWT) | Dashboard chat |
 
 **S2/S2.5 use n8n's built-in Chat Trigger** — students interact via n8n UI at `http://<LB>/`
 
-**S4/S5 use dashboard chat** — students interact via `http://<LB>/dashboard/` → CHAT tab
+**S4/S5/S6/S8 use dashboard chat** — students interact via `http://<LB>/dashboard/` → CHAT tab
+
+> **Numbering note:** `Sx` are historical *build-order* file IDs, NOT teaching
+> order. Slides teach detect → approve: **Section 3 = Alert Intelligence (s5)**
+> before **Section 4 = Human Approval (s4)**. Don't renumber — the IDs are in
+> ~14 files incl. the live Alertmanager webhook path. (S5 hands off to S4 via the
+> incident key; S6/S8 detect K8s events instead of metric alerts.)
 
 ---
 
@@ -294,6 +313,34 @@ curl -s -X POST http://${N8N_IP}:5678/webhook/prometheus-alert-s5 \
 - **kubectl-write "Not a write command"** — strip "kubectl" prefix before sending to MCP.
 - **Alertmanager not sending** — check it's pointing to `n8n.clawops.svc.cluster.local` (not old EC2 IP).
 
+### Fixed in 2026-06 (validated on a fresh cluster — keep these in mind)
+
+- **n8n blank UI / truncated editor JS** — the EBS CSI PVC can truncate a large
+  single-file write at a 64KB boundary. n8n templates its ~1MB frontend into
+  `~/.n8n/.cache` on startup → truncated → "Unexpected end of input" → blank page.
+  Fix: `.cache` is mounted on a node-local **emptyDir** (regenerable, off the PVC)
+  in `k8s/clawops/n8n/deployment.yaml`. The SQLite DB stays on the PVC. (Separate
+  from the older `:latest`→2.x 0-byte bug, which the `1.123.62` pin fixed.)
+- **event-watcher / linux-mcp-server not deployed on fresh clusters** — bootstrap
+  referenced an **undefined `$K8S_DIR`** for those two applies, so they failed
+  silently. Fixed: all paths use `$CLAWOPS_DIR`. If they're ever missing again,
+  check the dir variables in `bootstrap-k8s.sh` resolve.
+- **Grafana subpath/scrape broken (TargetDown)** — `GF_SERVER_ROOT_URL` shipped a
+  literal `INJECT_INGRESS_LB`. Fixed: bootstrap's prometheus-values render now
+  substitutes `INJECT_INGRESS_LB → $INGRESS_LB`. Fixing root_url also recovered
+  the /metrics scrape.
+- **Memory-leak chaos OOMKilled instead of firing TargetAppMemoryLeak** —
+  target-app limit was 512Mi but the leak goes to 500MB. Raised to **768Mi**.
+- **Noisy `/prometheus/alerts` on kops** — control-plane + coredns + Watchdog +
+  grafana TargetDown alerts are expected kops noise (Alertmanager drops them via
+  `null-receiver`). `prometheus-values.yaml` now disables those `defaultRules`
+  groups; the `workshop.pods` rules are scoped to `namespace="workshop"` so they
+  never fire on system pods (they carry `workshop="true"` and route to n8n).
+- **S5 fed the AI fake `CPU Stress=0`** — the old `PromQL Enrichment` Code node
+  hardcoded signals to 0 (Code nodes can't do HTTP). Merged into `Extract Brief +
+  Signal Plan`: it hands the AI a query PLAN; the AI runs it live via its promql
+  tool. The `Worth Escalating?` gate is now real (firing → AI, resolved → log).
+
 ---
 
 ## Docker Images
@@ -301,6 +348,13 @@ curl -s -X POST http://${N8N_IP}:5678/webhook/prometheus-alert-s5 \
 | Image | Built from |
 |-------|-----------|
 | `yanivomc/target-app:latest` | `target-app/` |
+| `yanivomc/chaos-loader:latest` | `chaos-loader/` |
 | `yanivomc/clawops-dashboard:latest` | `dashboard/` |
 | `yanivomc/mcp-server:latest` | `mcp-server/` |
 | `yanivomc/linux-mcp-server:latest` | `linux-mcp-server/` |
+| `yanivomc/event-watcher:latest` | `event-watcher/` |
+
+> **Build for `linux/amd64`** (nodes are x86_64; arm64 from a Mac CrashLoops with
+> `exec format error`): `docker buildx build --platform linux/amd64 ... --push`
+> or `podman build --platform linux/amd64`. Deployments use `imagePullPolicy:
+> Always`, so a pushed `:latest` rolls out on the next restart.
