@@ -338,7 +338,10 @@ async def chat_stream(request: Request):
                     msg = await asyncio.wait_for(queue.get(), timeout=15.0)
                     yield f"data: {json.dumps(msg)}\n\n"
                 except asyncio.TimeoutError:
-                    yield f": ping\n\n"  # keep-alive
+                    # keep-alive as a REAL event (not a ': comment') so the
+                    # browser's onmessage fires → its watchdog can tell a healthy
+                    # idle connection from a silently-dead one.
+                    yield f"data: {json.dumps({'type': 'ping'})}\n\n"
         finally:
             try: _chat_subscribers.remove(queue)
             except: pass

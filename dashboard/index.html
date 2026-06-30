@@ -751,19 +751,52 @@ document.getElementById('modal').addEventListener('click',e=>{if(e.target===e.cu
 <script>
 // ── Chat SSE ────────────────────────────────────────────────────
 var _chatSSE = null;
+var _chatSeen = {};          // dedupe rendered messages by id (safe across reconnects)
+var _chatLastEvent = 0;      // timestamp of the last SSE event (incl. keep-alive ping)
+var _chatWatchdog = null;
+
+// Render a message, ignoring keep-alive pings and de-duplicating by id.
+function renderChatMsg(msg) {
+  if (!msg || msg.type === 'ping') return;
+  if (msg.id != null) {
+    if (_chatSeen[msg.id]) return;
+    _chatSeen[msg.id] = 1;
+  }
+  appendChatMessage(msg);
+}
+
+// Load the backlog over a plain GET — reliable even if the SSE stream is flaky.
+function loadChatHistory() {
+  var base = (window.CLAWOPS_CONFIG && window.CLAWOPS_CONFIG.basePath) || '';
+  return fetch(base + '/api/chat/history')
+    .then(function(r){ return r.json(); })
+    .then(function(msgs){ (msgs || []).forEach(renderChatMsg); })
+    .catch(function(){});
+}
 
 function initChat() {
   var base = (window.CLAWOPS_CONFIG && window.CLAWOPS_CONFIG.basePath) || '';
+  if (_chatSSE) { try { _chatSSE.close(); } catch(e){} }   // drop any stale connection
   _chatSSE = new EventSource(base + '/api/chat/stream');
+  _chatLastEvent = Date.now();
   _chatSSE.onmessage = function(e) {
-    try {
-      var msg = JSON.parse(e.data);
-      appendChatMessage(msg);
-    } catch(err) {}
+    _chatLastEvent = Date.now();
+    try { renderChatMsg(JSON.parse(e.data)); } catch(err) {}
   };
-  _chatSSE.onerror = function() {
-    setTimeout(initChat, 3000); // reconnect
-  };
+  _chatSSE.onerror = function() { _chatLastEvent = 0; }; // mark dead; watchdog reconnects
+}
+
+// Start chat: show backlog, open the stream, and keep it alive.
+function startChat() {
+  loadChatHistory().then(initChat);
+  if (_chatWatchdog) clearInterval(_chatWatchdog);
+  _chatWatchdog = setInterval(function() {
+    // Healthy connections get a ping every 15s. If we've heard nothing for 35s+
+    // (or the stream is closed), it's silently dead — reconnect.
+    if (!_chatSSE || _chatSSE.readyState === 2 || (Date.now() - _chatLastEvent > 35000)) {
+      initChat();
+    }
+  }, 12000);
 }
 
 function appendChatMessage(msg) {
@@ -827,7 +860,7 @@ function sendChatMessage() {
   });
 }
 
-document.addEventListener('DOMContentLoaded', function() { initChat(); });
+document.addEventListener('DOMContentLoaded', function() { startChat(); });
 
 var _activeTab = 'dashboard';
 
